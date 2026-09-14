@@ -1,6 +1,6 @@
 import { Printer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -224,6 +224,7 @@ export function PrintFormsDialog({
   const [noteIdx, setNoteIdx] = useState(0);
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState<FormOverrides>({});
+  const [showCompensation, setShowCompensation] = useState(true);
   const sheetRef = useRef<HTMLElement>(null);
 
   const history = useQuery({
@@ -300,6 +301,16 @@ export function PrintFormsDialog({
           >
             تعبئة يدوية
           </Button>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={showCompensation && Boolean(selected?.compensation)}
+              disabled={!selected?.compensation}
+              onChange={(e) => setShowCompensation(e.target.checked)}
+            />
+            إظهار فرص التعويض في التعهد والخطاب
+          </label>
         </div>
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
@@ -355,6 +366,7 @@ export function PrintFormsDialog({
           selectedNote={selected}
           school={school}
           overrides={manual ? overrides : undefined}
+          showCompensation={showCompensation && Boolean(selected?.compensation)}
         />
       </DialogContent>
     </Dialog>
@@ -368,6 +380,7 @@ export function OfficialForm({
   selectedNote,
   school,
   overrides,
+  showCompensation = false,
   ref,
 }: {
   kind: FormKind;
@@ -376,6 +389,7 @@ export function OfficialForm({
   selectedNote: PrintableNote | null;
   school: School;
   overrides?: FormOverrides;
+  showCompensation?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const { behaviorTypes } = useWorkspace();
@@ -408,9 +422,14 @@ export function OfficialForm({
     ?.split(/\n/)
     .map((s) => s.trim())
     .filter(Boolean);
+  const parsedAction = parseActionTaken(focus?.actionTaken || focus?.suggestedAction);
   const actionSteps = overrideSteps?.length
     ? overrideSteps
-    : splitAction(focus?.actionTaken || focus?.suggestedAction, official);
+    : parsedAction.steps.length
+      ? parsedAction.steps
+      : official.length
+        ? official
+        : ["…………………………………………"];
   const period = overrides?.period || (focus?.periodKey ? periodShort(focus.periodKey, school.season) : "");
   const subject = overrides?.subject || focus?.teacherSubject?.trim() || "";
   const ctx: FormCtx = {
@@ -425,6 +444,7 @@ export function OfficialForm({
     degree,
     violation,
     actionSteps,
+    actionNote: overrides?.extra?.trim() || parsedAction.note,
     previous,
     occurrence,
     principal,
@@ -440,6 +460,8 @@ export function OfficialForm({
     period,
     subject,
     stageLabel: procedureStageLabel(stageIdx + 1),
+    compensation: focus?.compensation || "",
+    showCompensation: Boolean(showCompensation && focus?.compensation),
   };
 
   return (
@@ -497,6 +519,7 @@ type FormCtx = {
   degree: string;
   violation: string;
   actionSteps: string[];
+  actionNote: string;
   previous: PrintableNote[];
   occurrence: number;
   principal: string;
@@ -512,17 +535,50 @@ type FormCtx = {
   period: string;
   subject: string;
   stageLabel: string;
+  compensation: string;
+  showCompensation: boolean;
 };
 
-function splitAction(action: string | undefined, fallback: string[]) {
-  if (action?.trim()) {
-    const parts = action
-      .split(/\n|—|;|؛/)
-      .map((s) => s.replace(/^ملاحظة للمعلم:.*/, "").trim())
-      .filter(Boolean);
-    if (parts.length) return parts;
+function parseActionTaken(action: string | undefined): { steps: string[]; note: string } {
+  const raw = action?.trim() ?? "";
+  if (!raw) return { steps: [], note: "" };
+  const marker = raw.search(/[—\-]\s*ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]/);
+  let body = raw;
+  let note = "";
+  if (marker >= 0) {
+    body = raw.slice(0, marker).trim();
+    note = raw
+      .slice(marker)
+      .replace(/^[—\-]\s*/, "")
+      .replace(/^ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]\s*/, "")
+      .trim();
+  } else {
+    const onlyNote = raw.match(/^ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]\s*([\s\S]+)$/);
+    if (onlyNote) {
+      body = "";
+      note = onlyNote[1].trim();
+    }
   }
-  return fallback.length ? fallback : ["…………………………………………"];
+  const steps = body
+    .split(/\n|;|؛|—/)
+    .map((s) => s.replace(/^ملاحظة للمعلم:.*/, "").trim())
+    .filter((s) => s.length > 0 && !/^ملاحظة\s*[:：]/.test(s));
+  return { steps, note };
+}
+
+function actionDisplay(action: string | undefined) {
+  const parsed = parseActionTaken(action);
+  return parsed.steps.join(" — ") || parsed.note || "";
+}
+
+function ActionNoteBox({ note }: { note: string }) {
+  if (!note.trim()) return null;
+  return (
+    <div className="my-2 rounded-sm border border-black px-3 py-2 text-[13.5px] leading-7">
+      <p className="font-semibold">الملاحظات</p>
+      <p>{note}</p>
+    </div>
+  );
 }
 
 function previousSame(notes: PrintableNote[], focus: PrintableNote | null) {
@@ -540,29 +596,65 @@ function previousSame(notes: PrintableNote[], focus: PrintableNote | null) {
 }
 
 function FormHeader({ school, confidential }: { school: School; confidential?: boolean }) {
+  return <OfficialLetterhead school={school} confidential={confidential} />;
+}
+
+export function OfficialLetterhead({
+  school,
+  confidential,
+}: {
+  school: School;
+  confidential?: boolean;
+}) {
   const gov = school.governorate.replace(/^محافظة\s*/, "").trim();
   const region = school.region.trim();
-  const schoolLine = school.name.startsWith("مدرسة") ? school.name : `مدرسة ${school.name || "………………"}`;
+  const regionCore = region.replace(/^المنطقة\s*/, "").trim();
+  const rawName = school.name.trim();
+  const schoolLine = !rawName
+    ? "………………"
+    : /^(مدرسة|متوسطة|متوسطه|ابتدائية|ابتدائيه|ثانوية|ثانويه|روضة|مجمع)(\s|$)/.test(rawName)
+      ? rawName
+      : `مدرسة ${rawName}`;
+  const eduLine = regionCore ? `إدارة التعليم ب${regionCore}` : "";
   return (
     <header className="mb-3">
       <div className="official-accent h-1.5 bg-[#00857c]" />
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-1 py-2.5">
-        <div className="text-[12px] leading-5">
-          <p className="font-semibold">المملكة العربية السعودية</p>
-          <p>وزارة التعليم</p>
-          {confidential ? <p className="mt-1 font-semibold text-[#00857c]">سري</p> : null}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 py-2">
+        <div className="flex flex-col items-center justify-center px-1 text-center">
+          <img
+            src="/ksa-diwani.png"
+            alt="المملكة العربية السعودية"
+            className="ksa-diwani mx-auto h-[35px] w-auto max-w-full object-contain object-center"
+          />
+          <p className="ksa-ministry mt-0.5 text-[13px] font-semibold tracking-wide text-[#14532d]">
+            وزارة التعليم
+          </p>
+          {confidential ? <p className="mt-1 text-[12px] font-semibold text-[#00857c]">سري</p> : null}
         </div>
-        <div className="flex items-center gap-3">
-          <img src="/moe-logo.jpg" alt="شعار وزارة التعليم" className="h-[62px] w-auto max-w-[7rem] object-contain" />
+        <div className="flex items-center justify-center gap-2">
+          <img
+            src="/moe-logo.jpg"
+            alt="شعار وزارة التعليم"
+            className="h-[62px] w-auto max-w-[6.5rem] object-contain"
+          />
           {school.logoUrl ? (
-            <img src={school.logoUrl} alt="شعار المدرسة" className="h-[62px] w-auto max-w-[7rem] object-contain" />
+            <img
+              src={school.logoUrl}
+              alt="شعار المدرسة"
+              className="h-[62px] w-auto max-w-[6.5rem] object-contain"
+            />
+          ) : null}
+          {school.extraLogoUrl ? (
+            <img
+              src={school.extraLogoUrl}
+              alt="شعار إضافي"
+              className="h-[62px] w-auto max-w-[6.5rem] object-contain"
+            />
           ) : null}
         </div>
-        <div className="text-left text-[12px] leading-5">
-          <p>
-            {region ? `إدارة التعليم ب${region.replace(/^المنطقة\s*/, "")}` : "إدارة التعليم: ………………"}
-          </p>
-          {gov ? <p>المحافظة: {gov}</p> : null}
+        <div className="px-1 text-center text-[12px] leading-5">
+          <p>{eduLine || "إدارة التعليم: ………………"}</p>
+          {gov ? <p>{gov.startsWith("محافظة") ? gov : `محافظة ${gov}`}</p> : null}
           <p className="font-semibold">{schoolLine}</p>
         </div>
       </div>
@@ -639,20 +731,34 @@ function Dotted({ value }: { value: string }) {
 
 function SignRow({
   items,
+  note,
 }: {
   items: { title: string; name?: string }[];
+  note?: string;
 }) {
   return (
-    <div className="mt-5 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
-      {items.map((item) => (
-        <div key={item.title}>
-          <p className="font-semibold">{item.title}</p>
-          <p>الاسم: {item.name || "………………"}</p>
-          <p>التوقيع: ………………</p>
-          <p>التاريخ: ………………</p>
-        </div>
-      ))}
-    </div>
+    <>
+      {note ? <ActionNoteBox note={note} /> : null}
+      <div className="mt-5 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
+        {items.map((item) => (
+          <div key={item.title}>
+            <p className="font-semibold">{item.title}</p>
+            <p>الاسم: {item.name || "………………"}</p>
+            <p>التوقيع: ………………</p>
+            <p>التاريخ: ………………</p>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function NamesTail({ note, children }: { note?: string; children: ReactNode }) {
+  return (
+    <>
+      {note ? <ActionNoteBox note={note} /> : null}
+      {children}
+    </>
   );
 }
 
@@ -680,7 +786,7 @@ function RepeatBox({ ctx }: { ctx: FormCtx }) {
                 <td>{formatStamp(n.createdAt)}</td>
                 <td>{n.periodKey ? periodShort(n.periodKey, ctx.season) : "—"}</td>
                 <td>{n.teacherSubject || "—"}</td>
-                <td>{n.actionTaken || "—"}</td>
+                <td>{actionDisplay(n.actionTaken) || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -705,6 +811,15 @@ function ProcedureList({ ctx }: { ctx: FormCtx }) {
         ))}
       </ol>
     </div>
+  );
+}
+
+function CompensationLine({ ctx }: { ctx: FormCtx }) {
+  if (!ctx.showCompensation || !ctx.compensation) return null;
+  return (
+    <p className="rounded-sm border border-black px-3 py-2 text-[13.5px] leading-7">
+      فرص تعويض درجات السلوك المتاحة للطالب: {ctx.compensation}
+    </p>
   );
 }
 
@@ -735,8 +850,10 @@ function PledgeBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
+      <CompensationLine ctx={ctx} />
       <p>وأتعهد بعدم تكرار أي مشكلة سلوكية مستقبلاً وعلى ذلك جرى التوقيع.</p>
       <SignRow
+        note={ctx.actionNote}
         items={[
           { title: ctx.studentWord, name: ctx.name },
           { title: "ولي الأمر" },
@@ -759,6 +876,7 @@ function ReceiptBody({ ctx }: { ctx: FormCtx }) {
       <p>اسم ولي الأمر: …………………………………… رقم الهوية: ……………………</p>
       <p>الجوال: {ctx.parentPhone || "……………………"}</p>
       <SignRow
+        note={ctx.actionNote}
         items={[
           { title: "ولي الأمر" },
           { title: ctx.principal, name: ctx.principalName },
@@ -832,7 +950,9 @@ function NoticeBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
+      <CompensationLine ctx={ctx} />
       <p>لذا يرجى منكم المتابعة والتعاون مع المدرسة بما يسهم في انضباط سلوك ابنكم / ابنتكم.</p>
+      <NamesTail note={ctx.actionNote}>
       <div className="mt-6 flex justify-between">
         <p className="text-[12px]">الختم</p>
         <div className="text-center text-[12px] leading-6">
@@ -841,6 +961,7 @@ function NoticeBody({ ctx }: { ctx: FormCtx }) {
           <p>التوقيع: ………………</p>
         </div>
       </div>
+      </NamesTail>
     </div>
   );
 }
@@ -859,6 +980,7 @@ function InviteBody({ ctx }: { ctx: FormCtx }) {
         بهدف مناقشة مشكلة سلوكية ({ctx.violation}).
       </p>
       <p>شاكرين لكم تعاونكم معنا لتحقيق مصلحة {ctx.studentWord}.</p>
+      <NamesTail note={ctx.actionNote}>
       <div className="mt-4 flex justify-between">
         <p className="text-[12px]">الختم</p>
         <div className="text-center text-[12px] leading-6">
@@ -867,6 +989,7 @@ function InviteBody({ ctx }: { ctx: FormCtx }) {
           <p>التوقيع: ………………</p>
         </div>
       </div>
+      </NamesTail>
       <div className="mt-4 border-t border-black pt-2 text-[13px] leading-7">
         <p className="font-semibold">رد ولي الأمر:</p>
         <p>☐ أقر بالعلم، وسأحضر في الموعد المحدد.</p>
@@ -889,6 +1012,7 @@ function ReferralBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <RepeatBox ctx={ctx} />
       <p>يرجى متابعة الحالة ودراسة وضعها ووضع الحلول التربوية والعلاجية المناسبة.</p>
+      <NamesTail note={ctx.actionNote}>
       <div className="mt-8 flex justify-between">
         <p className="text-[12px]">الختم</p>
         <div className="text-center text-[12px] leading-6">
@@ -897,6 +1021,7 @@ function ReferralBody({ ctx }: { ctx: FormCtx }) {
           <p>التوقيع: ………………</p>
         </div>
       </div>
+      </NamesTail>
     </div>
   );
 }
@@ -915,6 +1040,7 @@ function AttendanceBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <p>وأتعهد بالالتزام بالخطة التربوية والعلاجية المقدمة لتحسين الحضور، وعلى ذلك جرى التوقيع.</p>
       <SignRow
+        note={ctx.actionNote}
         items={[
           { title: ctx.studentWord, name: ctx.name },
           { title: "ولي الأمر" },
@@ -953,7 +1079,7 @@ function RecordBody({ ctx }: { ctx: FormCtx }) {
               <td>{n ? `الدرجة ${degreeLabel(n.behaviorDegree) || "—"}` : ""}</td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
               <td />
-              <td>{n?.actionTaken || ""}</td>
+              <td>{actionDisplay(n?.actionTaken)}</td>
               <td>{n?.actionTaken ? formatDay(n.createdAt) : ""}</td>
               <td />
               <td />
@@ -961,6 +1087,7 @@ function RecordBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — التاريخ: ………………</p>
@@ -995,7 +1122,7 @@ function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
             <tr key={n?.createdAt ?? i}>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
               <td>{n ? degreeLabel(n.behaviorDegree) : ""}</td>
-              <td>{n?.actionTaken || ""}</td>
+              <td>{actionDisplay(n?.actionTaken)}</td>
               <td />
               <td>{n?.occurrence ? occurrenceLabel(n.occurrence) : ""}</td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
@@ -1004,6 +1131,7 @@ function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">المعلم / المعلمة</p>
         <p>الاسم: {teacher || "………………"} — التوقيع: ……………… — التاريخ: ………………</p>
@@ -1032,6 +1160,7 @@ function PlanBody({ ctx }: { ctx: FormCtx }) {
       <p>رأي معلم الفصل: …………………………………………</p>
       <p>رأي ولي الأمر: …………………………………………</p>
       <SignRow
+        note={ctx.actionNote}
         items={[
           { title: "القائم بتعديل السلوك" },
           { title: ctx.counselor, name: ctx.counselorName },
@@ -1069,6 +1198,7 @@ function CompensationBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>
@@ -1106,6 +1236,7 @@ function ExcellenceBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>
@@ -1144,6 +1275,7 @@ function IncidentBody({ ctx }: { ctx: FormCtx }) {
         </tbody>
       </table>
       <SignRow
+        note={ctx.actionNote}
         items={[
           { title: ctx.studentWord, name: ctx.name },
           { title: "ولي الأمر" },
@@ -1196,6 +1328,7 @@ function CommitteeBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-2 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>
@@ -1221,6 +1354,7 @@ function ViolenceBody({ ctx }: { ctx: FormCtx }) {
           </tr>
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — الختم المدرسي</p>
@@ -1249,6 +1383,7 @@ function RiskBody({ ctx }: { ctx: FormCtx }) {
       ].map((item) => (
         <p key={item}>☐ {item}</p>
       ))}
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-2 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>
@@ -1282,6 +1417,7 @@ function AbsenceExcusedBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>
@@ -1321,6 +1457,7 @@ function AbsenceUnexcusedBody({ ctx }: { ctx: FormCtx }) {
           ))}
         </tbody>
       </table>
+      {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
         <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ………………</p>

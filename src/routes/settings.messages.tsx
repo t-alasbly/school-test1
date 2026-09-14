@@ -10,12 +10,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { updateMessageTemplates } from "@/lib/school/api";
 import { WHATSAPP_TEMPLATES } from "@/lib/school/constants";
-import type { MessageKind, MessageTemplate } from "@/lib/school/types";
+import type { CustomMessage, MessageKind, MessageTemplate } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/settings/messages")({ component: MessagesSettings });
 
 const KEYS: MessageKind[] = ["absence", "late", "homework", "behavior", "general"];
+
+function newId() {
+  return `c${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+}
 
 function MessagesSettings() {
   const { school } = useWorkspace();
@@ -27,15 +31,35 @@ function MessagesSettings() {
     }
     return next;
   });
+  const [custom, setCustom] = useState<CustomMessage[]>(() => school.customMessages ?? []);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState(WHATSAPP_TEMPLATES.general.body);
 
   const mutation = useMutation({
-    mutationFn: () => updateMessageTemplates({ data: { templates: drafts } }),
+    mutationFn: (customMessages: CustomMessage[]) =>
+      updateMessageTemplates({
+        data: { templates: drafts, customMessages },
+      }),
     onSuccess: () => {
       toast.success("تم حفظ قوالب الرسائل");
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
   });
+
+  function addCustom() {
+    const t = title.trim();
+    const b = body.trim();
+    if (t.length < 2 || b.length < 4) {
+      toast.error("اكتب عنواناً ونص الرسالة");
+      return;
+    }
+    const next = [...custom, { id: newId(), title: t, body: b }];
+    setCustom(next);
+    setTitle("");
+    setBody(WHATSAPP_TEMPLATES.general.body);
+    mutation.mutate(next);
+  }
 
   return (
     <div className="space-y-6">
@@ -83,7 +107,73 @@ function MessagesSettings() {
           </CardContent>
         </Card>
       ))}
-      <Button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>رسائل عامة مخصصة</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-fg-muted">
+            أضف قوالب إضافية تظهر مع «رسالة عامة» عند مراسلة ولي الأمر (تهنئة، تنبيه، اجتماع…).
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-title">عنوان القالب</Label>
+            <Input
+              id="c-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="مثال: تهنئة تفوّق"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="c-body">نص الرسالة</Label>
+            <Textarea
+              id="c-body"
+              className="min-h-28"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
+          <Button type="button" variant="secondary" onClick={addCustom}>
+            إضافة للرسائل العامة
+          </Button>
+          <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
+            {custom.map((item) => (
+              <li key={item.id} className="space-y-2 px-3 py-3">
+                <Input
+                  value={item.title}
+                  onChange={(e) =>
+                    setCustom((prev) =>
+                      prev.map((m) => (m.id === item.id ? { ...m, title: e.target.value } : m)),
+                    )
+                  }
+                />
+                <Textarea
+                  className="min-h-24"
+                  value={item.body}
+                  onChange={(e) =>
+                    setCustom((prev) =>
+                      prev.map((m) => (m.id === item.id ? { ...m, body: e.target.value } : m)),
+                    )
+                  }
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCustom((prev) => prev.filter((m) => m.id !== item.id))}
+                >
+                  حذف
+                </Button>
+              </li>
+            ))}
+            {custom.length === 0 ? (
+              <li className="px-3 py-6 text-center text-sm text-fg-muted">لا توجد رسائل مخصصة بعد</li>
+            ) : null}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Button disabled={mutation.isPending} onClick={() => mutation.mutate(custom)}>
         حفظ كل القوالب
       </Button>
     </div>

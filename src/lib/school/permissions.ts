@@ -96,7 +96,7 @@ export function defaultPermissions(
   role: StaffRole,
   school?: Pick<School, "teachersCanMessage" | "teachersCanViewAll">,
 ): StaffPermissions {
-  if (role === "admin") return { ...ALL_ON };
+  if (role === "admin" || role === "principal") return { ...ALL_ON };
   if (role === "counselor") {
     return {
       editStudents: false,
@@ -106,6 +106,66 @@ export function defaultPermissions(
       takeActions: true,
       acceptImprovements: true,
       dailyAttendance: false,
+      counseling: false,
+    };
+  }
+  if (role === "school_vp") {
+    return {
+      editStudents: true,
+      sendMessages: true,
+      viewAllViolations: true,
+      editStaff: false,
+      takeActions: true,
+      acceptImprovements: true,
+      dailyAttendance: true,
+      counseling: false,
+    };
+  }
+  if (role === "teachers_vp") {
+    return {
+      editStudents: true,
+      sendMessages: true,
+      viewAllViolations: true,
+      editStaff: true,
+      takeActions: false,
+      acceptImprovements: false,
+      dailyAttendance: false,
+      counseling: false,
+    };
+  }
+  if (role === "student_counselor") {
+    return {
+      editStudents: false,
+      sendMessages: true,
+      viewAllViolations: true,
+      editStaff: false,
+      takeActions: false,
+      acceptImprovements: true,
+      dailyAttendance: false,
+      counseling: true,
+    };
+  }
+  if (role === "health_counselor") {
+    return {
+      editStudents: false,
+      sendMessages: true,
+      viewAllViolations: true,
+      editStaff: false,
+      takeActions: false,
+      acceptImprovements: false,
+      dailyAttendance: true,
+      counseling: true,
+    };
+  }
+  if (role === "activity_leader") {
+    return {
+      editStudents: false,
+      sendMessages: true,
+      viewAllViolations: true,
+      editStaff: false,
+      takeActions: false,
+      acceptImprovements: false,
+      dailyAttendance: true,
       counseling: false,
     };
   }

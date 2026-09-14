@@ -98,7 +98,7 @@ function AppearanceSettings() {
         <SettingsBack />
         <h1 className="text-3xl font-semibold tracking-tight">المظهر</h1>
         <p className="text-sm text-fg-muted">
-          قوالب جاهزة تناسب معظم الأذواق، مع اختيار الخط وحجمه ولون النص والخلفية واللون الأساسي.
+          قوالب جاهزة، وخطوط عربية أجمل (ال مسيري، Cairo، أميري وغيرها)، مع تكبير أو تصغير حجم الخط.
         </p>
       </div>
 

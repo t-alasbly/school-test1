@@ -8,7 +8,7 @@ export type ThemeId =
   | "sky"
   | "night";
 
-export type FontId = "ibm" | "cairo" | "tajawal" | "almarai" | "naskh";
+export type FontId = "cairo" | "messiri" | "tajawal" | "almarai" | "ibm" | "readex" | "amiri" | "naskh";
 
 export type ThemeTokens = {
   bg: string;
@@ -44,19 +44,36 @@ export function clampFontScale(value: unknown): number {
 
 
 export const FONT_STACKS: Record<FontId, string> = {
-  ibm: '"IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif',
   cairo: '"Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
-  tajawal: '"Tajawal", "IBM Plex Sans Arabic", system-ui, sans-serif',
-  almarai: '"Almarai", "IBM Plex Sans Arabic", system-ui, sans-serif',
-  naskh: '"Noto Naskh Arabic", "IBM Plex Sans Arabic", serif',
+  messiri: '"El Messiri", "Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  tajawal: '"Tajawal", "Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  almarai: '"Almarai", "Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  ibm: '"IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif',
+  readex: '"Readex Pro", "Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  amiri: '"Amiri", "Noto Naskh Arabic", serif',
+  naskh: '"Noto Naskh Arabic", "Amiri", "IBM Plex Sans Arabic", serif',
 };
 
 export const FONT_LABEL: Record<FontId, string> = {
-  ibm: "IBM Plex — واضح للعمل اليومي",
-  cairo: "Cairo — حديث ومتوازن",
-  tajawal: "Tajawal — عريض وسهل القراءة",
+  cairo: "Cairo — حديث مرتب للعمل اليومي",
+  messiri: "ال مسيري — أنيق للعناوين والنصوص",
+  tajawal: "Tajawal — عريض وواضح",
   almarai: "Almarai — ودود للمدرسة",
-  naskh: "نسخ — رسمي للنماذج والقراءة",
+  ibm: "IBM Plex — عملي دقيق",
+  readex: "Readex Pro — حديث ومتناسق",
+  amiri: "أميري — تراثي جميل",
+  naskh: "نسخ — رسمي للنماذج",
+};
+
+export const FONT_DISPLAY: Record<FontId, string> = {
+  cairo: FONT_STACKS.messiri,
+  messiri: FONT_STACKS.messiri,
+  tajawal: FONT_STACKS.messiri,
+  almarai: FONT_STACKS.messiri,
+  ibm: FONT_STACKS.messiri,
+  readex: FONT_STACKS.messiri,
+  amiri: FONT_STACKS.amiri,
+  naskh: FONT_STACKS.naskh,
 };
 
 export const THEMES: Record<
@@ -67,7 +84,7 @@ export const THEMES: Record<
     id: "oasis",
     name: "واحة",
     hint: "الدافئ الحالي — فيروزي ومخطوط كريمي",
-    font: "ibm",
+    font: "cairo",
     tokens: {
       bg: "#f3eee4",
       bgElevated: "#fffdf8",
@@ -89,7 +106,7 @@ export const THEMES: Record<
     id: "ministry",
     name: "وزارة",
     hint: "أخضر التعليم الرسمي على أبيض نظيف",
-    font: "ibm",
+    font: "cairo",
     tokens: {
       bg: "#f4f7f4",
       bgElevated: "#ffffff",
@@ -221,7 +238,7 @@ export const THEMES: Record<
     id: "night",
     name: "ليلي",
     hint: "وضع داكن مريح للعمل المسائي",
-    font: "ibm",
+    font: "cairo",
     tokens: {
       bg: "#12151a",
       bgElevated: "#1b2028",
@@ -246,7 +263,7 @@ export const FONT_LIST = Object.keys(FONT_LABEL) as FontId[];
 
 export function parseAppearance(raw: unknown): Appearance {
   const optional = parseOptionalAppearance(raw);
-  return optional ?? { themeId: "oasis", font: "ibm", fontScale: 1 };
+  return optional ?? { themeId: "oasis", font: "cairo", fontScale: 1 };
 }
 
 export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
@@ -322,7 +339,7 @@ export function applyAppearance(appearance: Appearance) {
     "--color-muted": tokens.muted,
     "--color-ring": tokens.ring,
     "--font-sans": FONT_STACKS[appearance.font],
-    "--font-display": FONT_STACKS[appearance.font],
+    "--font-display": FONT_DISPLAY[appearance.font] ?? FONT_STACKS[appearance.font],
   };
   for (const [key, value] of Object.entries(map)) {
     root.style.setProperty(key, value);

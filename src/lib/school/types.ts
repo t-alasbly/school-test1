@@ -4,7 +4,17 @@ import type { Appearance } from "./theme";
 export type { StaffPermissions, PermissionKey } from "./permissions";
 export type { Appearance, ThemeId, FontId } from "./theme";
 
-export type StaffRole = "admin" | "teacher" | "counselor" | "pending";
+export type StaffRole =
+  | "admin"
+  | "principal"
+  | "school_vp"
+  | "teachers_vp"
+  | "counselor"
+  | "student_counselor"
+  | "health_counselor"
+  | "activity_leader"
+  | "teacher"
+  | "pending";
 export type NoteType = "absence" | "late" | "homework" | "behavior";
 export type NoteStatus = "open" | "closed";
 export type NoteTone = "danger" | "warn" | "ok";
@@ -32,6 +42,19 @@ export type MessageTemplate = {
 
 export type MessageTemplates = Partial<Record<MessageKind, MessageTemplate>>;
 
+export type CustomMessage = {
+  id: string;
+  title: string;
+  body: string;
+};
+
+export type PrintMargins = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type School = {
   id: number;
   name: string;
@@ -44,7 +67,11 @@ export type School = {
   counselorName: string;
   technicalVpName: string;
   logoUrl: string;
+  extraLogoUrl: string;
+  tagline: string;
+  printMargins: PrintMargins;
   messageTemplates: MessageTemplates;
+  customMessages: CustomMessage[];
   teachersCanMessage: boolean;
   teachersCanViewAll: boolean;
   appearance: Appearance;
@@ -248,4 +275,5 @@ export type Workspace = {
   actionTypes: ActionType[];
   healthConditions: CatalogItem[];
   compensations: CatalogItem[];
+  improvementOptions: CatalogItem[];
 };

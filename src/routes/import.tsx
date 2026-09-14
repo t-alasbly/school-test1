@@ -1,12 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, Search, Upload } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
+import { StaffManager } from "@/components/staff-manager";
+import {
+  AddStudentButton,
+  DeleteStudentButton,
+  EditStudentButton,
+} from "@/components/student-editor";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { importStudents, importTeachers } from "@/lib/school/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { importStudents, importTeachers, listRoster } from "@/lib/school/api";
 import { DEFAULT_TEACHER_PASSWORD } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -39,6 +50,26 @@ const TEACHER_FIELDS: { key: keyof TeacherMapping; label: string }[] = [
   { key: "subject", label: "المادة" },
 ];
 
+type RosterStudent = {
+  id: number;
+  name: string;
+  parentPhone: string;
+  classId: number;
+};
+
+type RosterClass = {
+  id: number;
+  name: string;
+  label: string;
+  stageName: string;
+  students: RosterStudent[];
+};
+
+type RosterStage = {
+  name: string;
+  classes: RosterClass[];
+};
+
 function ImportPage() {
   return (
     <AppGate>
@@ -58,8 +89,10 @@ function ImportBody() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm text-fg-muted">ارفع ملف إكسل ثم طابق الأعمدة مع حقول النظام</p>
-        <h1 className="text-3xl font-semibold tracking-tight">الاستيراد</h1>
+        <p className="text-sm text-fg-muted">
+          كل البيانات المضافة ظاهرة هنا: الفصول والطلاب والمعلمون — مع التعديل والحذف والاستيراد من إكسل
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">البيانات والاستيراد</h1>
       </header>
       <div className="flex gap-2">
         <Button
@@ -82,6 +115,146 @@ function ImportBody() {
 
 function StudentImport() {
   const queryClient = useQueryClient();
+  const roster = useQuery({ queryKey: ["roster"], queryFn: () => listRoster() });
+  const [q, setQ] = useState("");
+  const [openStage, setOpenStage] = useState<Record<string, boolean>>({});
+  const [showExcel, setShowExcel] = useState(false);
+
+  const stages = useMemo(() => {
+    const list: RosterStage[] = roster.data?.stages ?? [];
+    const term = q.trim();
+    if (!term) return list;
+    return list
+      .map((stage: RosterStage) => ({
+        ...stage,
+        classes: stage.classes
+          .map((cls: RosterClass) => ({
+            ...cls,
+            students: cls.students.filter(
+              (s: RosterStudent) => s.name.includes(term) || s.parentPhone.includes(term),
+            ),
+          }))
+          .filter((cls: RosterClass) => cls.students.length > 0),
+      }))
+      .filter((stage: RosterStage) => stage.classes.length > 0);
+  }, [roster.data, q]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-56 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-muted" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="بحث باسم الطالب أو جوال ولي الأمر"
+            className="pr-10"
+          />
+        </div>
+        <Button variant="secondary" onClick={() => setShowExcel((v) => !v)}>
+          <Upload className="size-4" />
+          {showExcel ? "إخفاء ملف الإكسل" : "استيراد من إكسل"}
+        </Button>
+      </div>
+      {showExcel ? (
+        <StudentExcelForm
+          onImported={() => {
+            void queryClient.invalidateQueries({ queryKey: ["roster"] });
+            void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+            setShowExcel(false);
+          }}
+        />
+      ) : null}
+
+      {roster.isPending ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-[var(--radius-lg)]" />
+          ))}
+        </div>
+      ) : roster.isError ? (
+        <p className="text-danger">تعذر تحميل قائمة الطلاب.</p>
+      ) : (
+        <div className="space-y-5">
+          <p className="text-sm text-fg-muted">
+            {roster.data?.studentCount ?? 0} طالب في {roster.data?.classCount ?? 0} فصل
+          </p>
+          {stages.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-fg-muted">
+                {q.trim()
+                  ? "لا نتائج مطابقة للبحث."
+                  : "لم يُضف طلاب بعد. ارفع ملف إكسل أو أضف طالبًا داخل فصل."}
+              </CardContent>
+            </Card>
+          ) : null}
+          {stages.map((stage: RosterStage) => {
+            const open = openStage[stage.name] !== false;
+            const count = stage.classes.reduce((n: number, c: RosterClass) => n + c.students.length, 0);
+            return (
+              <section key={stage.name} className="space-y-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-[var(--radius-md)] bg-muted px-3 py-2 text-right"
+                  onClick={() =>
+                    setOpenStage((prev) => ({ ...prev, [stage.name]: !open }))
+                  }
+                >
+                  <span className="font-semibold">{stage.name}</span>
+                  <span className="flex items-center gap-2 text-sm text-fg-muted">
+                    {count} طالب · {stage.classes.length} فصل
+                    <ChevronDown className={cn("size-4 transition", open ? "rotate-180" : "")} />
+                  </span>
+                </button>
+                {open
+                  ? stage.classes.map((cls: RosterClass) => (
+                      <Card key={cls.id}>
+                        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+                          <div>
+                            <CardTitle className="text-lg">{cls.label}</CardTitle>
+                            <p className="text-xs text-fg-muted">{cls.stageName}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge>{cls.students.length} طالب</Badge>
+                            <AddStudentButton classId={cls.id} />
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          {cls.students.length === 0 ? (
+                            <p className="px-4 py-6 text-sm text-fg-muted">لا طلاب في هذا الفصل بعد.</p>
+                          ) : (
+                            <ul className="divide-y divide-border">
+                              {cls.students.map((student: RosterStudent) => (
+                                <li
+                                  key={student.id}
+                                  className="flex flex-wrap items-center gap-2 px-4 py-3"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-medium">{student.name}</p>
+                                    <p className="text-xs text-fg-subtle" dir="ltr">
+                                      {student.parentPhone || "بدون جوال ولي الأمر"}
+                                    </p>
+                                  </div>
+                                  <EditStudentButton student={student} showLabel />
+                                  <DeleteStudentButton student={student} />
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))
+                  : null}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StudentExcelForm({ onImported }: { onImported: () => void }) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<StudentMapping>({
@@ -98,7 +271,7 @@ function StudentImport() {
       toast.success(
         `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز`,
       );
-      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+      onImported();
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الاستيراد"),
   });
@@ -173,6 +346,31 @@ function StudentImport() {
 
 function TeacherImport() {
   const queryClient = useQueryClient();
+  const [showExcel, setShowExcel] = useState(false);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-fg-muted">أضف معلمًا أو عدّل بياناته، أو ارفع ملف إكسل دفعة واحدة.</p>
+        <Button variant="secondary" onClick={() => setShowExcel((v) => !v)}>
+          <Upload className="size-4" />
+          {showExcel ? "إخفاء ملف الإكسل" : "استيراد معلمين من إكسل"}
+        </Button>
+      </div>
+      {showExcel ? (
+        <TeacherExcelForm
+          onImported={() => {
+            void queryClient.invalidateQueries({ queryKey: ["staff"] });
+            setShowExcel(false);
+          }}
+        />
+      ) : null}
+      <StaffManager compact />
+    </div>
+  );
+}
+
+function TeacherExcelForm({ onImported }: { onImported: () => void }) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<TeacherMapping>({
@@ -188,7 +386,7 @@ function TeacherImport() {
       toast.success(
         `تم استيراد المعلمين: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز. كلمة المرور ${DEFAULT_TEACHER_PASSWORD}`,
       );
-      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      onImported();
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الاستيراد"),
   });

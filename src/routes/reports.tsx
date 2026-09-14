@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AppGate } from "@/components/app-gate";
+import { OfficialLetterhead } from "@/components/print-forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -122,11 +123,6 @@ function ReportsBody() {
     if (sheetRef.current) printElement(sheetRef.current);
   }
 
-  const gov = reportSchool.governorate.replace(/^محافظة\s*/, "").trim();
-  const region = reportSchool.region.trim();
-  const schoolLine = reportSchool.name.startsWith("مدرسة")
-    ? reportSchool.name
-    : `مدرسة ${reportSchool.name || "………………"}`;
   const principal = principalTitle(reportSchool.leadershipGender);
   const counselor = counselorTitle(reportSchool.leadershipGender);
 
@@ -256,40 +252,13 @@ function ReportsBody() {
         ref={sheetRef}
         className="print-form print-report official-sheet official-report overflow-hidden rounded-[var(--radius-lg)] border border-border bg-white text-black font-naskh sm:px-5 sm:py-4"
       >
-        <header className="mb-2">
-          <div className="official-accent h-1.5 bg-[#00857c]" />
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-1 py-2">
-            <div className="text-[11px] leading-5">
-              <p className="font-semibold">المملكة العربية السعودية</p>
-              <p>وزارة التعليم</p>
-              <p>متابعة الطلاب الشاملة</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <img src="/moe-logo.jpg" alt="" className="h-[58px] w-auto object-contain" />
-              {reportSchool.logoUrl ? (
-                <img src={reportSchool.logoUrl} alt="" className="h-[58px] w-auto object-contain" />
-              ) : (
-                <img src="/app-logo.jpg" alt="" className="h-[58px] w-[58px] object-contain" />
-              )}
-            </div>
-            <div className="text-left text-[11px] leading-5">
-              <p>
-                {region
-                  ? `إدارة التعليم ب${region.replace(/^المنطقة\s*/, "")}`
-                  : "إدارة التعليم: ………………"}
-              </p>
-              {gov ? <p>المحافظة: {gov}</p> : null}
-              <p className="font-semibold">{schoolLine}</p>
-            </div>
-          </div>
-          <div className="official-accent h-px bg-[#00857c]" />
-          <h2 className="mt-2 text-center text-[20px] font-semibold tracking-wide">
-            {mode === "messages" ? "كشف رسائل أولياء الأمور" : "كشف متابعة الطلاب"}
-          </h2>
-          <p className="text-center text-[13px] text-[#00857c]">
-            {todayLabel()} — {hijriDate()}
-          </p>
-        </header>
+        <OfficialLetterhead school={reportSchool} />
+        <h2 className="mt-2 text-center text-[20px] font-semibold tracking-wide">
+          {mode === "messages" ? "كشف رسائل أولياء الأمور" : "كشف متابعة الطلاب"}
+        </h2>
+        <p className="text-center text-[13px] text-[#00857c]">
+          {todayLabel()} — {hijriDate()}
+        </p>
 
         {selectedStudent ? (
           <table className="official-table mb-3">

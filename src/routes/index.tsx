@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { GraduationCap } from "lucide-react";
 import { AppGate } from "@/components/app-gate";
+import { ROLE_LABEL } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +20,7 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <p className="text-sm text-fg-muted">
-          {staff.role === "admin"
-            ? "مرحباً بك في لوحة الإدارة"
-            : staff.role === "counselor"
-              ? "مرحباً بك وكيل شؤون الطلاب"
-              : "لوحة تحكم المعلم"}
-        </p>
+        <p className="text-sm text-fg-muted">مرحباً بك — {ROLE_LABEL[staff.role]}</p>
         <h1 className="text-3xl font-semibold tracking-tight">اختر المرحلة</h1>
       </header>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -61,7 +56,7 @@ function Dashboard() {
       </div>
       {stages.length === 0 ? (
         <p className={cn("rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-fg-muted")}>
-          لم تُضف مراحل بعد.
+          لم تُضف مراحل بعد. ارفع ملف الطلاب من صفحة الاستيراد ليُنشأ الهيكل تلقائياً.
         </p>
       ) : null}
     </div>

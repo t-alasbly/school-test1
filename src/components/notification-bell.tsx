@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,10 +13,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getNotifications, markNotificationsRead } from "@/lib/school/api";
 import { formatStamp } from "@/lib/school/constants";
+import { staffCan } from "@/lib/school/permissions";
+import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
 export function NotificationBell() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { staff } = useWorkspace();
   const seen = useRef<number | null>(null);
   const query = useQuery({
     queryKey: ["notifications"],
@@ -26,6 +30,8 @@ export function NotificationBell() {
 
   const unread = query.data?.unread ?? 0;
   const items = query.data?.items ?? [];
+  const canAdmin = staffCan(staff, "takeActions") || staffCan(staff, "acceptImprovements");
+  const canCounsel = staffCan(staff, "counseling");
 
   useEffect(() => {
     if (seen.current === null) {
@@ -46,6 +52,34 @@ export function NotificationBell() {
       await markNotificationsRead();
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
+  }
+
+  function openItem(item: {
+    kind: string;
+    studentId?: number | null;
+    classId?: number | null;
+  }) {
+    if (item.kind === "referral" && canCounsel) {
+      void navigate({ to: "/counseling" });
+      return;
+    }
+    if (item.classId && item.studentId) {
+      void navigate({
+        to: "/class/$classId",
+        params: { classId: String(item.classId) },
+        search: { student: item.studentId },
+      });
+      return;
+    }
+    if (item.studentId && canAdmin) {
+      void navigate({ to: "/admin", search: { student: item.studentId } });
+      return;
+    }
+    if (canAdmin) {
+      void navigate({ to: "/admin" });
+      return;
+    }
+    void navigate({ to: "/" });
   }
 
   return (
@@ -71,27 +105,26 @@ export function NotificationBell() {
           <p className="px-3 py-6 text-center text-sm text-fg-muted">لا توجد تنبيهات بعد</p>
         ) : (
           items.slice(0, 8).map((item) => (
-            <DropdownMenuItem key={item.id} asChild>
-              <Link
-                to={item.kind === "note" || item.kind === "repeat" ? "/admin" : "/"}
-                className="flex flex-col items-stretch gap-0.5 py-2"
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{item.title}</span>
-                  <span
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      item.tone === "danger"
-                        ? "bg-danger"
-                        : item.tone === "ok"
-                          ? "bg-ok"
-                          : "bg-warn",
-                    )}
-                  />
-                </span>
-                <span className="text-xs leading-5 text-fg-muted">{item.body}</span>
-                <span className="text-xs text-fg-subtle">{formatStamp(item.createdAt)}</span>
-              </Link>
+            <DropdownMenuItem
+              key={item.id}
+              className="flex flex-col items-stretch gap-0.5 py-2"
+              onSelect={() => openItem(item)}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="font-medium">{item.title}</span>
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    item.tone === "danger"
+                      ? "bg-danger"
+                      : item.tone === "ok"
+                        ? "bg-ok"
+                        : "bg-warn",
+                  )}
+                />
+              </span>
+              <span className="text-xs leading-5 text-fg-muted">{item.body}</span>
+              <span className="text-xs text-fg-subtle">{formatStamp(item.createdAt)}</span>
             </DropdownMenuItem>
           ))
         )}

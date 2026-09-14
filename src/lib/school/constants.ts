@@ -3,6 +3,7 @@ import type {
   MessageKind,
   NoteTone,
   NoteType,
+  PrintMargins,
   School,
   SchoolGender,
   Season,
@@ -23,15 +24,98 @@ export const NOTE_TYPES = Object.keys(NOTE_META) as NoteType[];
 
 export const ROLE_LABEL: Record<StaffRole, string> = {
   admin: "مدير التطبيق",
+  principal: "مدير مدرسة",
+  school_vp: "وكيل الشؤون المدرسية",
+  teachers_vp: "وكيل شؤون المعلمين",
   counselor: "وكيل شؤون الطلاب",
+  student_counselor: "مرشد طلابي",
+  health_counselor: "مرشد صحي",
+  activity_leader: "رائد نشاط",
   teacher: "معلم",
   pending: "بانتظار الموافقة",
 };
 
-export const ASSIGNABLE_ROLES: StaffRole[] = ["admin", "counselor", "teacher", "pending"];
+export const ASSIGNABLE_ROLES: StaffRole[] = [
+  "teacher",
+  "activity_leader",
+  "health_counselor",
+  "student_counselor",
+  "counselor",
+  "teachers_vp",
+  "school_vp",
+  "principal",
+  "admin",
+  "pending",
+];
+
+export const CREATE_ROLES: Exclude<StaffRole, "pending">[] = [
+  "teacher",
+  "activity_leader",
+  "health_counselor",
+  "student_counselor",
+  "counselor",
+  "teachers_vp",
+  "school_vp",
+  "principal",
+  "admin",
+];
+
+export const APP_NAME = "متابعة الطلاب الشاملة";
+export const DEFAULT_APP_PHRASE =
+  "نظام متابعة شؤون الطلاب — بين المعلم والإدارة وولي الأمر";
+export const DEFAULT_SCHOOL_NAME = "اسم المدرسة";
+export const DEFAULT_PRINT_MARGINS: PrintMargins = {
+  top: 10,
+  right: 10,
+  bottom: 12,
+  left: 8,
+};
+
+export function clampPrintMargin(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 10;
+  return Math.min(40, Math.max(0, Math.round(n)));
+}
+
+export function parsePrintMargins(raw: unknown): PrintMargins {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return { ...DEFAULT_PRINT_MARGINS };
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...DEFAULT_PRINT_MARGINS };
+  }
+  const rec = value as Record<string, unknown>;
+  return {
+    top: clampPrintMargin(rec.top ?? DEFAULT_PRINT_MARGINS.top),
+    right: clampPrintMargin(rec.right ?? DEFAULT_PRINT_MARGINS.right),
+    bottom: clampPrintMargin(rec.bottom ?? DEFAULT_PRINT_MARGINS.bottom),
+    left: clampPrintMargin(rec.left ?? DEFAULT_PRINT_MARGINS.left),
+  };
+}
+
+export function applyPrintMargins(margins: PrintMargins) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  root.style.setProperty("--print-margin-top", `${margins.top}mm`);
+  root.style.setProperty("--print-margin-right", `${margins.right}mm`);
+  root.style.setProperty("--print-margin-bottom", `${margins.bottom}mm`);
+  root.style.setProperty("--print-margin-left", `${margins.left}mm`);
+}
+
 
 export function isLeadership(role: StaffRole) {
-  return role === "admin" || role === "counselor";
+  return (
+    role === "admin" ||
+    role === "principal" ||
+    role === "counselor" ||
+    role === "school_vp" ||
+    role === "teachers_vp"
+  );
 }
 
 export const DEFAULT_BEHAVIOR_TYPES = [
@@ -231,6 +315,18 @@ export const COMPENSATION_OPTIONS = [
   "المشاركة في النشاط الطلابي",
   "تقديم اعتذار وسلوك إيجابي موثّق",
   "تمثيل المدرسة في مسابقة أو نشاط",
+  "أخرى",
+];
+
+export const IMPROVE_OPTIONS = [
+  "الالتزام بالحضور في الوقت",
+  "احترام المعلم",
+  "احترام الزملاء",
+  "إنجاز الواجبات",
+  "الهدوء داخل الفصل",
+  "الالتزام بالزي المدرسي",
+  "عدم استخدام الجوال",
+  "المشاركة الإيجابية في الحصة",
   "أخرى",
 ];
 

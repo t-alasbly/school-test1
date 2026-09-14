@@ -1,23 +1,30 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { ImproveDialog } from "@/components/improve-dialog";
 import { NoteActions } from "@/components/note-actions";
 import { NoteSession } from "@/components/note-session";
 import { AddStudentButton } from "@/components/student-editor";
 import { StudentSheet } from "@/components/student-sheet";
+import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getClassPage } from "@/lib/school/api";
 import { NOTE_META, formatTime, noteTone } from "@/lib/school/constants";
+import { staffCan } from "@/lib/school/permissions";
 import type { DailyKind, StudentRow } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/class/$classId")({ component: ClassPage });
+export const Route = createFileRoute("/class/$classId")({
+  validateSearch: (search: Record<string, unknown>): { student?: number } => ({
+    student: Number(search.student) > 0 ? Number(search.student) : undefined,
+  }),
+  component: ClassPage,
+});
 
 function ClassPage() {
   return (
@@ -35,15 +42,21 @@ function dailyRank(kind: DailyKind | null) {
 
 function ClassBody() {
   const { classId } = Route.useParams();
+  const { student: studentParam } = Route.useSearch();
   const id = Number(classId);
   const { school, staff } = useWorkspace();
   const [q, setQ] = useState("");
-  const [activeStudent, setActiveStudent] = useState<number | null>(null);
+  const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
+  const canMessage = staffCan(staff, "sendMessages");
   const query = useQuery({
     queryKey: ["class", id],
     queryFn: () => getClassPage({ data: { classId: id } }),
     enabled: Number.isFinite(id),
   });
+
+  useEffect(() => {
+    if (studentParam) setActiveStudent(studentParam);
+  }, [studentParam]);
 
   const students = useMemo(() => {
     const list = query.data?.students ?? [];
@@ -177,6 +190,20 @@ function ClassBody() {
                   </span>
                 </button>
                 <div className="flex shrink-0 items-center">
+                  {canMessage ? (
+                    <WhatsAppDialog
+                      studentId={student.id}
+                      studentName={student.name}
+                      parentPhone={student.parentPhone}
+                      className={classInfo.name}
+                      shortName={classInfo.shortName}
+                      defaultType={latest?.type ?? "general"}
+                      details={latest?.behaviorTypeName ?? latest?.details ?? ""}
+                      subject={latest?.teacherSubject}
+                      createdAt={latest?.createdAt}
+                      periodKey={latest?.periodKey}
+                    />
+                  ) : null}
                   <ImproveDialog
                     studentId={student.id}
                     studentName={student.name}

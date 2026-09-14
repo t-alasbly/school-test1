@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { NoteSession } from "@/components/note-session";
@@ -41,7 +41,12 @@ import { staffCan } from "@/lib/school/permissions";
 import type { BehaviorImprovement, ImprovementStatus, NoteRecord } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
-export const Route = createFileRoute("/admin")({ component: AdminPage });
+export const Route = createFileRoute("/admin")({
+  validateSearch: (search: Record<string, unknown>): { student?: number } => ({
+    student: Number(search.student) > 0 ? Number(search.student) : undefined,
+  }),
+  component: AdminPage,
+});
 
 function AdminPage() {
   return (
@@ -52,17 +57,22 @@ function AdminPage() {
 }
 
 function AdminBody() {
+  const { student: studentParam } = Route.useSearch();
   const { staff } = useWorkspace();
   const canAct = staffCan(staff, "takeActions");
   const canImprove = staffCan(staff, "acceptImprovements");
   const allowed = canAct || canImprove;
-  const [activeStudent, setActiveStudent] = useState<number | null>(null);
+  const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const query = useQuery({
     queryKey: ["admin"],
     queryFn: () => getAdminDashboard(),
     refetchInterval: 5000,
     enabled: allowed,
   });
+
+  useEffect(() => {
+    if (studentParam) setActiveStudent(studentParam);
+  }, [studentParam]);
 
   if (!allowed) {
     return <p className="text-fg-muted">هذه الصفحة مخصصة لمن مُنح صلاحية الإجراءات أو قبول التحسين.</p>;
@@ -348,6 +358,7 @@ function AdminNoteCard({
                   teacherName: note.teacherName,
                   teacherSubject: note.teacherSubject,
                   occurrence: note.occurrence,
+                  compensation: note.compensation,
                 },
               ]}
               studentId={note.studentId}
@@ -375,6 +386,7 @@ function AdminNoteCard({
                   teacherName: note.teacherName,
                   teacherSubject: note.teacherSubject,
                   occurrence: note.occurrence,
+                  compensation: note.compensation,
                 },
               ]}
               studentId={note.studentId}
@@ -620,7 +632,7 @@ function AdminNoteCard({
                   id={`note-${note.id}`}
                   value={actionNote}
                   onChange={(e) => setActionNote(e.target.value)}
-                  placeholder="تُحفظ مع الإجراء وتظهر للمعلم في التنبيه…"
+                  placeholder="تُحفظ مع الإجراء وتظهر في الورقة المطبوعة وفي تنبيه المعلم…"
                 />
               </div>
               <div className="flex gap-2">

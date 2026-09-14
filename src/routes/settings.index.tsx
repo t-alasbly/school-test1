@@ -1,5 +1,20 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Award, Gavel, HeartPulse, KeyRound, MessageCircle, Palette, School, ShieldAlert } from "lucide-react";
+import {
+  Award,
+  Gavel,
+  HeartPulse,
+  KeyRound,
+  MessageCircle,
+  Palette,
+  Printer,
+  School,
+  ShieldAlert,
+  Smartphone,
+  Sprout,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/settings/")({ component: SettingsHub });
@@ -9,13 +24,39 @@ function SettingsHub() {
   const admin = staff.role === "admin";
   const cards = [
     {
-      to: "/settings/school" as const,
-      title: "البيانات",
-      body: admin
-        ? "بيانات المدرسة والشعار، وحسابك (الاسم واسم المستخدم وكلمة المرور والمادة)، وإضافة المعلمين."
-        : "اسمك الظاهر، اسم المستخدم، كلمة المرور، والمادة الدراسية.",
-      icon: School,
+      to: "/settings/profile" as const,
+      title: "حسابك",
+      body: "اسمك الظاهر، رقم الجوال، كلمة المرور، والمادة الدراسية.",
+      icon: UserRound,
       show: true,
+    },
+    {
+      to: "/settings/school" as const,
+      title: "بيانات المدرسة",
+      body: "المنطقة وإدارة التعليم واسم المدرسة وأسماء القيادة كما تظهر في الخطابات.",
+      icon: School,
+      show: admin,
+    },
+    {
+      to: "/settings/app" as const,
+      title: "أيقونة التطبيق",
+      body: "شعار المدرسة وعبارة التطبيق على الشاشة الرئيسية وشاشة الدخول.",
+      icon: Smartphone,
+      show: admin,
+    },
+    {
+      to: "/settings/print" as const,
+      title: "هوامش الطباعة",
+      body: "ضبط هوامش الورقة بالمليمتر لتوافق الطابعة المستخدمة.",
+      icon: Printer,
+      show: admin,
+    },
+    {
+      to: "/staff" as const,
+      title: "المعلمون والمستخدمون",
+      body: "إضافة المعلمين وتعديل بياناتهم وتفعيل الصلاحيات أمام كل موظف.",
+      icon: Users,
+      show: staffCan(staff, "editStaff"),
     },
     {
       to: "/settings/appearance" as const,
@@ -34,7 +75,7 @@ function SettingsHub() {
     {
       to: "/settings/permissions" as const,
       title: "صلاحيات المعلمين",
-      body: "إظهار أو إخفاء مراسلة ولي الأمر، والسماح للمعلم بمشاهدة مخالفات زملائه أو حصرها عليه.",
+      body: "الافتراضي للمعلمين الجدد: مراسلة ولي الأمر، ومشاهدة مخالفات الزملاء.",
       icon: KeyRound,
       show: admin,
     },
@@ -60,9 +101,16 @@ function SettingsHub() {
       show: admin,
     },
     {
+      to: "/settings/improve" as const,
+      title: "خيارات تحسين السلوك",
+      body: "السلوكيات التي يختار منها المعلم عند تحسين سلوك الطالب — يضيفها المدير أو المرشد.",
+      icon: Sprout,
+      show: admin || staffCan(staff, "counseling") || staffCan(staff, "acceptImprovements"),
+    },
+    {
       to: "/settings/messages" as const,
       title: "الرسائل",
-      body: "قوالب رسائل ولي الأمر عبر واتساب: الغياب والتأخر والواجب والسلوك.",
+      body: "قوالب واتساب للغياب والتأخر والواجب والسلوك، مع رسائل عامة مخصصة تُضاف للقائمة.",
       icon: MessageCircle,
       show: admin,
     },
@@ -71,7 +119,7 @@ function SettingsHub() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm text-fg-muted">ضبط الهوية والمظهر والمخالفات والصلاحيات</p>
+        <p className="text-sm text-fg-muted">كل بطاقة تفتح صفحتها فقط</p>
         <h1 className="text-3xl font-semibold tracking-tight">الإعدادات</h1>
       </header>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -79,7 +127,7 @@ function SettingsHub() {
           const Icon = card.icon;
           return (
             <Link
-              key={card.to}
+              key={card.title}
               to={card.to}
               className="group flex min-h-40 flex-col justify-between rounded-[var(--radius-xl)] border border-border bg-card p-6 shadow-[var(--shadow-card)] transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary"
             >

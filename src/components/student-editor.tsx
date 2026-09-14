@@ -38,8 +38,10 @@ export function AddStudentButton({ classId }: { classId: number }) {
 
 export function EditStudentButton({
   student,
+  showLabel = false,
 }: {
   student: { id: number; name: string; parentPhone: string; classId: number };
+  showLabel?: boolean;
 }) {
   const { staff } = useWorkspace();
   const [open, setOpen] = useState(false);
@@ -47,12 +49,13 @@ export function EditStudentButton({
   return (
     <>
       <Button
-        size="icon-sm"
-        variant="ghost"
+        size={showLabel ? "sm" : "icon-sm"}
+        variant={showLabel ? "secondary" : "ghost"}
         aria-label={`تعديل بيانات ${student.name}`}
         onClick={() => setOpen(true)}
       >
         <Pencil className="size-4" />
+        {showLabel ? "تعديل" : null}
       </Button>
       <StudentEditorDialog
         open={open}
@@ -61,6 +64,68 @@ export function EditStudentButton({
         student={student}
         classId={student.classId}
       />
+    </>
+  );
+}
+
+export function DeleteStudentButton({
+  student,
+}: {
+  student: { id: number; name: string; classId: number };
+}) {
+  const { staff } = useWorkspace();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const mutation = useMutation({
+    mutationFn: () => deleteStudent({ data: { studentId: student.id } }),
+    onSuccess: () => {
+      toast.success(`تم حذف ${student.name}`);
+      void queryClient.invalidateQueries({ queryKey: ["class", student.classId] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
+      void queryClient.invalidateQueries({ queryKey: ["student"] });
+      void queryClient.invalidateQueries({ queryKey: ["roster"] });
+      setOpen(false);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+  });
+  if (!staffCan(staff, "editStudents")) return null;
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-danger"
+        aria-label={`حذف ${student.name}`}
+        onClick={() => setOpen(true)}
+      >
+        <Trash2 className="size-4" />
+        حذف
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>حذف الطالب</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-danger">
+            سيُحذف {student.name} وجميع ملاحظاته. لا يمكن التراجع.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate()}
+            >
+              <Trash2 className="size-4" />
+              تأكيد الحذف
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              إلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -101,6 +166,8 @@ function StudentEditorDialog({
     void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     void queryClient.invalidateQueries({ queryKey: ["admin"] });
     void queryClient.invalidateQueries({ queryKey: ["student"] });
+    void queryClient.invalidateQueries({ queryKey: ["roster"] });
+    void queryClient.invalidateQueries({ queryKey: ["staff"] });
   }
 
   const saveMutation = useMutation({

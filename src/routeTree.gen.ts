@@ -22,11 +22,15 @@ import { Route as StaffRouteImport } from './routes/staff'
 import { Route as ClassClassIdRouteImport } from './routes/class.$classId'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActionsRouteImport } from './routes/settings.actions'
+import { Route as SettingsAppRouteImport } from './routes/settings.app'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as SettingsCompensationRouteImport } from './routes/settings.compensation'
 import { Route as SettingsHealthRouteImport } from './routes/settings.health'
+import { Route as SettingsImproveRouteImport } from './routes/settings.improve'
 import { Route as SettingsMessagesRouteImport } from './routes/settings.messages'
 import { Route as SettingsPermissionsRouteImport } from './routes/settings.permissions'
+import { Route as SettingsPrintRouteImport } from './routes/settings.print'
+import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsSchoolRouteImport } from './routes/settings.school'
 import { Route as SettingsViolationsRouteImport } from './routes/settings.violations'
 import { Route as StageStageIdRouteImport } from './routes/stage.$stageId'
@@ -97,6 +101,11 @@ const SettingsActionsRoute = SettingsActionsRouteImport.update({
   path: '/actions',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsAppRoute = SettingsAppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   id: '/appearance',
   path: '/appearance',
@@ -112,6 +121,11 @@ const SettingsHealthRoute = SettingsHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsImproveRoute = SettingsImproveRouteImport.update({
+  id: '/improve',
+  path: '/improve',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsMessagesRoute = SettingsMessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
@@ -120,6 +134,16 @@ const SettingsMessagesRoute = SettingsMessagesRouteImport.update({
 const SettingsPermissionsRoute = SettingsPermissionsRouteImport.update({
   id: '/permissions',
   path: '/permissions',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsPrintRoute = SettingsPrintRouteImport.update({
+  id: '/print',
+  path: '/print',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsProfileRoute = SettingsProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsSchoolRoute = SettingsSchoolRouteImport.update({
@@ -156,11 +180,15 @@ export interface FileRoutesByFullPath {
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
   '/settings/actions': typeof SettingsActionsRoute
+  '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
+  '/settings/improve': typeof SettingsImproveRoute
   '/settings/messages': typeof SettingsMessagesRoute
   '/settings/permissions': typeof SettingsPermissionsRoute
+  '/settings/print': typeof SettingsPrintRoute
+  '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
@@ -179,11 +207,15 @@ export interface FileRoutesByTo {
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
   '/settings/actions': typeof SettingsActionsRoute
+  '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
+  '/settings/improve': typeof SettingsImproveRoute
   '/settings/messages': typeof SettingsMessagesRoute
   '/settings/permissions': typeof SettingsPermissionsRoute
+  '/settings/print': typeof SettingsPrintRoute
+  '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
@@ -204,11 +236,15 @@ export interface FileRoutesById {
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
   '/settings/actions': typeof SettingsActionsRoute
+  '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
+  '/settings/improve': typeof SettingsImproveRoute
   '/settings/messages': typeof SettingsMessagesRoute
   '/settings/permissions': typeof SettingsPermissionsRoute
+  '/settings/print': typeof SettingsPrintRoute
+  '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
@@ -230,11 +266,15 @@ export interface FileRouteTypes {
     | '/staff'
     | '/class/$classId'
     | '/settings/actions'
+    | '/settings/app'
     | '/settings/appearance'
     | '/settings/compensation'
     | '/settings/health'
+    | '/settings/improve'
     | '/settings/messages'
     | '/settings/permissions'
+    | '/settings/print'
+    | '/settings/profile'
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
@@ -253,11 +293,15 @@ export interface FileRouteTypes {
     | '/staff'
     | '/class/$classId'
     | '/settings/actions'
+    | '/settings/app'
     | '/settings/appearance'
     | '/settings/compensation'
     | '/settings/health'
+    | '/settings/improve'
     | '/settings/messages'
     | '/settings/permissions'
+    | '/settings/print'
+    | '/settings/profile'
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
@@ -277,11 +321,15 @@ export interface FileRouteTypes {
     | '/staff'
     | '/class/$classId'
     | '/settings/actions'
+    | '/settings/app'
     | '/settings/appearance'
     | '/settings/compensation'
     | '/settings/health'
+    | '/settings/improve'
     | '/settings/messages'
     | '/settings/permissions'
+    | '/settings/print'
+    | '/settings/profile'
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
@@ -398,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsActionsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/app': {
+      id: '/settings/app'
+      path: '/app'
+      fullPath: '/settings/app'
+      preLoaderRoute: typeof SettingsAppRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/appearance': {
       id: '/settings/appearance'
       path: '/appearance'
@@ -419,6 +474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsHealthRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/improve': {
+      id: '/settings/improve'
+      path: '/improve'
+      fullPath: '/settings/improve'
+      preLoaderRoute: typeof SettingsImproveRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/messages': {
       id: '/settings/messages'
       path: '/messages'
@@ -431,6 +493,20 @@ declare module '@tanstack/react-router' {
       path: '/permissions'
       fullPath: '/settings/permissions'
       preLoaderRoute: typeof SettingsPermissionsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/print': {
+      id: '/settings/print'
+      path: '/print'
+      fullPath: '/settings/print'
+      preLoaderRoute: typeof SettingsPrintRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/profile': {
+      id: '/settings/profile'
+      path: '/profile'
+      fullPath: '/settings/profile'
+      preLoaderRoute: typeof SettingsProfileRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/school': {
@@ -466,11 +542,15 @@ declare module '@tanstack/react-router' {
 
 interface SettingsRouteChildren {
   SettingsActionsRoute: typeof SettingsActionsRoute
+  SettingsAppRoute: typeof SettingsAppRoute
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
   SettingsCompensationRoute: typeof SettingsCompensationRoute
   SettingsHealthRoute: typeof SettingsHealthRoute
+  SettingsImproveRoute: typeof SettingsImproveRoute
   SettingsMessagesRoute: typeof SettingsMessagesRoute
   SettingsPermissionsRoute: typeof SettingsPermissionsRoute
+  SettingsPrintRoute: typeof SettingsPrintRoute
+  SettingsProfileRoute: typeof SettingsProfileRoute
   SettingsSchoolRoute: typeof SettingsSchoolRoute
   SettingsViolationsRoute: typeof SettingsViolationsRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -478,11 +558,15 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsActionsRoute: SettingsActionsRoute,
+  SettingsAppRoute: SettingsAppRoute,
   SettingsAppearanceRoute: SettingsAppearanceRoute,
   SettingsCompensationRoute: SettingsCompensationRoute,
   SettingsHealthRoute: SettingsHealthRoute,
+  SettingsImproveRoute: SettingsImproveRoute,
   SettingsMessagesRoute: SettingsMessagesRoute,
   SettingsPermissionsRoute: SettingsPermissionsRoute,
+  SettingsPrintRoute: SettingsPrintRoute,
+  SettingsProfileRoute: SettingsProfileRoute,
   SettingsSchoolRoute: SettingsSchoolRoute,
   SettingsViolationsRoute: SettingsViolationsRoute,
   SettingsIndexRoute: SettingsIndexRoute,

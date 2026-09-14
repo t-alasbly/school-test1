@@ -16,7 +16,6 @@ import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { ROLE_LABEL, todayLabel } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
-import type { StaffRole } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -27,23 +26,21 @@ const NAV: {
   label: string;
   counselorLabel?: string;
   icon: typeof BookOpen;
-  roles: StaffRole[];
 }[] = [
-  { to: "/", label: "الفصول", icon: BookOpen, roles: ["admin", "teacher", "counselor"] },
+  { to: "/", label: "الفصول", icon: BookOpen },
   {
     to: "/admin",
     label: "الإدارة",
     counselorLabel: "شؤون الطلاب",
     icon: LayoutDashboard,
-    roles: ["admin", "counselor", "teacher"],
   },
-  { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck, roles: ["admin", "teacher", "counselor"] },
-  { to: "/counseling", label: "الإرشاد", icon: HeartHandshake, roles: ["admin", "teacher", "counselor"] },
-  { to: "/reports", label: "التقارير", icon: ClipboardList, roles: ["admin", "teacher", "counselor"] },
-  { to: "/forms", label: "طباعة نماذج", icon: Printer, roles: ["admin", "teacher", "counselor"] },
-  { to: "/import", label: "الاستيراد", icon: Upload, roles: ["admin"] },
-  { to: "/staff", label: "الموظفون", icon: Users, roles: ["admin", "teacher", "counselor"] },
-  { to: "/settings", label: "الإعدادات", icon: Settings, roles: ["admin", "teacher", "counselor"] },
+  { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck },
+  { to: "/counseling", label: "الإرشاد", icon: HeartHandshake },
+  { to: "/reports", label: "التقارير", icon: ClipboardList },
+  { to: "/forms", label: "طباعة نماذج", icon: Printer },
+  { to: "/import", label: "الاستيراد", icon: Upload },
+  { to: "/staff", label: "الموظفون", icon: Users },
+  { to: "/settings", label: "الإعدادات", icon: Settings },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -52,13 +49,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
   const items = NAV.filter((item) => {
-    if (!item.roles.includes(staff.role)) return false;
+    if (staff.role === "pending") return false;
     if (item.to === "/staff") return staffCan(staff, "editStaff");
     if (item.to === "/admin") {
       return staffCan(staff, "takeActions") || staffCan(staff, "acceptImprovements");
     }
     if (item.to === "/attendance") return staffCan(staff, "dailyAttendance");
     if (item.to === "/counseling") return staffCan(staff, "counseling");
+    if (item.to === "/import") return staff.role === "admin";
     return true;
   });
 
@@ -67,10 +65,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Link to="/" className="flex min-w-0 items-center gap-3">
-            <SchoolMark size="sm" />
+            <SchoolMark size="sm" src={school.logoUrl || undefined} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
-              <span className="block truncate text-xs text-fg-muted">متابعة الطلاب الشاملة</span>
+              <span className="block truncate text-xs text-fg-muted">
+                {school.tagline?.trim() || "متابعة الطلاب الشاملة"}
+              </span>
             </span>
           </Link>
           <nav className="mx-auto hidden items-center gap-1 md:flex">

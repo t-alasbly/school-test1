@@ -39,6 +39,7 @@ function FormsBody() {
   const [noteIdx, setNoteIdx] = useState(0);
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState<FormOverrides>({});
+  const [showCompensation, setShowCompensation] = useState(true);
 
   const report = useQuery({
     queryKey: ["report", "forms"],
@@ -182,6 +183,16 @@ function FormsBody() {
             )}
           </Select>
         </div>
+        <label className="flex min-h-11 items-center gap-2 self-end rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm sm:col-span-2">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={showCompensation && Boolean(selectedNote?.compensation)}
+            disabled={!selectedNote?.compensation}
+            onChange={(e) => setShowCompensation(e.target.checked)}
+          />
+          إظهار فرص التعويض في التعهد والخطاب
+        </label>
       </form>
 
       {selectedStudent && manual ? (
@@ -245,6 +256,7 @@ function FormsBody() {
           selectedNote={selectedNote}
           school={school}
           overrides={manual ? overrides : undefined}
+          showCompensation={showCompensation && Boolean(selectedNote?.compensation)}
         />
       ) : (
         <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-10 text-center text-sm text-fg-muted">

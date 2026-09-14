@@ -43,7 +43,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
           <h1 className="text-2xl font-semibold">بانتظار موافقة الإدارة</h1>
           <p className="text-fg-muted">
             تم إنشاء حسابك في {workspace.data.school.name}. سيظهر لك التطبيق بعد
-            أن يعتمد المدير صلاحيتك كمعلم أو وكيل شؤون الطلاب.
+            أن يعتمد المدير صلاحيتك كمعلم أو أحد مسميات القيادة والإرشاد.
           </p>
         </div>
       </div>

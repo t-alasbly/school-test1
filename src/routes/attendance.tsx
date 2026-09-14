@@ -4,11 +4,11 @@ import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { OfficialLetterhead } from "@/components/print-forms";
 import { AppGate } from "@/components/app-gate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { getDailyAttendance, saveDailyAttendance } from "@/lib/school/api";
 import { formatDay, formatTime, hijriDate, todayLabel } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
@@ -62,27 +62,51 @@ function AttendanceBody() {
   const queryClient = useQueryClient();
   const sheetRef = useRef<HTMLElement>(null);
   const [day, setDay] = useState(todayISO);
-  const [stageId, setStageId] = useState("");
-  const [classId, setClassId] = useState("");
+  const allClassIds = useMemo(() => classes.map((c) => c.id), [classes]);
+  const [classIds, setClassIds] = useState<number[] | null>(null);
+  const selectedIds = classIds ?? allClassIds;
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [draft, setDraft] = useState<Record<number, Draft>>({});
   const [printKind, setPrintKind] = useState<PrintKind>("all");
 
   const can = staffCan(staff, "dailyAttendance");
   const query = useQuery({
-    queryKey: ["daily-attendance", day, classId, stageId],
+    queryKey: ["daily-attendance", day, selectedIds.join(",")],
     queryFn: () =>
       getDailyAttendance({
         data: {
           day,
-          classId: classId ? Number(classId) : undefined,
-          stageId: stageId ? Number(stageId) : undefined,
+          classIds: selectedIds,
         },
       }),
     enabled: can,
   });
 
-  const classOptions = classes.filter((c) => (stageId ? c.stageId === Number(stageId) : true));
   const students: DailyAttendanceRow[] = query.data?.students ?? [];
+
+  function stageOn(stageId: number) {
+    const ids = classes.filter((c) => c.stageId === stageId).map((c) => c.id);
+    return ids.length > 0 && ids.every((id) => selectedSet.has(id));
+  }
+  function toggleStage(stageId: number, on: boolean) {
+    const ids = classes.filter((c) => c.stageId === stageId).map((c) => c.id);
+    setClassIds(() => {
+      const cur = new Set(selectedIds);
+      for (const id of ids) {
+        if (on) cur.add(id);
+        else cur.delete(id);
+      }
+      return [...cur];
+    });
+  }
+  function toggleClass(id: number, on: boolean) {
+    setClassIds(() => {
+      const cur = new Set(selectedIds);
+      if (on) cur.add(id);
+      else cur.delete(id);
+      return [...cur];
+    });
+  }
 
   function statusOf(row: DailyAttendanceRow): DailyKind | "present" {
     return draft[row.studentId]?.kind ?? row.kind ?? "present";
@@ -143,9 +167,6 @@ function AttendanceBody() {
     return <p className="text-fg-muted">تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.</p>;
   }
 
-  const gov = school.governorate.replace(/^محافظة\s*/, "").trim();
-  const region = school.region.trim();
-  const schoolLine = school.name.startsWith("مدرسة") ? school.name : `مدرسة ${school.name}`;
   const printTitle =
     printKind === "absence"
       ? "كشف الغياب اليومي"
@@ -181,40 +202,65 @@ function AttendanceBody() {
         </div>
       </header>
 
-      <form className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-3">
-        <div className="space-y-1.5">
+      <form className="no-print space-y-4 rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <div className="space-y-1.5 sm:max-w-xs">
           <Label htmlFor="att-day">اليوم</Label>
           <Input id="att-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="att-stage">المرحلة</Label>
-          <Select
-            id="att-stage"
-            value={stageId}
-            onChange={(e) => {
-              setStageId(e.target.value);
-              setClassId("");
-            }}
-          >
-            <option value="">الكل</option>
-            {stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">المراحل</p>
+          <div className="flex flex-wrap gap-2">
+            {stages.map((stage) => {
+              const on = stageOn(stage.id);
+              return (
+                <label
+                  key={stage.id}
+                  className={cn(
+                    "inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm font-medium",
+                    on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg-elevated text-fg-muted",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={on}
+                    onChange={(e) => toggleStage(stage.id, e.target.checked)}
+                  />
+                  {stage.shortName || stage.name}
+                </label>
+              );
+            })}
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="att-class">الفصل</Label>
-          <Select id="att-class" value={classId} onChange={(e) => setClassId(e.target.value)}>
-            <option value="">الكل</option>
-            {classOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {stages.map((stage) => (
+          <div key={stage.id} className="space-y-1.5">
+            <p className="text-xs font-medium text-fg-muted">{stage.name}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {classes
+                .filter((c) => c.stageId === stage.id)
+                .map((cls) => {
+                  const on = selectedSet.has(cls.id);
+                  return (
+                    <label
+                      key={cls.id}
+                      className={cn(
+                        "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-sm",
+                        on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg-elevated text-fg-muted",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-3.5 accent-primary"
+                        checked={on}
+                        onChange={(e) => toggleClass(cls.id, e.target.checked)}
+                      />
+                      {cls.name}
+                    </label>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
       </form>
 
       <ul className="no-print divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
@@ -303,31 +349,11 @@ function AttendanceBody() {
       </ul>
 
       <article ref={sheetRef} className="print-form official-sheet bg-white text-black font-naskh">
-        <header className="mb-3">
-          <div className="official-accent h-1.5 bg-[#00857c]" />
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-1 py-2.5">
-            <div className="text-[12px] leading-5">
-              <p className="font-semibold">المملكة العربية السعودية</p>
-              <p>وزارة التعليم</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <img src="/moe-logo.jpg" alt="" className="h-[58px] w-auto object-contain" />
-              {school.logoUrl ? (
-                <img src={school.logoUrl} alt="" className="h-[58px] w-auto object-contain" />
-              ) : null}
-            </div>
-            <div className="text-left text-[12px] leading-5">
-              <p>{region ? `إدارة التعليم ب${region.replace(/^المنطقة\s*/, "")}` : "إدارة التعليم"}</p>
-              {gov ? <p>المحافظة: {gov}</p> : null}
-              <p className="font-semibold">{schoolLine}</p>
-            </div>
-          </div>
-          <div className="official-accent h-px bg-[#00857c]" />
-          <h2 className="mt-2 text-center text-[20px] font-semibold">{printTitle}</h2>
-          <p className="text-center text-[13px] text-[#00857c]">
-            {todayLabel()} — {hijriDate(`${day}T12:00:00`)} — {formatDay(`${day}T12:00:00`)}
-          </p>
-        </header>
+        <OfficialLetterhead school={school} />
+        <h2 className="mt-2 text-center text-[20px] font-semibold">{printTitle}</h2>
+        <p className="text-center text-[13px] text-[#00857c]">
+          {todayLabel()} — {hijriDate(`${day}T12:00:00`)} — {formatDay(`${day}T12:00:00`)}
+        </p>
         <table className="official-table mb-3">
           <thead>
             <tr>

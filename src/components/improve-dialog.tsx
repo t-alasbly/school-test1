@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sprout } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { OptionChips } from "@/components/option-chips";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +15,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createImprovement } from "@/lib/school/api";
+import { IMPROVE_OPTIONS, isOtherChoice, resolveOther } from "@/lib/school/constants";
+import { useWorkspace } from "@/lib/school/workspace";
 
 export function ImproveDialog({
   studentId,
@@ -24,14 +27,29 @@ export function ImproveDialog({
   studentName: string;
   classId?: number;
 }) {
+  const { improvementOptions = [] } = useWorkspace();
+  const options =
+    improvementOptions.length > 0 ? improvementOptions.map((o) => o.name) : IMPROVE_OPTIONS;
   const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [other, setOther] = useState("");
   const [plan, setPlan] = useState("");
   const queryClient = useQueryClient();
+
+  function composed() {
+    const names = resolveOther(picked, other);
+    const extra = plan.trim();
+    const focus = names.length ? `السلوك المراد تحسينه: ${names.join(" — ")}` : "";
+    return [focus, extra].filter(Boolean).join("\n");
+  }
+
   const mutation = useMutation({
-    mutationFn: () => createImprovement({ data: { studentId, plan } }),
+    mutationFn: () => createImprovement({ data: { studentId, plan: composed() } }),
     onSuccess: (result) => {
       toast.success(`أُرسلت خطة تحسين سلوك ${result.studentName} إلى المرشد`);
       setPlan("");
+      setPicked([]);
+      setOther("");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["improvements"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
@@ -42,12 +60,20 @@ export function ImproveDialog({
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ الخطة"),
   });
 
+  const ready =
+    composed().trim().length >= 4 &&
+    (!picked.some(isOtherChoice) || other.trim().length >= 2);
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setPlan("");
+        if (!next) {
+          setPlan("");
+          setPicked([]);
+          setOther("");
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -59,25 +85,36 @@ export function ImproveDialog({
         <DialogHeader>
           <DialogTitle>تحسين سلوك الطالب</DialogTitle>
           <DialogDescription>
-            {studentName} — تُرسل الخطة إلى المرشد الطلابي للمتابعة.
+            {studentName} — اختر السلوك المراد تحسينه ثم أرسل الخطة إلى المرشد الطلابي.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor={`plan-${studentId}`}>إجراء التحسين الذي ستطبقه</Label>
+            <Label>السلوك الذي تريد تحسينه</Label>
+            <OptionChips
+              items={options}
+              selected={picked}
+              onToggle={(name) =>
+                setPicked((prev) =>
+                  prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name],
+                )
+              }
+              otherValue={other}
+              onOtherChange={setOther}
+              otherPlaceholder="صف السلوك يدوياً…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`plan-${studentId}`}>إجراء التحسين الذي ستطبقه (اختياري)</Label>
             <Textarea
               id={`plan-${studentId}`}
-              className="min-h-32"
-              placeholder="مثال: تعزيز إيجابي عند الالتزام، جلوس في المقدمة، متابعة الواجب يومياً، تواصل مع ولي الأمر…"
+              className="min-h-24"
+              placeholder="مثال: تعزيز إيجابي عند الالتزام، جلوس في المقدمة، متابعة الواجب يومياً…"
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
             />
           </div>
-          <Button
-            className="w-full"
-            disabled={mutation.isPending || plan.trim().length < 4}
-            onClick={() => mutation.mutate()}
-          >
+          <Button className="w-full" disabled={mutation.isPending || !ready} onClick={() => mutation.mutate()}>
             إرسال للمرشد الطلابي
           </Button>
         </div>

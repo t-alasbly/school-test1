@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
+import { Ban, Check, Shield } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createStaffUser, listStaff, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
-import { ASSIGNABLE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
+import { createStaffUser, listStaff, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
+import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
 import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
 import type { StaffRole } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -23,14 +23,14 @@ import { cn } from "@/lib/utils";
 
 function roleTone(role: StaffRole) {
   if (role === "pending") return "warn" as const;
-  if (role === "admin") return "primary" as const;
-  if (role === "counselor") return "ok" as const;
+  if (role === "admin" || role === "principal") return "primary" as const;
+  if (role === "counselor" || role === "school_vp" || role === "teachers_vp") return "ok" as const;
   return "default" as const;
 }
 
 type StaffRow = Awaited<ReturnType<typeof listStaff>>[number];
 
-export function StaffManager() {
+export function StaffManager({ compact = false }: { compact?: boolean }) {
   const { staff } = useWorkspace();
   const queryClient = useQueryClient();
   const canManage = staffCan(staff, "editStaff");
@@ -45,7 +45,9 @@ export function StaffManager() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("1234");
   const [subject, setSubject] = useState("");
-  const [role, setRole] = useState<"admin" | "teacher" | "counselor">("teacher");
+  const [role, setRole] = useState<Exclude<StaffRole, "pending">>("teacher");
+  const [permsFor, setPermsFor] = useState<StaffRow | null>(null);
+  const [cancelFor, setCancelFor] = useState<StaffRow | null>(null);
   const [editing, setEditing] = useState<{
     userId: string;
     displayName: string;
@@ -68,6 +70,7 @@ export function StaffManager() {
       setSubject("");
       setRole("teacher");
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
   });
@@ -87,6 +90,17 @@ export function StaffManager() {
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التحديث"),
+  });
+
+  const activeMutation = useMutation({
+    mutationFn: (input: { userId: string; active: boolean }) => setStaffActive({ data: input }),
+    onSuccess: (res) => {
+      toast.success(res.active ? `أُعيد تفعيل ${res.displayName}` : `أُلغي حساب ${res.displayName}`);
+      setCancelFor(null);
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر تغيير حالة الحساب"),
   });
 
   const permMutation = useMutation({
@@ -120,7 +134,7 @@ export function StaffManager() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>إضافة معلم أو مستخدم</CardTitle>
+          <CardTitle>{compact ? "إضافة معلم" : "إضافة معلم أو مستخدم"}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -187,17 +201,17 @@ export function StaffManager() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-role">الصلاحية</Label>
+              <Label htmlFor="new-role">المسمى الوظيفي</Label>
               <Select
                 id="new-role"
                 value={role}
-                onChange={(e) =>
-                  setRole(e.target.value as "admin" | "teacher" | "counselor")
-                }
+                onChange={(e) => setRole(e.target.value as Exclude<StaffRole, "pending">)}
               >
-                <option value="teacher">{ROLE_LABEL.teacher}</option>
-                <option value="counselor">{ROLE_LABEL.counselor}</option>
-                <option value="admin">{ROLE_LABEL.admin}</option>
+                {CREATE_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="sm:col-span-2">
@@ -219,8 +233,8 @@ export function StaffManager() {
 
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {(query.data ?? []).map((member) => (
-          <li key={member.userId} className="space-y-3 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-3">
+          <li key={member.userId} className={cn("px-4 py-3", member.active === false && "opacity-60")}>
+            <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{member.displayName}</p>
                 <p className="text-xs text-fg-subtle">
@@ -230,6 +244,20 @@ export function StaffManager() {
                 </p>
               </div>
               <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
+              {member.active === false ? <Badge tone="danger">ملغى</Badge> : null}
+              {member.role === "admin" ? (
+                <span className="text-xs text-fg-muted">كل الصلاحيات</span>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setPermsFor(member)}
+                  aria-label={`صلاحيات ${member.displayName}`}
+                >
+                  <Shield className="size-4" />
+                  صلاحيات
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
@@ -247,56 +275,27 @@ export function StaffManager() {
               </Button>
               {member.userId === staff.userId ? (
                 <span className="text-xs text-fg-muted">حسابك</span>
-              ) : null}
+              ) : member.active === false ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={activeMutation.isPending}
+                  onClick={() => activeMutation.mutate({ userId: member.userId, active: true })}
+                >
+                  إعادة تفعيل
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCancelFor(member)}
+                  aria-label={`إلغاء ${member.displayName}`}
+                >
+                  <Ban className="size-4" />
+                  إلغاء
+                </Button>
+              )}
             </div>
-            {member.role === "admin" ? (
-              <p className="text-xs text-fg-muted">مدير التطبيق يملك كل الصلاحيات تلقائيًا.</p>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-fg-muted">الصلاحيات المسموح بها</p>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {PERMISSION_META.map((item) => {
-                  const on = member.permissions[item.key];
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      role="checkbox"
-                      aria-checked={on}
-                      disabled={permMutation.isPending}
-                      onClick={() =>
-                        permMutation.mutate({
-                          userId: member.userId,
-                          permissions: { ...member.permissions, [item.key]: !on },
-                        })
-                      }
-                      className={cn(
-                        "flex min-h-12 items-start gap-2 rounded-[var(--radius-sm)] border px-2.5 py-2 text-right transition-colors",
-                        on
-                          ? "border-primary bg-primary/10 text-fg"
-                          : "border-border bg-bg-elevated text-fg-muted",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-[4px] border",
-                          on
-                            ? "border-primary bg-primary text-primary-fg"
-                            : "border-border-strong bg-card",
-                        )}
-                      >
-                        {on ? <Check className="size-3.5" /> : null}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium leading-5">{item.label}</span>
-                        <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{item.hint}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-                </div>
-              </div>
-            )}
           </li>
         ))}
         {query.data?.length === 0 ? (
@@ -346,7 +345,7 @@ export function StaffManager() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-role">الصلاحية</Label>
+                <Label htmlFor="edit-role">المسمى الوظيفي</Label>
                 <Select
                   id="edit-role"
                   value={editing.role}
@@ -372,6 +371,91 @@ export function StaffManager() {
               </Button>
             </form>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={permsFor != null} onOpenChange={(open) => !open && setPermsFor(null)}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>صلاحيات {permsFor?.displayName}</DialogTitle>
+          </DialogHeader>
+          {permsFor ? (
+            <div className="space-y-2">
+              <p className="text-sm text-fg-muted">
+                اختر المسموح به لهذا الموظف ثم أغلق النافذة. لا تظهر صلاحيات الجميع في القائمة.
+              </p>
+              <div className="grid grid-cols-1 gap-1.5">
+                {PERMISSION_META.map((item) => {
+                  const live = (query.data ?? []).find((m) => m.userId === permsFor.userId);
+                  const on = (live ?? permsFor).permissions[item.key];
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      disabled={permMutation.isPending}
+                      onClick={() =>
+                        permMutation.mutate({
+                          userId: permsFor.userId,
+                          permissions: { ...(live ?? permsFor).permissions, [item.key]: !on },
+                        })
+                      }
+                      className={cn(
+                        "flex min-h-12 items-start gap-2 rounded-[var(--radius-sm)] border px-2.5 py-2 text-right transition-colors",
+                        on
+                          ? "border-primary bg-primary/10 text-fg"
+                          : "border-border bg-bg-elevated text-fg-muted",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-[4px] border",
+                          on
+                            ? "border-primary bg-primary text-primary-fg"
+                            : "border-border-strong bg-card",
+                        )}
+                      >
+                        {on ? <Check className="size-3.5" /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-5">{item.label}</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{item.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <Button type="button" className="w-full" variant="secondary" onClick={() => setPermsFor(null)}>
+                تم
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cancelFor != null} onOpenChange={(open) => !open && setCancelFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>إلغاء حساب {cancelFor?.displayName}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-fg-muted">
+            لن يتمكن من الدخول حتى تعيد تفعيله. سجل ملاحظاته ورسائله يبقى محفوظاً.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setCancelFor(null)}>
+              تراجع
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={activeMutation.isPending || !cancelFor}
+              onClick={() =>
+                cancelFor && activeMutation.mutate({ userId: cancelFor.userId, active: false })
+              }
+            >
+              تأكيد الإلغاء
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

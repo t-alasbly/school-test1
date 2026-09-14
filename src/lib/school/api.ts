@@ -9,13 +9,16 @@ import {
   DEFAULT_ACTION_TYPES,
   DEFAULT_HEALTH_CONDITIONS,
   COMPENSATION_OPTIONS,
+  IMPROVE_OPTIONS,
+  ROLE_LABEL,
   DEFAULT_ADMIN_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PHONE,
+  DEFAULT_PRINT_MARGINS,
+  DEFAULT_SCHOOL_NAME,
   DEFAULT_STAGES,
   DEFAULT_TEACHER_PASSWORD,
-  FIRST_NAMES,
-  LAST_NAMES,
+  parsePrintMargins,
   NOTE_META,
   OFFICIAL_BEHAVIOR_TYPES,
   classLabel,
@@ -27,7 +30,7 @@ import {
   procedureLadder,
   withOccurrence,
 } from "./constants";
-import { parsePermissions, type PermissionKey } from "./permissions";
+import { parsePermissions, defaultPermissions, type PermissionKey } from "./permissions";
 import { parseAppearance, parseOptionalAppearance, type Appearance } from "./theme";
 import type {
   ImprovementStatus,
@@ -61,6 +64,7 @@ type SchoolRow = {
   counselor_name: string;
   technical_vp_name: string;
   logo_url: string;
+  tagline: string;
   message_templates: unknown;
   teachers_can_message: boolean;
   teachers_can_view_all: boolean;
@@ -83,7 +87,11 @@ function mapSchool(school: any): School {
 		counselorName: school.counselor_name ?? "",
 		technicalVpName: school.technical_vp_name ?? "",
 		logoUrl: school.logo_url ?? "",
+		extraLogoUrl: school.extra_logo_url ?? "",
+		tagline: school.tagline ?? "",
+		printMargins: parsePrintMargins(school.print_margins ?? school.printMargins),
 		messageTemplates: parseMessageTemplates(school.message_templates),
+		customMessages: parseCustomMessages(school.custom_messages),
 		teachersCanMessage: school.teachers_can_message !== false,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
 		appearance: parseAppearance(school.appearance)
@@ -99,8 +107,22 @@ function parseMessageTemplates(raw: any) {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
 	return value;
 }
+function parseCustomMessages(raw: any) {
+	let value = raw;
+	if (typeof raw === "string") try {
+		value = JSON.parse(raw);
+	} catch {
+		return [];
+	}
+	if (!Array.isArray(value)) return [];
+	return value.filter((item) => item && typeof item.title === "string" && typeof item.body === "string").map((item) => ({
+		id: String(item.id || "").slice(0, 40),
+		title: String(item.title).trim().slice(0, 80),
+		body: String(item.body).trim().slice(0, 2e3)
+	})).filter((item) => item.id && item.title.length >= 2 && item.body.length >= 4);
+}
 async function loadSchool(sql: any, schoolId: any) {
-	return (await sql<any>`
+	const row = (await sql<any>`
     select id, name, coalesce(principal_name, '') as principal_name,
            coalesce(season, 'winter') as season,
            coalesce(region, '') as region,
@@ -116,9 +138,55 @@ async function loadSchool(sql: any, schoolId: any) {
            coalesce(appearance::text, '{}') as appearance
     from schools where id = ${schoolId}
   `)[0] ?? null;
+	if (!row) return null;
+	let tagline = "";
+	let print_margins = DEFAULT_PRINT_MARGINS;
+	let extra_logo_url = "";
+	let custom_messages = "[]";
+	try {
+		const extra = (await sql`
+      select coalesce(tagline, '') as tagline, coalesce(print_margins::text, '{}') as print_margins,
+             coalesce(extra_logo_url, '') as extra_logo_url,
+             coalesce(custom_messages::text, '[]') as custom_messages
+      from schools where id = ${schoolId}
+    `)[0];
+		tagline = extra?.tagline ?? "";
+		print_margins = extra?.print_margins ?? DEFAULT_PRINT_MARGINS;
+		extra_logo_url = extra?.extra_logo_url ?? "";
+		custom_messages = extra?.custom_messages ?? "[]";
+	} catch {
+		try {
+			const extra = (await sql`
+        select coalesce(tagline, '') as tagline, coalesce(print_margins::text, '{}') as print_margins
+        from schools where id = ${schoolId}
+      `)[0];
+			tagline = extra?.tagline ?? "";
+			print_margins = extra?.print_margins ?? DEFAULT_PRINT_MARGINS;
+		} catch {
+			try {
+				tagline = (await sql`
+          select coalesce(tagline, '') as tagline from schools where id = ${schoolId}
+        `)[0]?.tagline ?? "";
+			} catch {
+				tagline = "";
+			}
+		}
+	}
+	return { ...row, tagline, print_margins, extra_logo_url, custom_messages };
 }
 async function getStaff(sql: any, userId: any) {
-	return (await sql<any>`
+	try {
+		return (await sql<any>`
+    select user_id, school_id, display_name, role,
+           coalesce(subject, '') as subject, coalesce(phone, '') as phone,
+           coalesce(permissions::text, '{}') as permissions,
+           coalesce(appearance::text, '{}') as appearance,
+           coalesce(active, true) as active
+    from staff
+    where user_id = ${userId}
+  `)[0] ?? null;
+	} catch {
+		const row = (await sql<any>`
     select user_id, school_id, display_name, role,
            coalesce(subject, '') as subject, coalesce(phone, '') as phone,
            coalesce(permissions::text, '{}') as permissions,
@@ -126,6 +194,8 @@ async function getStaff(sql: any, userId: any) {
     from staff
     where user_id = ${userId}
   `)[0] ?? null;
+		return row ? { ...row, active: true } : null;
+	}
 }
 function mappedPerms(staff: any, school: any) {
 	return parsePermissions(staff.permissions, staff.role, mapSchool(school));
@@ -158,6 +228,7 @@ async function requireApproved(userId: any) {
 	const sql = await getSql();
 	const staff = await getStaff(sql, userId);
 	if (!staff || staff.role === "pending") throw new Error("لا تملك صلاحية الوصول بعد");
+	if (staff.active === false) throw new Error("تم إلغاء هذا الحساب. راجع مدير التطبيق.");
 	const school = await loadSchool(sql, staff.school_id);
 	if (!school) throw new Error("المدرسة غير موجودة");
 	return {
@@ -220,6 +291,18 @@ async function ensureCompensations(sql: any, schoolId: any) {
 		// table may not exist until migration applies
 	}
 }
+async function ensureImproveOptions(sql: any, schoolId: any) {
+	try {
+		await ensureCatalog(sql, schoolId, "improvement_options", IMPROVE_OPTIONS);
+	} catch {
+		// table may not exist until migration applies
+	}
+}
+function canManageImproveCatalog(staff: any, school: any) {
+	if (staff.role === "admin") return true;
+	const perms = mappedPerms(staff, school);
+	return Boolean(perms.counseling || perms.acceptImprovements);
+}
 function mapCatalog(rows: any) {
 	return rows.map((r) => ({
 		id: r.id,
@@ -275,50 +358,6 @@ async function listClassOptions(sql: any, schoolId: any) {
 	}));
 }
 async function seedSchool(sql: any, schoolId: any) {
-	let studentIndex = 0;
-	for (const stage of DEFAULT_STAGES) {
-		const stageId = (await sql<any>`
-      insert into stages (school_id, name, short_name, sort_order)
-      values (${schoolId}, ${stage.name}, ${stage.shortName}, ${stage.sortOrder})
-      returning id
-    `)[0]?.id;
-		if (!stageId) continue;
-		for (let n = 1; n <= 5; n += 1) {
-			const classId = (await sql<any>`
-        insert into classes (school_id, stage_id, name, sort_order)
-        values (${schoolId}, ${stageId}, ${String(n)}, ${n})
-        returning id
-      `)[0]?.id;
-			if (!classId) continue;
-			const names = [];
-			const phones = [];
-			for (let s = 0; s < 6; s += 1) {
-				const first = FIRST_NAMES[studentIndex % FIRST_NAMES.length];
-				const last = LAST_NAMES[(studentIndex * 5 + n) % LAST_NAMES.length];
-				names.push(`${first} ${last}`);
-				phones.push(`05${String(3e7 + studentIndex).padStart(8, "0")}`);
-				studentIndex += 1;
-			}
-			await sql.query<any>(`insert into students (school_id, class_id, name, parent_phone) values
-          ($1, $2, $3, $4), ($1, $2, $5, $6), ($1, $2, $7, $8),
-          ($1, $2, $9, $10), ($1, $2, $11, $12), ($1, $2, $13, $14)`, [
-				schoolId,
-				classId,
-				names[0],
-				phones[0],
-				names[1],
-				phones[1],
-				names[2],
-				phones[2],
-				names[3],
-				phones[3],
-				names[4],
-				phones[4],
-				names[5],
-				phones[5]
-			]);
-		}
-	}
 	await ensureBehaviorTypes(sql, schoolId);
 	await ensureActionTypes(sql, schoolId);
 }
@@ -353,7 +392,7 @@ async function ensureSchoolAndAdmin(sql: any) {
 	if (!schoolId) {
 		schoolId = (await sql<any>`
       insert into schools (name, created_by)
-      values (${"مدرسة المتابعة المتوسطة"}, ${user.id})
+      values (${DEFAULT_SCHOOL_NAME}, ${user.id})
       returning id
     `)[0].id;
 		await seedSchool(sql, schoolId);
@@ -371,8 +410,23 @@ async function ensureSchoolAndAdmin(sql: any) {
     `;
 }
 export const ensureAppReady = createServerFn({ method: "GET" }).handler(async () => {
-	await ensureSchoolAndAdmin(await getSql());
-	return { ok: true };
+	const sql = await getSql();
+	await ensureSchoolAndAdmin(sql);
+	let name = "";
+	let logoUrl = "";
+	let tagline = "";
+	try {
+		const row = (await sql`
+      select name, coalesce(logo_url, '') as logo_url, coalesce(tagline, '') as tagline
+      from schools order by id limit 1
+    `)[0];
+		name = row?.name ?? "";
+		logoUrl = row?.logo_url ?? "";
+		tagline = row?.tagline ?? "";
+	} catch {
+		/* tagline column applies after restart */
+	}
+	return { ok: true, name, logoUrl, tagline };
 });
 async function listStageSummaries(sql: any, schoolId: any, teacherId: any) {
 	return (teacherId ? await sql<any>`
@@ -437,6 +491,7 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 		staff = await getStaff(sql, userId);
 	}
 	if (!staff) throw new Error("تعذر تجهيز الحساب");
+	if (staff.active === false) throw new Error("تم إلغاء هذا الحساب. راجع مدير التطبيق.");
 	const school = await loadSchool(sql, staff.school_id);
 	if (!school) throw new Error("المدرسة غير موجودة");
 	const pending = staff.role === "pending";
@@ -448,11 +503,13 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 		await ensureActionTypes(sql, school.id);
 		await ensureHealthConditions(sql, school.id);
 		await ensureCompensations(sql, school.id);
+		await ensureImproveOptions(sql, school.id);
 	}
 	const behaviorTypes = pending ? [] : await listBehaviorTypeRows(sql, school.id, true);
 	const actionTypes = pending ? [] : await listActionTypeRows(sql, school.id, true);
 	let healthConditions = [];
 	let compensations = [];
+	let improvementOptions = [];
 	if (!pending) {
 		try {
 			healthConditions = await listCatalogRows(sql, school.id, "health_conditions", true);
@@ -464,6 +521,11 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 		} catch {
 			compensations = [];
 		}
+		try {
+			improvementOptions = await listCatalogRows(sql, school.id, "improvement_options", true);
+		} catch {
+			improvementOptions = [];
+		}
 	}
 	return {
 		staff: mapStaffPublic(staff, school),
@@ -473,7 +535,8 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 		behaviorTypes,
 		actionTypes,
 		healthConditions,
-		compensations
+		compensations,
+		improvementOptions
 	};
 });
 export const getStagePage = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ stageId: z.number() })).handler(async ({ context, data }) => {
@@ -662,7 +725,7 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
           and behavior_type_id = ${behaviorTypeId}
       `)[0]?.count ?? 1;
 	const title = occurrence > 1 ? `تكرار مخالفة — ${occurrenceLabel(occurrence)}` : `تم تسجيل ${meta.label}`;
-	const actor = staff.role === "counselor" ? "وكيل شؤون الطلاب" : staff.role === "admin" ? "المدير" : "المعلم";
+	const actor = ROLE_LABEL[staff.role] || "الموظف";
 	const body = occurrence > 1 ? `تكررت مخالفة (${behaviorName}) على الطالب ${student.name} ${occurrenceLabel(occurrence)}. سجّلها ${actor} ${staff.display_name}. يُرجى إشعار وكيل الشؤون الفنية${school.technical_vp_name ? ` (${school.technical_vp_name})` : ""} واتخاذ إجراء المرحلة المناسبة.` : `تم تسجيل ${label} للطالب ${student.name} بواسطة ${actor} ${staff.display_name}`;
 	const tone = occurrence > 1 ? "danger" : meta.tone;
 	const recipients = await sql<any>`
@@ -986,7 +1049,7 @@ export const closeNote = createServerFn({ method: "POST" }).middleware([authMidd
     `;
 	const meta = NOTE_META[note.type];
 	const title = "تم اتخاذ الإجراء";
-	const body = `قام ${staff.role === "counselor" ? "وكيل شؤون الطلاب" : "الإدارة"} بإغلاق ملاحظة (${meta.label}) للطالب ${note.student_name}: ${data.actionTaken.trim()}`;
+	const body = `قام ${ROLE_LABEL[staff.role] || "الإدارة"} بإغلاق ملاحظة (${meta.label}) للطالب ${note.student_name}: ${data.actionTaken.trim()}`;
 	await sql<any>`
       insert into notifications (school_id, user_id, note_id, kind, title, body, tone)
       values (${staff.school_id}, ${note.teacher_id}, ${note.id}, ${"action"}, ${title}, ${body}, ${"ok"})
@@ -996,10 +1059,15 @@ export const closeNote = createServerFn({ method: "POST" }).middleware([authMidd
 export const getNotifications = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff } = await requireApproved(context.userId);
 	const rows = await sql<any>`
-      select id, note_id, kind, title, body, tone, read, created_at::text as created_at
-      from notifications
-      where user_id = ${staff.user_id} and school_id = ${staff.school_id}
-      order by created_at desc
+      select ntf.id, ntf.note_id, ntf.kind, ntf.title, ntf.body, ntf.tone, ntf.read,
+             ntf.created_at::text as created_at,
+             notes.student_id as student_id,
+             s.class_id as class_id
+      from notifications ntf
+      left join notes on notes.id = ntf.note_id
+      left join students s on s.id = notes.student_id
+      where ntf.user_id = ${staff.user_id} and ntf.school_id = ${staff.school_id}
+      order by ntf.created_at desc
       limit 40
     `;
 	const unread = rows.filter((r) => !r.read).length;
@@ -1012,7 +1080,9 @@ export const getNotifications = createServerFn({ method: "GET" }).middleware([au
 			body: r.body,
 			tone: r.tone,
 			read: r.read,
-			createdAt: r.created_at
+			createdAt: r.created_at,
+			studentId: r.student_id ?? null,
+			classId: r.class_id ?? null
 		})),
 		unread
 	};
@@ -1073,15 +1143,41 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 			skipped += 1;
 			continue;
 		}
-		const stage = matchStage(row.stageName, stageList);
+		let stage = matchStage(row.stageName, stageList);
 		if (!stage) {
-			skipped += 1;
-			continue;
+			const stageName = row.stageName.trim();
+			if (!stageName) {
+				skipped += 1;
+				continue;
+			}
+			const known = DEFAULT_STAGES.find((st) => foldArabic(st.name) === foldArabic(stageName) || foldArabic(st.shortName) === foldArabic(stageName));
+			const shortName = known?.shortName ?? (stageName.length <= 8 ? stageName : stageName.slice(0, 8));
+			const sortOrder = known?.sortOrder ?? stageList.length + 1;
+			const created = (await sql<any>`
+        insert into stages (school_id, name, short_name, sort_order)
+        values (${staff.school_id}, ${known?.name ?? stageName}, ${shortName}, ${sortOrder})
+        returning id, name, short_name, sort_order
+      `)[0];
+			stage = { id: created.id, name: created.name, shortName: created.short_name, sortOrder: created.sort_order };
+			stageList.push(stage);
 		}
-		const cls = matchClass(row.className, classList, stage.id);
+		let cls = matchClass(row.className, classList, stage.id);
 		if (!cls) {
-			skipped += 1;
-			continue;
+			const rawClass = row.className.trim();
+			if (!rawClass) {
+				skipped += 1;
+				continue;
+			}
+			const digits = rawClass.match(/\d+/);
+			const className = digits ? digits[0] : rawClass;
+			const sortOrder = Number(className) || classList.filter((c) => c.stageId === stage.id).length + 1;
+			const created = (await sql<any>`
+        insert into classes (school_id, stage_id, name, sort_order)
+        values (${staff.school_id}, ${stage.id}, ${className}, ${sortOrder})
+        returning id, stage_id, name
+      `)[0];
+			cls = { id: created.id, stageId: created.stage_id, name: created.name };
+			classList.push(cls);
 		}
 		const existing = await sql<any>`
         select id from students
@@ -1132,7 +1228,30 @@ async function insertCredentialStaff(sql: any, opts: any) {
 export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	const mapped = mapSchool(school);
-	return (await sql<any>`
+	let rows: any[] = [];
+	try {
+		rows = await sql<any>`
+      select st.user_id, st.display_name, st.role, st.created_at::text as created_at,
+             u.email as email,
+             coalesce(st.subject, '') as subject,
+             coalesce(st.phone, '') as phone,
+             coalesce(st.permissions::text, '{}') as permissions,
+             coalesce(st.active, true) as active
+      from staff st
+      left join "user" u on u.id = st.user_id
+      where st.school_id = ${staff.school_id}
+      order by
+        coalesce(st.active, true) desc,
+        case st.role
+          when 'pending' then 0 when 'admin' then 1 when 'principal' then 2
+          when 'school_vp' then 3 when 'teachers_vp' then 4 when 'counselor' then 5
+          when 'student_counselor' then 6 when 'health_counselor' then 7
+          when 'activity_leader' then 8 else 9
+        end,
+        st.created_at
+    `;
+	} catch {
+		rows = await sql<any>`
       select st.user_id, st.display_name, st.role, st.created_at::text as created_at,
              u.email as email,
              coalesce(st.subject, '') as subject,
@@ -1142,9 +1261,12 @@ export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddl
       left join "user" u on u.id = st.user_id
       where st.school_id = ${staff.school_id}
       order by
-        case st.role when 'pending' then 0 when 'admin' then 1 when 'counselor' then 2 else 3 end,
+        case st.role when 'pending' then 0 when 'admin' then 1 else 2 end,
         st.created_at
-    `).map((r) => ({
+    `;
+		rows = rows.map((r) => ({ ...r, active: true }));
+	}
+	return rows.map((r) => ({
 		userId: r.user_id,
 		displayName: r.display_name,
 		role: r.role as StaffRole,
@@ -1152,24 +1274,44 @@ export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddl
 		email: r.email ?? "",
 		subject: r.subject,
 		phone: r.phone,
-		permissions: parsePermissions(r.permissions, r.role, mapped)
+		permissions: parsePermissions(r.permissions, r.role, mapped),
+		active: r.active !== false
 	}));
 });
 export const setStaffRole = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	userId: z.string(),
 	role: z.enum([
 		"admin",
-		"teacher",
+		"principal",
+		"school_vp",
+		"teachers_vp",
 		"counselor",
+		"student_counselor",
+		"health_counselor",
+		"activity_leader",
+		"teacher",
 		"pending"
 	])
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editStaff");
 	if (data.userId === staff.user_id && data.role !== "admin") throw new Error("لا يمكنك إزالة صلاحية المدير عن حسابك");
+	await assertNotLastAdmin(sql, staff.school_id, data.userId, data.role, true);
+	const current = (await sql<any>`
+      select role from staff where user_id = ${data.userId} and school_id = ${staff.school_id}
+    `)[0];
 	await sql<any>`
       update staff set role = ${data.role}
       where user_id = ${data.userId} and school_id = ${staff.school_id}
     `;
+	if (current && current.role !== data.role) {
+		const school = await loadSchool(sql, staff.school_id);
+		const nextPerms = defaultPermissions(data.role, school ? mapSchool(school) : undefined);
+		await sql.query(`update staff set permissions = $1::jsonb where user_id = $2 and school_id = $3`, [
+			JSON.stringify(nextPerms),
+			data.userId,
+			staff.school_id,
+		]);
+	}
 	return { ok: true };
 });
 export const updateStaffMember = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -1177,23 +1319,43 @@ export const updateStaffMember = createServerFn({ method: "POST" }).middleware([
 	displayName: z.string().min(2).max(80),
 	role: z.enum([
 		"admin",
-		"teacher",
+		"principal",
+		"school_vp",
+		"teachers_vp",
 		"counselor",
+		"student_counselor",
+		"health_counselor",
+		"activity_leader",
+		"teacher",
 		"pending"
 	]),
 	subject: z.string().max(80).optional(),
 	phone: z.string().max(20).optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requirePerm(context.userId, "editStaff");
+	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	if (data.userId === staff.user_id && data.role !== "admin") throw new Error("لا يمكنك إزالة صلاحية المدير عن حسابك");
+	await assertNotLastAdmin(sql, staff.school_id, data.userId, data.role, true);
 	const name = data.displayName.trim();
 	const subject = data.subject?.trim() ?? "";
 	const phone = data.phone ? normalizeSaudiPhone(data.phone) : "";
-	await sql<any>`
+	const current = (await sql<any>`
+      select role from staff where user_id = ${data.userId} and school_id = ${staff.school_id}
+    `)[0];
+	if (current && current.role !== data.role) {
+		const nextPerms = defaultPermissions(data.role, mapSchool(school));
+		await sql.query(
+			`update staff
+         set display_name = $1, role = $2, subject = $3, phone = $4, permissions = $5::jsonb
+       where user_id = $6 and school_id = $7`,
+			[name, data.role, subject, phone, JSON.stringify(nextPerms), data.userId, staff.school_id],
+		);
+	} else {
+		await sql<any>`
       update staff
       set display_name = ${name}, role = ${data.role}, subject = ${subject}, phone = ${phone}
       where user_id = ${data.userId} and school_id = ${staff.school_id}
     `;
+	}
 	await sql<any>`
       update "user" set name = ${name}, "updatedAt" = now()
       where id = ${data.userId}
@@ -1207,8 +1369,14 @@ export const createStaffUser = createServerFn({ method: "POST" }).middleware([au
 	password: z.string().min(4).max(80),
 	role: z.enum([
 		"admin",
-		"teacher",
-		"counselor"
+		"principal",
+		"school_vp",
+		"teachers_vp",
+		"counselor",
+		"student_counselor",
+		"health_counselor",
+		"activity_leader",
+		"teacher"
 	]),
 	subject: z.string().max(80).optional()
 })).handler(async ({ context, data }) => {
@@ -1227,6 +1395,35 @@ export const createStaffUser = createServerFn({ method: "POST" }).middleware([au
 		subject: data.subject?.trim() ?? "",
 		phone
 	}) };
+});
+async function assertNotLastAdmin(sql: any, schoolId: any, userId: any, nextRole: any, nextActive: any) {
+	const target = (await sql<any>`
+      select role, coalesce(active, true) as active from staff
+      where user_id = ${userId} and school_id = ${schoolId}
+    `)[0];
+	if (!target || target.role !== "admin") return;
+	const stillAdmin = nextRole === "admin" && nextActive !== false;
+	if (stillAdmin) return;
+	const others = (await sql<any>`
+      select count(*)::int as count from staff
+      where school_id = ${schoolId} and role = 'admin' and coalesce(active, true) = true and user_id <> ${userId}
+    `)[0]?.count ?? 0;
+	if (others < 1) throw new Error("لا يمكن إلغاء آخر مدير تطبيق");
+}
+export const setStaffActive = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	userId: z.string(),
+	active: z.boolean()
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requirePerm(context.userId, "editStaff");
+	if (data.userId === staff.user_id) throw new Error("لا يمكنك إلغاء حسابك");
+	await assertNotLastAdmin(sql, staff.school_id, data.userId, "admin", data.active);
+	const updated = await sql<any>`
+      update staff set active = ${data.active}
+      where user_id = ${data.userId} and school_id = ${staff.school_id}
+      returning display_name, active
+    `;
+	if (!updated[0]) throw new Error("الموظف غير موجود");
+	return { ok: true, displayName: updated[0].display_name, active: updated[0].active };
 });
 export const importTeachers = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ rows: z.array(z.object({
 	name: z.string(),
@@ -1289,19 +1486,32 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 	studentGender: z.enum(["male", "female"]).optional(),
 	counselorName: z.string().max(80).optional(),
 	technicalVpName: z.string().max(80).optional(),
-	logoUrl: z.string().max(4e5).optional()
+	logoUrl: z.string().max(4e5).optional(),
+	extraLogoUrl: z.string().max(4e5).optional(),
+	tagline: z.string().max(160).optional(),
+	printMargins: z.object({
+		top: z.number().min(0).max(40),
+		right: z.number().min(0).max(40),
+		bottom: z.number().min(0).max(40),
+		left: z.number().min(0).max(40)
+	}).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
+	const current = await loadSchool(sql, staff.school_id);
+	if (!current) throw new Error("المدرسة غير موجودة");
 	const name = data.name.trim();
-	const principalName = data.principalName?.trim() ?? "";
-	const season = data.season ?? "winter";
-	const region = data.region?.trim() ?? "";
-	const governorate = data.governorate?.trim() ?? "";
-	const leadershipGender = data.leadershipGender ?? "male";
-	const studentGender = data.studentGender ?? "male";
-	const counselorName = data.counselorName?.trim() ?? "";
-	const technicalVpName = data.technicalVpName?.trim() ?? "";
-	const logoUrl = data.logoUrl ?? "";
+	const principalName = data.principalName !== undefined ? data.principalName.trim() : (current.principal_name ?? "");
+	const season = data.season ?? current.season ?? "winter";
+	const region = data.region !== undefined ? data.region.trim() : (current.region ?? "");
+	const governorate = data.governorate !== undefined ? data.governorate.trim() : (current.governorate ?? "");
+	const leadershipGender = data.leadershipGender ?? current.leadership_gender ?? "male";
+	const studentGender = data.studentGender ?? current.student_gender ?? "male";
+	const counselorName = data.counselorName !== undefined ? data.counselorName.trim() : (current.counselor_name ?? "");
+	const technicalVpName = data.technicalVpName !== undefined ? data.technicalVpName.trim() : (current.technical_vp_name ?? "");
+	const logoUrl = data.logoUrl !== undefined ? data.logoUrl : (current.logo_url ?? "");
+	const extraLogoUrl = data.extraLogoUrl !== undefined ? data.extraLogoUrl : (current.extra_logo_url ?? "");
+	const tagline = data.tagline !== undefined ? data.tagline.trim() : (current.tagline ?? "");
+	const printMargins = data.printMargins ? parsePrintMargins(data.printMargins) : parsePrintMargins(current.print_margins);
 	await sql<any>`
       update schools
       set name = ${name},
@@ -1313,9 +1523,21 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
           student_gender = ${studentGender},
           counselor_name = ${counselorName},
           technical_vp_name = ${technicalVpName},
-          logo_url = ${logoUrl}
+          logo_url = ${logoUrl},
+          tagline = ${tagline}
       where id = ${staff.school_id}
     `;
+	try {
+		const raw = JSON.stringify(printMargins);
+		await sql.query(`update schools set print_margins = $1::jsonb where id = $2`, [raw, staff.school_id]);
+	} catch {
+		/* column applies after restart */
+	}
+	try {
+		await sql`update schools set extra_logo_url = ${extraLogoUrl} where id = ${staff.school_id}`;
+	} catch {
+		/* column applies after restart */
+	}
 	return {
 		name,
 		principalName,
@@ -1326,15 +1548,32 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 		studentGender,
 		counselorName,
 		technicalVpName,
-		logoUrl
+		logoUrl,
+		extraLogoUrl,
+		tagline,
+		printMargins
 	};
 });
-export const updateMessageTemplates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ templates: z.record(z.string(), z.object({
-	title: z.string().min(2).max(80),
-	body: z.string().min(4).max(2e3)
-})) })).handler(async ({ context, data }) => {
+export const updateMessageTemplates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	templates: z.record(z.string(), z.object({
+		title: z.string().min(2).max(80),
+		body: z.string().min(4).max(2e3)
+	})),
+	customMessages: z.array(z.object({
+		id: z.string().min(1).max(40),
+		title: z.string().min(2).max(80),
+		body: z.string().min(4).max(2e3)
+	})).max(40).optional()
+})).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	await sql.query<any>(`update schools set message_templates = $1::jsonb where id = $2`, [JSON.stringify(data.templates), staff.school_id]);
+	if (data.customMessages) {
+		try {
+			await sql.query<any>(`update schools set custom_messages = $1::jsonb where id = $2`, [JSON.stringify(data.customMessages), staff.school_id]);
+		} catch {
+			throw new Error("تعذر حفظ الرسائل المخصصة — أعد تشغيل التطبيق بعد التحديث");
+		}
+	}
 	return { ok: true };
 });
 export const updateSchoolName = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ name: z.string().min(3).max(80) })).handler(async ({ context, data }) => {
@@ -1830,10 +2069,13 @@ const appearanceShape = z.object({
 		"night"
 	]),
 	font: z.enum([
-		"ibm",
 		"cairo",
+		"messiri",
 		"tajawal",
 		"almarai",
+		"ibm",
+		"readex",
+		"amiri",
 		"naskh"
 	]),
 	fontScale: z.number().min(0.8).max(1.5).optional(),
@@ -1881,6 +2123,7 @@ export const getDailyAttendance = createServerFn({ method: "POST" })
 			day: z.string().max(12).optional(),
 			classId: z.number().optional(),
 			stageId: z.number().optional(),
+			classIds: z.array(z.number()).max(80).optional(),
 		}),
 	)
 	.handler(async ({ context, data }) => {
@@ -1888,13 +2131,23 @@ export const getDailyAttendance = createServerFn({ method: "POST" })
 		const day = data.day?.trim() || todayISODate();
 		const params: unknown[] = [staff.school_id];
 		let where = `s.school_id = $1`;
-		if (data.stageId) {
-			params.push(data.stageId);
-			where += ` and c.stage_id = $${params.length}`;
+		if (data.classIds && data.classIds.length === 0) {
+			return { day, students: [] };
 		}
-		if (data.classId) {
-			params.push(data.classId);
-			where += ` and s.class_id = $${params.length}`;
+		if (data.classIds && data.classIds.length) {
+			const start = params.length + 1;
+			for (const id of data.classIds) params.push(id);
+			const placeholders = data.classIds.map((_, i) => `$${start + i}`).join(", ");
+			where += ` and s.class_id in (${placeholders})`;
+		} else {
+			if (data.stageId) {
+				params.push(data.stageId);
+				where += ` and c.stage_id = $${params.length}`;
+			}
+			if (data.classId) {
+				params.push(data.classId);
+				where += ` and s.class_id = $${params.length}`;
+			}
 		}
 		params.push(day);
 		const dayIdx = params.length;
@@ -2304,3 +2557,115 @@ export const setNoteCompensation = createServerFn({ method: "POST" })
 		return { ok: true };
 	});
 
+export const listAllImprovementOptions = createServerFn({ method: "GET" })
+	.middleware([authMiddleware])
+	.handler(async ({ context }) => {
+		const { sql, staff, school } = await requireApproved(context.userId);
+		if (!canManageImproveCatalog(staff, school)) throw new Error("ليست لديك هذه الصلاحية");
+		await ensureImproveOptions(sql, staff.school_id);
+		return listCatalogRows(sql, staff.school_id, "improvement_options", false);
+	});
+
+export const createImprovementOption = createServerFn({ method: "POST" })
+	.middleware([authMiddleware])
+	.validator(z.object({ name: z.string().min(2).max(80) }))
+	.handler(async ({ context, data }) => {
+		const { sql, staff, school } = await requireApproved(context.userId);
+		if (!canManageImproveCatalog(staff, school)) throw new Error("ليست لديك هذه الصلاحية");
+		const name = data.name.trim();
+		if (name === "أخرى") throw new Error("أخرى خيار ثابت — اكتب السلوك نفسه");
+		await ensureImproveOptions(sql, staff.school_id);
+		const existing = (
+			await sql.query<any>(`select id, name from improvement_options where school_id = $1 and name = $2 limit 1`, [
+				staff.school_id,
+				name,
+			])
+		)[0];
+		if (existing) return { id: existing.id, name: existing.name, existed: true };
+		return { ...(await createCatalogItem(sql, staff.school_id, "improvement_options", name)), existed: false };
+	});
+
+export const updateImprovementOption = createServerFn({ method: "POST" })
+	.middleware([authMiddleware])
+	.validator(
+		z
+			.object({
+				id: z.number(),
+				name: z.string().min(2).max(80).optional(),
+				active: z.boolean().optional(),
+			})
+			.refine((d) => d.name !== void 0 || d.active !== void 0, { message: "لا يوجد تعديل" }),
+	)
+	.handler(async ({ context, data }) => {
+		const { sql, staff, school } = await requireApproved(context.userId);
+		if (!canManageImproveCatalog(staff, school)) throw new Error("ليست لديك هذه الصلاحية");
+		return patchCatalogItem(sql, staff.school_id, "improvement_options", data);
+	});
+
+export const listRoster = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff } = await requireAdmin(context.userId);
+	const rows = await sql`
+      select
+        c.id as class_id,
+        c.name as class_name,
+        c.sort_order as class_sort,
+        st.name as stage_name,
+        st.short_name as short_name,
+        st.sort_order as stage_sort,
+        s.id as student_id,
+        s.name as student_name,
+        coalesce(s.parent_phone, '') as parent_phone
+      from classes c
+      join stages st on st.id = c.stage_id
+      left join students s on s.class_id = c.id and s.school_id = c.school_id
+      where c.school_id = ${staff.school_id}
+      order by st.sort_order, c.sort_order, s.name
+    `;
+	const byClass = new Map();
+	for (const r of rows) {
+		let cls = byClass.get(r.class_id);
+		if (!cls) {
+			cls = {
+				id: r.class_id,
+				name: r.class_name,
+				label: classLabel(r.short_name, r.class_name),
+				stageName: r.stage_name,
+				stageSort: r.stage_sort,
+				classSort: r.class_sort,
+				students: []
+			};
+			byClass.set(r.class_id, cls);
+		}
+		if (r.student_id) {
+			cls.students.push({
+				id: r.student_id,
+				name: r.student_name,
+				parentPhone: r.parent_phone,
+				classId: r.class_id
+			});
+		}
+	}
+	const classes = [...byClass.values()];
+	const stages = [];
+	const stageMap = new Map();
+	for (const cls of classes) {
+		let stage = stageMap.get(cls.stageName);
+		if (!stage) {
+			stage = { name: cls.stageName, sort: cls.stageSort, classes: [] };
+			stageMap.set(cls.stageName, stage);
+			stages.push(stage);
+		}
+		stage.classes.push({
+			id: cls.id,
+			name: cls.name,
+			label: cls.label,
+			stageName: cls.stageName,
+			students: cls.students
+		});
+	}
+	return {
+		stages: stages.map((st) => ({ name: st.name, classes: st.classes })),
+		studentCount: classes.reduce((n, c) => n + c.students.length, 0),
+		classCount: classes.length
+	};
+});

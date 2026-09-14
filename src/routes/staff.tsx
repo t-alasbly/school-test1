@@ -23,7 +23,7 @@ function StaffBody() {
     <div className="space-y-6">
       <header>
         <p className="text-sm text-fg-muted">
-          أمام كل موظف الاختيارات المسموح له بها، ومنها الغياب اليومي والإرشاد الطلابي.
+          اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف دخول الموظف دون حذف سجله.
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">الموظفون</h1>
       </header>
