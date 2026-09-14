@@ -1,0 +1,379 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { createStaffUser, listStaff, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
+import { ASSIGNABLE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
+import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
+import type { StaffRole } from "@/lib/school/types";
+import { useWorkspace } from "@/lib/school/workspace";
+import { cn } from "@/lib/utils";
+
+function roleTone(role: StaffRole) {
+  if (role === "pending") return "warn" as const;
+  if (role === "admin") return "primary" as const;
+  if (role === "counselor") return "ok" as const;
+  return "default" as const;
+}
+
+type StaffRow = Awaited<ReturnType<typeof listStaff>>[number];
+
+export function StaffManager() {
+  const { staff } = useWorkspace();
+  const queryClient = useQueryClient();
+  const canManage = staffCan(staff, "editStaff");
+  const query = useQuery({
+    queryKey: ["staff"],
+    queryFn: () => listStaff(),
+    enabled: canManage,
+  });
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("1234");
+  const [subject, setSubject] = useState("");
+  const [role, setRole] = useState<"admin" | "teacher" | "counselor">("teacher");
+  const [editing, setEditing] = useState<{
+    userId: string;
+    displayName: string;
+    role: StaffRole;
+    subject: string;
+    phone: string;
+  } | null>(null);
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createStaffUser({
+        data: { name, email, phone, password, role, subject },
+      }),
+    onSuccess: () => {
+      toast.success("تم إضافة المستخدم");
+      setName("");
+      setEmail("");
+      setPhone("");
+      setPassword("1234");
+      setSubject("");
+      setRole("teacher");
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (input: {
+      userId: string;
+      displayName: string;
+      role: StaffRole;
+      subject: string;
+      phone: string;
+    }) => updateStaffMember({ data: input }),
+    onSuccess: () => {
+      toast.success("تم حفظ بيانات المستخدم");
+      setEditing(null);
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التحديث"),
+  });
+
+  const permMutation = useMutation({
+    mutationFn: (input: { userId: string; permissions: StaffPermissions }) =>
+      updateStaffPermissions({ data: input }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["staff"] });
+      const previous = queryClient.getQueryData<StaffRow[]>(["staff"]);
+      queryClient.setQueryData<StaffRow[]>(["staff"], (old) =>
+        (old ?? []).map((member) =>
+          member.userId === input.userId ? { ...member, permissions: input.permissions } : member,
+        ),
+      );
+      return { previous };
+    },
+    onError: (err, _input, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["staff"], ctx.previous);
+      toast.error(err instanceof Error ? err.message : "تعذر حفظ الصلاحية");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+    },
+  });
+
+  if (!canManage) return null;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>إضافة معلم أو مستخدم</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-3 sm:grid-cols-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMutation.mutate();
+            }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="new-name">الاسم</Label>
+              <Input
+                id="new-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="مثال: سعد العتيبي"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-phone">رقم الجوال (اسم المستخدم)</Label>
+              <Input
+                id="new-phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="05xxxxxxxx"
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email">البريد الإلكتروني (اختياري)</Label>
+              <Input
+                id="new-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="إن وُجد بدل الجوال"
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-subject">المادة</Label>
+              <Input
+                id="new-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="رياضيات، لغتي…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-pass">كلمة المرور</Label>
+              <Input
+                id="new-pass"
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="الافتراضي 1234"
+                required
+                minLength={4}
+                dir="ltr"
+                className="text-left"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-role">الصلاحية</Label>
+              <Select
+                id="new-role"
+                value={role}
+                onChange={(e) =>
+                  setRole(e.target.value as "admin" | "teacher" | "counselor")
+                }
+              >
+                <option value="teacher">{ROLE_LABEL.teacher}</option>
+                <option value="counselor">{ROLE_LABEL.counselor}</option>
+                <option value="admin">{ROLE_LABEL.admin}</option>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Button
+                type="submit"
+                disabled={
+                  createMutation.isPending ||
+                  name.trim().length < 2 ||
+                  password.length < 4 ||
+                  (!phone.trim() && !email.trim())
+                }
+              >
+                إضافة المستخدم
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+        {(query.data ?? []).map((member) => (
+          <li key={member.userId} className="space-y-3 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">{member.displayName}</p>
+                <p className="text-xs text-fg-subtle">
+                  {member.phone || member.email || "بدون حساب دخول"}
+                  {member.subject ? ` · ${member.subject}` : ""}
+                  {` · ${formatStamp(member.createdAt)}`}
+                </p>
+              </div>
+              <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  setEditing({
+                    userId: member.userId,
+                    displayName: member.displayName,
+                    role: member.role,
+                    subject: member.subject,
+                    phone: member.phone,
+                  })
+                }
+              >
+                تعديل
+              </Button>
+              {member.userId === staff.userId ? (
+                <span className="text-xs text-fg-muted">حسابك</span>
+              ) : null}
+            </div>
+            {member.role === "admin" ? (
+              <p className="text-xs text-fg-muted">مدير التطبيق يملك كل الصلاحيات تلقائيًا.</p>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-fg-muted">الصلاحيات المسموح بها</p>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {PERMISSION_META.map((item) => {
+                  const on = member.permissions[item.key];
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={on}
+                      disabled={permMutation.isPending}
+                      onClick={() =>
+                        permMutation.mutate({
+                          userId: member.userId,
+                          permissions: { ...member.permissions, [item.key]: !on },
+                        })
+                      }
+                      className={cn(
+                        "flex min-h-12 items-start gap-2 rounded-[var(--radius-sm)] border px-2.5 py-2 text-right transition-colors",
+                        on
+                          ? "border-primary bg-primary/10 text-fg"
+                          : "border-border bg-bg-elevated text-fg-muted",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-[4px] border",
+                          on
+                            ? "border-primary bg-primary text-primary-fg"
+                            : "border-border-strong bg-card",
+                        )}
+                      >
+                        {on ? <Check className="size-3.5" /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-5">{item.label}</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{item.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+        {query.data?.length === 0 ? (
+          <li className="px-4 py-8 text-center text-sm text-fg-muted">لا يوجد موظفون بعد</li>
+        ) : null}
+      </ul>
+
+      <Dialog open={editing != null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>تعديل المستخدم</DialogTitle>
+          </DialogHeader>
+          {editing ? (
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateMutation.mutate(editing);
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-name">الاسم</Label>
+                <Input
+                  id="edit-name"
+                  value={editing.displayName}
+                  onChange={(e) =>
+                    setEditing({ ...editing, displayName: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-phone">الجوال</Label>
+                <Input
+                  id="edit-phone"
+                  value={editing.phone}
+                  onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
+                  dir="ltr"
+                  className="text-left"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-subject">المادة</Label>
+                <Input
+                  id="edit-subject"
+                  value={editing.subject}
+                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-role">الصلاحية</Label>
+                <Select
+                  id="edit-role"
+                  value={editing.role}
+                  onChange={(e) =>
+                    setEditing({ ...editing, role: e.target.value as StaffRole })
+                  }
+                >
+                  {ASSIGNABLE_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  updateMutation.isPending || editing.displayName.trim().length < 2
+                }
+              >
+                حفظ التعديلات
+              </Button>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

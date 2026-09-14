@@ -1,0 +1,336 @@
+export type ThemeId =
+  | "oasis"
+  | "ministry"
+  | "navy"
+  | "sand"
+  | "olive"
+  | "rose"
+  | "sky"
+  | "night";
+
+export type FontId = "ibm" | "cairo" | "tajawal" | "almarai" | "naskh";
+
+export type ThemeTokens = {
+  bg: string;
+  bgElevated: string;
+  bgSubtle: string;
+  fg: string;
+  fgMuted: string;
+  fgSubtle: string;
+  border: string;
+  borderStrong: string;
+  primary: string;
+  primaryFg: string;
+  primaryHover: string;
+  card: string;
+  muted: string;
+  ring: string;
+};
+
+export type Appearance = {
+  themeId: ThemeId;
+  font: FontId;
+  fontScale?: number;
+  custom?: Partial<Pick<ThemeTokens, "primary" | "bg" | "fg" | "card">>;
+};
+
+export const FONT_SCALE_STEPS = [0.9, 1, 1.12, 1.25, 1.4] as const;
+
+export function clampFontScale(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1.5, Math.max(0.85, Math.round(n * 100) / 100));
+}
+
+
+export const FONT_STACKS: Record<FontId, string> = {
+  ibm: '"IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif',
+  cairo: '"Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  tajawal: '"Tajawal", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  almarai: '"Almarai", "IBM Plex Sans Arabic", system-ui, sans-serif',
+  naskh: '"Noto Naskh Arabic", "IBM Plex Sans Arabic", serif',
+};
+
+export const FONT_LABEL: Record<FontId, string> = {
+  ibm: "IBM Plex — واضح للعمل اليومي",
+  cairo: "Cairo — حديث ومتوازن",
+  tajawal: "Tajawal — عريض وسهل القراءة",
+  almarai: "Almarai — ودود للمدرسة",
+  naskh: "نسخ — رسمي للنماذج والقراءة",
+};
+
+export const THEMES: Record<
+  ThemeId,
+  { id: ThemeId; name: string; hint: string; font: FontId; tokens: ThemeTokens }
+> = {
+  oasis: {
+    id: "oasis",
+    name: "واحة",
+    hint: "الدافئ الحالي — فيروزي ومخطوط كريمي",
+    font: "ibm",
+    tokens: {
+      bg: "#f3eee4",
+      bgElevated: "#fffdf8",
+      bgSubtle: "#ebe4d6",
+      fg: "#1c242e",
+      fgMuted: "#5c6570",
+      fgSubtle: "#8a8174",
+      border: "#d9d0c2",
+      borderStrong: "#c4b9a8",
+      primary: "#1b5c57",
+      primaryFg: "#f7f4ee",
+      primaryHover: "#164c48",
+      card: "#fffdf8",
+      muted: "#efe8db",
+      ring: "#1b5c57",
+    },
+  },
+  ministry: {
+    id: "ministry",
+    name: "وزارة",
+    hint: "أخضر التعليم الرسمي على أبيض نظيف",
+    font: "ibm",
+    tokens: {
+      bg: "#f4f7f4",
+      bgElevated: "#ffffff",
+      bgSubtle: "#e6eee7",
+      fg: "#14261a",
+      fgMuted: "#4d5f52",
+      fgSubtle: "#7a8b7d",
+      border: "#cdd8ce",
+      borderStrong: "#b3c2b5",
+      primary: "#006c35",
+      primaryFg: "#f4fff8",
+      primaryHover: "#00582b",
+      card: "#ffffff",
+      muted: "#e8f0ea",
+      ring: "#006c35",
+    },
+  },
+  navy: {
+    id: "navy",
+    name: "كحلي",
+    hint: "وقار إداري — أزرق ليلي ورمادي بارد",
+    font: "cairo",
+    tokens: {
+      bg: "#eef1f6",
+      bgElevated: "#ffffff",
+      bgSubtle: "#e2e7ef",
+      fg: "#152033",
+      fgMuted: "#4b5870",
+      fgSubtle: "#7b8699",
+      border: "#cfd6e2",
+      borderStrong: "#b4bdd0",
+      primary: "#1e3a5f",
+      primaryFg: "#f4f7fb",
+      primaryHover: "#172e4c",
+      card: "#ffffff",
+      muted: "#e6ebf3",
+      ring: "#1e3a5f",
+    },
+  },
+  sand: {
+    id: "sand",
+    name: "رمال",
+    hint: "دافئ صحراوي — Terracotta على رمل فاتح",
+    font: "tajawal",
+    tokens: {
+      bg: "#f6efe4",
+      bgElevated: "#fffcf7",
+      bgSubtle: "#eee4d4",
+      fg: "#2a1f16",
+      fgMuted: "#6b5748",
+      fgSubtle: "#947a66",
+      border: "#e0d0bc",
+      borderStrong: "#cbb49a",
+      primary: "#9a4a2a",
+      primaryFg: "#fff8f2",
+      primaryHover: "#7e3c22",
+      card: "#fffcf7",
+      muted: "#f1e6d6",
+      ring: "#9a4a2a",
+    },
+  },
+  olive: {
+    id: "olive",
+    name: "زيتوني",
+    hint: "هدوء الطبيعة — زيتون وحجر",
+    font: "almarai",
+    tokens: {
+      bg: "#f3f1e8",
+      bgElevated: "#fcfbf6",
+      bgSubtle: "#e7e4d6",
+      fg: "#1f2418",
+      fgMuted: "#5b614c",
+      fgSubtle: "#858a74",
+      border: "#d5d1bf",
+      borderStrong: "#bdb89f",
+      primary: "#4a5d23",
+      primaryFg: "#f6f8ee",
+      primaryHover: "#3b4b1b",
+      card: "#fcfbf6",
+      muted: "#ece9db",
+      ring: "#4a5d23",
+    },
+  },
+  rose: {
+    id: "rose",
+    name: "ياقوت",
+    hint: "أنيق للمدرسة — عنابي دافئ",
+    font: "cairo",
+    tokens: {
+      bg: "#f7eef0",
+      bgElevated: "#fffbfb",
+      bgSubtle: "#f0e2e5",
+      fg: "#2a161c",
+      fgMuted: "#6d4a54",
+      fgSubtle: "#966e78",
+      border: "#e4cdd2",
+      borderStrong: "#d0b0b7",
+      primary: "#7a1f2b",
+      primaryFg: "#fff6f7",
+      primaryHover: "#631822",
+      card: "#fffbfb",
+      muted: "#f3e6e9",
+      ring: "#7a1f2b",
+    },
+  },
+  sky: {
+    id: "sky",
+    name: "سماوي",
+    hint: "خفيف ومنعش — أزرق صباحي",
+    font: "tajawal",
+    tokens: {
+      bg: "#eef5f8",
+      bgElevated: "#ffffff",
+      bgSubtle: "#e1edf2",
+      fg: "#15303a",
+      fgMuted: "#4d6a75",
+      fgSubtle: "#7a939c",
+      border: "#c9dde5",
+      borderStrong: "#aec8d2",
+      primary: "#0e7490",
+      primaryFg: "#f3fbfe",
+      primaryHover: "#0b5f75",
+      card: "#ffffff",
+      muted: "#e4eef3",
+      ring: "#0e7490",
+    },
+  },
+  night: {
+    id: "night",
+    name: "ليلي",
+    hint: "وضع داكن مريح للعمل المسائي",
+    font: "ibm",
+    tokens: {
+      bg: "#12151a",
+      bgElevated: "#1b2028",
+      bgSubtle: "#161b22",
+      fg: "#ece7dc",
+      fgMuted: "#b3ab9e",
+      fgSubtle: "#8a8276",
+      border: "#2c3340",
+      borderStrong: "#3d4656",
+      primary: "#3d9d94",
+      primaryFg: "#071312",
+      primaryHover: "#4eb0a6",
+      card: "#1b2028",
+      muted: "#232a34",
+      ring: "#3d9d94",
+    },
+  },
+};
+
+export const THEME_LIST = Object.values(THEMES);
+export const FONT_LIST = Object.keys(FONT_LABEL) as FontId[];
+
+export function parseAppearance(raw: unknown): Appearance {
+  const optional = parseOptionalAppearance(raw);
+  return optional ?? { themeId: "oasis", font: "ibm", fontScale: 1 };
+}
+
+export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (rec.themeId == null && rec.font == null && rec.custom == null && rec.fontScale == null) return undefined;
+  const themeId = THEMES[rec.themeId as ThemeId] ? (rec.themeId as ThemeId) : "oasis";
+  const font = FONT_STACKS[rec.font as FontId] ? (rec.font as FontId) : THEMES[themeId].font;
+  const customRaw = rec.custom;
+  let custom: Appearance["custom"];
+  if (customRaw && typeof customRaw === "object" && !Array.isArray(customRaw)) {
+    const c = customRaw as Record<string, unknown>;
+    custom = {};
+    if (typeof c.primary === "string") custom.primary = c.primary;
+    if (typeof c.bg === "string") custom.bg = c.bg;
+    if (typeof c.fg === "string") custom.fg = c.fg;
+    if (typeof c.card === "string") custom.card = c.card;
+    if (Object.keys(custom).length === 0) custom = undefined;
+  }
+  const fontScale = rec.fontScale == null ? 1 : clampFontScale(rec.fontScale);
+  return { themeId, font, custom, fontScale };
+
+}
+
+export function mergeAppearance(school: Appearance, personal: Appearance | undefined): Appearance {
+  if (personal && personal.themeId) return personal;
+  return school;
+}
+
+export function resolvedTokens(appearance: Appearance): ThemeTokens {
+  const base = THEMES[appearance.themeId]?.tokens ?? THEMES.oasis.tokens;
+  const custom = appearance.custom ?? {};
+  const primary = custom.primary || base.primary;
+  return {
+    ...base,
+    primary,
+    ring: custom.primary || base.ring,
+    primaryHover: custom.primary || base.primaryHover,
+    bg: custom.bg || base.bg,
+    fg: custom.fg || base.fg,
+    card: custom.card || base.card,
+    bgElevated: custom.card || base.bgElevated,
+  };
+}
+
+export function applyAppearance(appearance: Appearance) {
+  if (typeof document === "undefined") return;
+  const tokens = resolvedTokens(appearance);
+  const root = document.documentElement;
+  const map: Record<string, string> = {
+    "--color-bg": tokens.bg,
+    "--color-bg-elevated": tokens.bgElevated,
+    "--color-bg-subtle": tokens.bgSubtle,
+    "--color-fg": tokens.fg,
+    "--color-fg-muted": tokens.fgMuted,
+    "--color-fg-subtle": tokens.fgSubtle,
+    "--color-border": tokens.border,
+    "--color-border-strong": tokens.borderStrong,
+    "--color-primary": tokens.primary,
+    "--color-primary-fg": tokens.primaryFg,
+    "--color-primary-hover": tokens.primaryHover,
+    "--color-accent": tokens.primary,
+    "--color-accent-fg": tokens.primaryFg,
+    "--color-card": tokens.card,
+    "--color-muted": tokens.muted,
+    "--color-ring": tokens.ring,
+    "--font-sans": FONT_STACKS[appearance.font],
+    "--font-display": FONT_STACKS[appearance.font],
+  };
+  for (const [key, value] of Object.entries(map)) {
+    root.style.setProperty(key, value);
+  }
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute("content", tokens.primary);
+  root.style.colorScheme = appearance.themeId === "night" ? "dark" : "light";
+  document.body.style.fontFamily = FONT_STACKS[appearance.font];
+  const scale = clampFontScale(appearance.fontScale ?? 1);
+  root.style.fontSize = `${16 * scale}px`;
+}

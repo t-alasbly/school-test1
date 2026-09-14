@@ -1,0 +1,319 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-display: "IBM Plex Sans Arabic", "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-naskh: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+
+  --color-bg: #f3eee4;
+  --color-bg-elevated: #fffdf8;
+  --color-bg-subtle: #ebe4d6;
+  --color-fg: #1c242e;
+  --color-fg-muted: #5c6570;
+  --color-fg-subtle: #8a8174;
+  --color-border: #d9d0c2;
+  --color-border-strong: #c4b9a8;
+  --color-primary: #1b5c57;
+  --color-primary-fg: #f7f4ee;
+  --color-primary-hover: #164c48;
+  --color-accent: #1b5c57;
+  --color-accent-fg: #f7f4ee;
+  --color-card: #fffdf8;
+  --color-muted: #efe8db;
+  --color-ring: #1b5c57;
+
+  --color-danger: #b42318;
+  --color-danger-soft: #f8e4e1;
+  --color-warn: #9a6700;
+  --color-warn-soft: #f7edd4;
+  --color-ok: #177245;
+  --color-ok-soft: #dcefe4;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-card: 0 1px 0 rgba(28, 36, 46, 0.04), 0 8px 24px -12px rgba(28, 36, 46, 0.12);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-sans);
+    font-size: 16px;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+.login-wash {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-primary) 10%, transparent),
+    transparent
+  );
+}
+
+.official-sheet {
+  width: 100%;
+  max-width: 196mm;
+  margin-inline: auto;
+  padding: 8px 10px 14px 6px;
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.official-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  font-size: 12.5px;
+}
+
+.official-table th,
+.official-table td {
+  border: 1px solid #111;
+  padding: 5px 4px;
+  vertical-align: middle;
+}
+
+.official-table th {
+  background: #e7f4f2;
+  font-weight: 600;
+}
+
+.official-table tr {
+  height: 2rem;
+}
+
+.official-report {
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.official-report-table {
+  font-size: 12.5px;
+}
+
+.official-report-table th,
+.official-report-table td {
+  padding: 5px 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.official-report-table tr {
+  height: auto;
+}
+
+.official-sheet .underline {
+
+  text-decoration-thickness: 1px;
+}
+
+.official-meta {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+#school-print-mount {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm 10mm 10mm 7mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-root,
+  .print-root * {
+    background: #ffffff !important;
+    color: #111111 !important;
+    box-shadow: none !important;
+  }
+
+  .print-root {
+    display: block !important;
+    border: none !important;
+  }
+
+  nav, header.app-header, aside, [data-sonner-toaster], .app-header {
+    display: none !important;
+  }
+
+  .min-h-dvh,
+  .bg-bg,
+  .bg-card,
+  .bg-bg-elevated,
+  .bg-muted {
+    background: #ffffff !important;
+  }
+
+  body.printing-form,
+  body.printing-form html {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  body.printing-form > *:not(#school-print-mount) {
+    display: none !important;
+  }
+
+  body.printing-form #school-print-mount {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    overflow: visible !important;
+  }
+
+  body.printing-form #school-print-mount .print-form,
+  body.printing-form #school-print-mount .print-form * {
+    visibility: visible !important;
+    color: #111111 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  body.printing-form #school-print-mount .print-form {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+    font-family: var(--font-naskh), "Noto Naskh Arabic", serif !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    max-height: none !important;
+  }
+
+  body.printing-form #school-print-mount .print-report {
+    page-break-inside: auto;
+    break-inside: auto;
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+
+  body.printing-form #school-print-mount .print-report * {
+    overflow: visible !important;
+  }
+
+  body.printing-form #school-print-mount .print-report thead {
+    display: table-header-group;
+  }
+
+  body.printing-form #school-print-mount .print-report tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.printing-form #school-print-mount .print-report .official-report-table {
+    font-size: 12.5px !important;
+  }
+
+  body.printing-form #school-print-mount .print-report .official-report-table th,
+  body.printing-form #school-print-mount .print-report .official-report-table td {
+    padding: 5px 6px !important;
+    font-size: 12.5px !important;
+    color: #111111 !important;
+  }
+
+
+  body.printing-form #school-print-mount .print-form .official-accent {
+    background: #00857c !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.printing-form #school-print-mount .print-form img {
+    background: transparent !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.printing-form #school-print-mount .print-form .official-tint,
+  body.printing-form #school-print-mount .print-form .official-tint * {
+    background: #f3faf8 !important;
+    color: #0f4f4a !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.printing-form #school-print-mount .official-table th {
+    background: #e7f4f2 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body.printing-form #school-print-mount .official-sheet {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  body.printing-form #school-print-mount .official-meta,
+  body.printing-form #school-print-mount .official-meta * {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  body.printing-form #school-print-mount .official-meta p:first-child {
+    color: #00857c !important;
+  }
+}
