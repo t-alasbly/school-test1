@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { MessageRecordTools, NoteRecordTools } from "@/components/record-actions";
@@ -31,6 +31,21 @@ import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/reports")({ component: ReportsPage });
 
+type RosterColumn = { id: string; label: string; width: number };
+
+const DEFAULT_ROSTER_WIDTHS: Record<string, number> = {
+  number: 10,
+  name: 42,
+  stage: 24,
+  class: 24,
+  phone: 32,
+};
+
+function clampColumnWidth(value: string | number) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Math.min(80, Math.max(8, Number.isFinite(parsed) ? parsed : 20));
+}
+
 function ReportsPage() {
   return (
     <AppGate>
@@ -57,7 +72,19 @@ function ReportsBody() {
   const [showTeacherSign, setShowTeacherSign] = useState(true);
   const [showCounselorSign, setShowCounselorSign] = useState(true);
   const [showPrincipalSign, setShowPrincipalSign] = useState(true);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("reports.rosterColumnWidths");
+      return saved ? { ...DEFAULT_ROSTER_WIDTHS, ...JSON.parse(saved) } : DEFAULT_ROSTER_WIDTHS;
+    } catch {
+      return DEFAULT_ROSTER_WIDTHS;
+    }
+  });
   const sheetRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem("reports.rosterColumnWidths", JSON.stringify(columnWidths));
+  }, [columnWidths]);
 
   const filters = useMemo(
     () => ({
@@ -118,6 +145,39 @@ function ReportsBody() {
       ? `${from ? formatDay(`${from}T12:00:00`) : "البداية"} — ${to ? formatDay(`${to}T12:00:00`) : "اليوم"}`
       : "جميع التواريخ";
   const typeLine = type === "all" ? "جميع الملاحظات" : NOTE_META[type].label;
+
+  const rosterColumns = useMemo<RosterColumn[]>(
+    () => [
+      { id: "number", label: "م", width: columnWidths.number ?? DEFAULT_ROSTER_WIDTHS.number },
+      { id: "name", label: "اسم الطالب", width: columnWidths.name ?? DEFAULT_ROSTER_WIDTHS.name },
+      ...(showStage
+        ? [{ id: "stage", label: "الصف", width: columnWidths.stage ?? DEFAULT_ROSTER_WIDTHS.stage }]
+        : []),
+      ...(showClass
+        ? [{ id: "class", label: "الفصل", width: columnWidths.class ?? DEFAULT_ROSTER_WIDTHS.class }]
+        : []),
+      ...(showPhone
+        ? [{ id: "phone", label: "جوال ولي الأمر", width: columnWidths.phone ?? DEFAULT_ROSTER_WIDTHS.phone }]
+        : []),
+      ...extraCols.map((col, index) => ({
+        id: col.id,
+        label: col.title.trim() || `عمود ${index + 1}`,
+        width: columnWidths[col.id] ?? 24,
+      })),
+    ],
+    [columnWidths, extraCols, showClass, showPhone, showStage],
+  );
+
+  function setColumnWidth(id: string, value: string) {
+    setColumnWidths((prev) => ({ ...prev, [id]: clampColumnWidth(value) }));
+  }
+
+  function resetColumnWidths() {
+    setColumnWidths({
+      ...DEFAULT_ROSTER_WIDTHS,
+      ...Object.fromEntries(extraCols.map((col) => [col.id, 24])),
+    });
+  }
 
   const counts = useMemo(() => {
     const empty = { absence: 0, late: 0, homework: 0, behavior: 0, open: 0, closed: 0 };
@@ -342,6 +402,36 @@ function ReportsBody() {
               الصف / المرحلة
             </label>
           </div>
+          <div className="space-y-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:col-span-2 lg:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <Label>عرض الأعمدة (مم)</Label>
+                <p className="text-xs text-fg-muted">اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.</p>
+              </div>
+              <button type="button" className="text-sm font-medium text-primary" onClick={resetColumnWidths}>
+                إعادة المقاسات الافتراضية
+              </button>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {rosterColumns.map((col) => (
+                <label key={col.id} className="flex items-center gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                  <Input
+                    type="number"
+                    min={8}
+                    max={80}
+                    step={1}
+                    dir="ltr"
+                    className="w-24 text-left"
+                    value={col.width}
+                    onChange={(e) => setColumnWidth(col.id, e.target.value)}
+                    aria-label={`عرض ${col.label} بالمليمتر`}
+                  />
+                  <span className="text-xs text-fg-muted">مم</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -429,10 +519,15 @@ function ReportsBody() {
 
         <div className="overflow-x-auto">
         {mode === "names" ? (
-        <table className="official-table official-report-table">
+        <table className="official-table official-report-table official-roster-table">
+          <colgroup>
+            {rosterColumns.map((col) => (
+              <col key={col.id} style={{ width: `${col.width}mm` }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th className="w-8">م</th>
+              <th>م</th>
               <th>اسم الطالب</th>
               {showStage ? <th>الصف</th> : null}
               {showClass ? <th>الفصل</th> : null}

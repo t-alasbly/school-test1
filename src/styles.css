@@ -130,6 +130,15 @@
   font-size: 12.5px;
 }
 
+.official-roster-table {
+  table-layout: fixed;
+}
+
+.official-roster-table th,
+.official-roster-table td {
+  overflow-wrap: anywhere;
+}
+
 .official-report-table th,
 .official-report-table td {
   padding: 5px 6px;
