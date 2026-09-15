@@ -6,14 +6,23 @@ import { NoteSession } from "@/components/note-session";
 import { NoteActions } from "@/components/note-actions";
 import { CounselorCaseDialog } from "@/components/counselor-case-dialog";
 import { PrintFormsButton } from "@/components/print-forms";
-import { NoteRecordTools, ImprovementRecordTools, MessageRecordTools } from "@/components/record-actions";
+import {
+  NoteRecordTools,
+  ImprovementRecordTools,
+  MessageRecordTools,
+} from "@/components/record-actions";
 import { EditStudentButton } from "@/components/student-editor";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { followImprovement, getStudentNotes, listImprovements, listParentMessages } from "@/lib/school/api";
+import {
+  followImprovement,
+  getStudentNotes,
+  listImprovements,
+  listParentMessages,
+} from "@/lib/school/api";
 import {
   IMPROVEMENT_STATUS,
   NOTE_META,
@@ -57,6 +66,13 @@ export function StudentSheet({
   const notes = query.data?.notes ?? [];
   const scoped = query.data?.scopedToTeacher;
   const canEditRecords = staffCan(staff, "editRecords");
+  const studentSummary = {
+    total: notes.length,
+    open: notes.filter((note) => note.status === "open").length,
+    absence: notes.filter((note) => note.type === "absence").length,
+    behavior: notes.filter((note) => note.type === "behavior").length,
+    messages: messages.data?.messages?.length ?? 0,
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -129,96 +145,120 @@ export function StudentSheet({
             <div className="space-y-6">
               {scoped ? (
                 <p className="rounded-[var(--radius-md)] border border-border bg-muted px-3 py-2 text-xs text-fg-muted">
-                  يظهر سجل ملاحظاتك فقط. مخالفات المعلمين الآخرين تظهر لمن مُنح صلاحية الاطلاع على جميع المخالفات.
+                  يظهر سجل ملاحظاتك فقط. مخالفات المعلمين الآخرين تظهر لمن مُنح صلاحية الاطلاع على
+                  جميع المخالفات.
                 </p>
               ) : null}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {[
+                  ["إجمالي الملاحظات", studentSummary.total],
+                  ["مفتوحة", studentSummary.open],
+                  ["غياب", studentSummary.absence],
+                  ["سلوك", studentSummary.behavior],
+                  ["رسائل ولي الأمر", studentSummary.messages],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-[var(--radius-sm)] border border-border bg-muted px-3 py-2 text-center"
+                  >
+                    <p className="text-[11px] text-fg-muted">{label}</p>
+                    <p className="text-lg font-semibold tabular-nums">{value}</p>
+                  </div>
+                ))}
+              </div>
               {notes.length === 0 ? (
                 <p className="text-sm text-fg-muted">لا توجد ملاحظات مسجّلة بعد.</p>
               ) : (
-            <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
-              <table className="w-full min-w-[60rem] border-collapse text-sm">
-                <thead>
-                  <tr className="bg-muted text-right">
-                    <th className="border-b border-border px-3 py-2 font-medium">التاريخ</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الحصة / المادة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">النوع</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">نوع المخالفة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الدرجة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">التكرار</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">المعلم</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">التفاصيل</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الحالة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الإجراء</th>
-                    {canEditRecords ? (
-                      <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
-                        تصحيح
-                      </th>
-                    ) : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {notes.map((note) => {
-                    const tone = noteTone(note.type, note.status);
-                    return (
-                      <tr key={note.id} className="align-top">
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap text-xs text-fg-muted">
-                          {formatStamp(note.createdAt)}
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          <NoteSession
-                            periodKey={note.periodKey}
-                            subject={note.teacherSubject}
-                            season={school.season}
-                          />
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          <Badge tone={tone}>{NOTE_META[note.type].label}</Badge>
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          {note.behaviorTypeName ?? "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.type === "behavior" ? (
-                            <Badge tone={note.occurrence > 1 ? "danger" : "default"}>
-                              {occurrenceLabel(note.occurrence)}
-                            </Badge>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.teacherName}
-                          {note.teacherSubject ? (
-                            <span className="block text-xs text-fg-subtle">{note.teacherSubject}</span>
-                          ) : null}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 text-fg-muted">
-                          {note.details || "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.status === "closed" ? (
-                            <span className="text-ok">أُغلقت</span>
-                          ) : (
-                            <span className="text-warn">مفتوحة</span>
-                          )}
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          {note.status === "closed" ? note.actionTaken || "—" : "—"}
-                        </td>
+                <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
+                  <table className="w-full min-w-[60rem] border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-muted text-right">
+                        <th className="border-b border-border px-3 py-2 font-medium">التاريخ</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">
+                          الحصة / المادة
+                        </th>
+                        <th className="border-b border-border px-3 py-2 font-medium">النوع</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">
+                          نوع المخالفة
+                        </th>
+                        <th className="border-b border-border px-3 py-2 font-medium">الدرجة</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">التكرار</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">المعلم</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">التفاصيل</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">الحالة</th>
+                        <th className="border-b border-border px-3 py-2 font-medium">الإجراء</th>
                         {canEditRecords ? (
-                          <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
-                            <NoteRecordTools note={note} />
-                          </td>
+                          <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
+                            تصحيح
+                          </th>
                         ) : null}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {notes.map((note) => {
+                        const tone = noteTone(note.type, note.status);
+                        return (
+                          <tr key={note.id} className="align-top">
+                            <td className="border-b border-border px-3 py-2 whitespace-nowrap text-xs text-fg-muted">
+                              {formatStamp(note.createdAt)}
+                            </td>
+                            <td className="border-b border-border px-3 py-2">
+                              <NoteSession
+                                periodKey={note.periodKey}
+                                subject={note.teacherSubject}
+                                season={school.season}
+                              />
+                            </td>
+                            <td className="border-b border-border px-3 py-2">
+                              <Badge tone={tone}>{NOTE_META[note.type].label}</Badge>
+                            </td>
+                            <td className="border-b border-border px-3 py-2">
+                              {note.behaviorTypeName ?? "—"}
+                            </td>
+                            <td className="border-b border-border px-3 py-2 whitespace-nowrap">
+                              {note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "—"}
+                            </td>
+                            <td className="border-b border-border px-3 py-2 whitespace-nowrap">
+                              {note.type === "behavior" ? (
+                                <Badge tone={note.occurrence > 1 ? "danger" : "default"}>
+                                  {occurrenceLabel(note.occurrence)}
+                                </Badge>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="border-b border-border px-3 py-2 whitespace-nowrap">
+                              {note.teacherName}
+                              {note.teacherSubject ? (
+                                <span className="block text-xs text-fg-subtle">
+                                  {note.teacherSubject}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="border-b border-border px-3 py-2 text-fg-muted">
+                              {note.details || "—"}
+                            </td>
+                            <td className="border-b border-border px-3 py-2 whitespace-nowrap">
+                              {note.status === "closed" ? (
+                                <span className="text-ok">أُغلقت</span>
+                              ) : (
+                                <span className="text-warn">مفتوحة</span>
+                              )}
+                            </td>
+                            <td className="border-b border-border px-3 py-2">
+                              {note.status === "closed" ? note.actionTaken || "—" : "—"}
+                            </td>
+                            {canEditRecords ? (
+                              <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
+                                <NoteRecordTools note={note} />
+                              </td>
+                            ) : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
               <ImprovementsBlock
                 items={improvements.data ?? []}
@@ -255,7 +295,12 @@ function ImprovementsBlock({
       ) : (
         <ul className="space-y-2">
           {items.map((item) => (
-            <ImprovementCard key={item.id} item={item} lead={lead} mine={item.teacherId === teacherId} />
+            <ImprovementCard
+              key={item.id}
+              item={item}
+              lead={lead}
+              mine={item.teacherId === teacherId}
+            />
           ))}
         </ul>
       )}
@@ -288,8 +333,7 @@ function ImprovementCard({
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
   });
-  const tone =
-    item.status === "closed" ? "ok" : item.status === "following" ? "primary" : "warn";
+  const tone = item.status === "closed" ? "ok" : item.status === "following" ? "primary" : "warn";
 
   return (
     <li className="rounded-[var(--radius-md)] border border-border bg-card p-3 text-sm">
@@ -342,9 +386,7 @@ function ImprovementCard({
               size="sm"
               variant="secondary"
               disabled={mutation.isPending}
-              onClick={() =>
-                mutation.mutate({ counselorNote, status: "following" })
-              }
+              onClick={() => mutation.mutate({ counselorNote, status: "following" })}
             >
               متابعة
             </Button>
@@ -373,7 +415,10 @@ function MessagesBlock({
       <h3 className="text-base font-semibold">رسائل ولي الأمر</h3>
       <ul className="space-y-2">
         {items.map((msg) => (
-          <li key={msg.id} className="rounded-[var(--radius-md)] border border-border bg-card p-3 text-sm">
+          <li
+            key={msg.id}
+            className="rounded-[var(--radius-md)] border border-border bg-card p-3 text-sm"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{messageKindLabel(msg.kind as MessageKind)}</Badge>
               <span className="text-xs text-fg-subtle">

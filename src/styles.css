@@ -54,7 +54,9 @@
     line-height: 1.5;
   }
 
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     font-family: var(--font-display);
     text-wrap: balance;
     letter-spacing: 0;
@@ -151,7 +153,6 @@
 }
 
 .official-sheet .underline {
-
   text-decoration-thickness: 1px;
 }
 
@@ -165,7 +166,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -178,7 +181,8 @@
     margin: 0;
   }
 
-  html, body {
+  html,
+  body {
     background: #ffffff !important;
     color: #111111 !important;
   }
@@ -199,7 +203,11 @@
     border: none !important;
   }
 
-  nav, header.app-header, aside, [data-sonner-toaster], .app-header {
+  nav,
+  header.app-header,
+  aside,
+  [data-sonner-toaster],
+  .app-header {
     display: none !important;
   }
 
@@ -294,7 +302,6 @@
     font-size: 12.5px !important;
     color: #111111 !important;
   }
-
 
   body.printing-form #school-print-mount .print-form .official-accent {
     background: #00857c !important;

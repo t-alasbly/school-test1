@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, Printer, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { AppGate } from "@/components/app-gate";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { MessageRecordTools, NoteRecordTools } from "@/components/record-actions";
@@ -32,6 +33,17 @@ import { useWorkspace } from "@/lib/school/workspace";
 export const Route = createFileRoute("/reports")({ component: ReportsPage });
 
 type RosterColumn = { id: string; label: string; width: number };
+type RosterTemplate = {
+  id: string;
+  name: string;
+  title: string;
+  showPhone: boolean;
+  showClass: boolean;
+  showStage: boolean;
+  extraCols: { id: string; title: string }[];
+  order: string[];
+  widths: Record<string, number>;
+};
 
 const DEFAULT_ROSTER_WIDTHS: Record<string, number> = {
   number: 10,
@@ -80,11 +92,25 @@ function ReportsBody() {
       return DEFAULT_ROSTER_WIDTHS;
     }
   });
+  const [templates, setTemplates] = useState<RosterTemplate[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("reports.rosterTemplates") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [templateName, setTemplateName] = useState("");
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [bulkMessage, setBulkMessage] = useState("السلام عليكم، نود إشعاركم بخصوص الطالب {name}.");
   const sheetRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     localStorage.setItem("reports.rosterColumnWidths", JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem("reports.rosterTemplates", JSON.stringify(templates));
+  }, [templates]);
 
   const filters = useMemo(
     () => ({
@@ -154,10 +180,22 @@ function ReportsBody() {
         ? [{ id: "stage", label: "الصف", width: columnWidths.stage ?? DEFAULT_ROSTER_WIDTHS.stage }]
         : []),
       ...(showClass
-        ? [{ id: "class", label: "الفصل", width: columnWidths.class ?? DEFAULT_ROSTER_WIDTHS.class }]
+        ? [
+            {
+              id: "class",
+              label: "الفصل",
+              width: columnWidths.class ?? DEFAULT_ROSTER_WIDTHS.class,
+            },
+          ]
         : []),
       ...(showPhone
-        ? [{ id: "phone", label: "جوال ولي الأمر", width: columnWidths.phone ?? DEFAULT_ROSTER_WIDTHS.phone }]
+        ? [
+            {
+              id: "phone",
+              label: "جوال ولي الأمر",
+              width: columnWidths.phone ?? DEFAULT_ROSTER_WIDTHS.phone,
+            },
+          ]
         : []),
       ...extraCols.map((col, index) => ({
         id: col.id,
@@ -168,6 +206,20 @@ function ReportsBody() {
     [columnWidths, extraCols, showClass, showPhone, showStage],
   );
 
+  const orderedRosterColumns = useMemo(() => {
+    const byId = new Map(rosterColumns.map((col) => [col.id, col]));
+    const ordered = columnOrder.map((id) => byId.get(id)).filter(Boolean) as RosterColumn[];
+    return [...ordered, ...rosterColumns.filter((col) => !columnOrder.includes(col.id))];
+  }, [columnOrder, rosterColumns]);
+
+  useEffect(() => {
+    setColumnOrder((prev) => {
+      const ids = rosterColumns.map((col) => col.id);
+      const next = prev.filter((id) => ids.includes(id));
+      return [...next, ...ids.filter((id) => !next.includes(id))];
+    });
+  }, [rosterColumns]);
+
   function setColumnWidth(id: string, value: string) {
     setColumnWidths((prev) => ({ ...prev, [id]: clampColumnWidth(value) }));
   }
@@ -177,6 +229,97 @@ function ReportsBody() {
       ...DEFAULT_ROSTER_WIDTHS,
       ...Object.fromEntries(extraCols.map((col) => [col.id, 24])),
     });
+  }
+
+  function saveRosterTemplate() {
+    const name = templateName.trim();
+    if (!name) return;
+    setTemplates((prev) => [
+      ...prev,
+      {
+        id: `tpl-${Date.now()}`,
+        name,
+        title: rosterTitle,
+        showPhone,
+        showClass,
+        showStage,
+        extraCols,
+        order: orderedRosterColumns.map((col) => col.id),
+        widths: columnWidths,
+      },
+    ]);
+    try {
+      const activity = JSON.parse(localStorage.getItem("school.activityLog") || "[]");
+      activity.unshift({ action: "حفظ قالب كشف", name, at: new Date().toISOString() });
+      localStorage.setItem("school.activityLog", JSON.stringify(activity.slice(0, 100)));
+    } catch {
+      // Ignore unavailable browser storage.
+    }
+    setTemplateName("");
+  }
+
+  function loadRosterTemplate(template: RosterTemplate) {
+    setRosterTitle(template.title);
+    setShowPhone(template.showPhone);
+    setShowClass(template.showClass);
+    setShowStage(template.showStage);
+    setExtraCols(template.extraCols);
+    setColumnOrder(template.order);
+    setColumnWidths({ ...DEFAULT_ROSTER_WIDTHS, ...template.widths });
+  }
+
+  function moveRosterColumn(id: string, direction: -1 | 1) {
+    setColumnOrder((prev) => {
+      const current = prev.indexOf(id);
+      const target = current + direction;
+      if (current < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[current], next[target]] = [next[target], next[current]];
+      return next;
+    });
+  }
+
+  function exportRosterExcel() {
+    const rows = students.map((student: any, index) => {
+      const row: Record<string, string | number> = {};
+      for (const col of orderedRosterColumns) {
+        row[col.label] =
+          col.id === "number"
+            ? index + 1
+            : col.id === "name"
+              ? student.name
+              : col.id === "stage"
+                ? student.stageName
+                : col.id === "class"
+                  ? student.label
+                  : col.id === "phone"
+                    ? student.parentPhone || ""
+                    : "";
+      }
+      return row;
+    });
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "كشف الأسماء");
+    XLSX.writeFile(
+      book,
+      `${(rosterTitle.trim() || "كشف الأسماء").replace(/[\\/:*?"<>|]/g, "-")}.xlsx`,
+    );
+  }
+
+  function sendBulkWhatsApp() {
+    const recipients = students.filter((student: any) => String(student.parentPhone || "").trim());
+    for (const student of recipients) {
+      const text = bulkMessage
+        .replaceAll("{name}", student.name)
+        .replaceAll("{class}", student.label || "");
+      const phone = String(student.parentPhone).replace(/\D/g, "");
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    }
   }
 
   const counts = useMemo(() => {
@@ -246,7 +389,11 @@ function ReportsBody() {
             disabled={mode === "messages" ? messagesQuery.isPending : query.isPending}
           >
             <Printer className="size-4" />
-            {mode === "messages" ? "طباعة الرسائل" : mode === "names" ? "طباعة كشف الأسماء" : "طباعة الكشف"}
+            {mode === "messages"
+              ? "طباعة الرسائل"
+              : mode === "names"
+                ? "طباعة كشف الأسماء"
+                : "طباعة الكشف"}
           </Button>
         </div>
       </header>
@@ -290,46 +437,46 @@ function ReportsBody() {
           </Select>
         </div>
         {mode !== "names" ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="student">اسم الطالب</Label>
-          <Select id="student" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
-            <option value="">الكل</option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="student">اسم الطالب</Label>
+            <Select id="student" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
+              <option value="">الكل</option>
+              {students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
         ) : null}
         {mode === "notes" ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="type">نوع الملاحظة</Label>
-          <Select
-            id="type"
-            value={type}
-            onChange={(e) => setType(e.target.value as "all" | NoteType)}
-          >
-            <option value="all">الكل</option>
-            {NOTE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {NOTE_META[t].label}
-              </option>
-            ))}
-          </Select>
-        </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="type">نوع الملاحظة</Label>
+            <Select
+              id="type"
+              value={type}
+              onChange={(e) => setType(e.target.value as "all" | NoteType)}
+            >
+              <option value="all">الكل</option>
+              {NOTE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {NOTE_META[t].label}
+                </option>
+              ))}
+            </Select>
+          </div>
         ) : null}
         {mode !== "names" ? (
-        <>
-        <div className="space-y-1.5">
-          <Label htmlFor="from">من تاريخ</Label>
-          <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="to">إلى تاريخ</Label>
-          <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-        </>
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="from">من تاريخ</Label>
+              <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="to">إلى تاريخ</Label>
+              <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </div>
+          </>
         ) : null}
       </form>
       {mode === "names" ? (
@@ -361,7 +508,9 @@ function ReportsBody() {
               </button>
             </div>
             {extraCols.length === 0 ? (
-              <p className="text-xs text-fg-muted">لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.</p>
+              <p className="text-xs text-fg-muted">
+                لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.
+              </p>
             ) : (
               <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {extraCols.map((col, i) => (
@@ -390,15 +539,27 @@ function ReportsBody() {
           </div>
           <div className="flex flex-wrap gap-4 text-sm sm:col-span-2 lg:col-span-3">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={showPhone} onChange={(e) => setShowPhone(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={showPhone}
+                onChange={(e) => setShowPhone(e.target.checked)}
+              />
               جوال ولي الأمر
             </label>
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={showClass} onChange={(e) => setShowClass(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={showClass}
+                onChange={(e) => setShowClass(e.target.checked)}
+              />
               الفصل
             </label>
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={showStage} onChange={(e) => setShowStage(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={showStage}
+                onChange={(e) => setShowStage(e.target.checked)}
+              />
               الصف / المرحلة
             </label>
           </div>
@@ -406,9 +567,15 @@ function ReportsBody() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <Label>عرض الأعمدة (مم)</Label>
-                <p className="text-xs text-fg-muted">اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.</p>
+                <p className="text-xs text-fg-muted">
+                  اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.
+                </p>
               </div>
-              <button type="button" className="text-sm font-medium text-primary" onClick={resetColumnWidths}>
+              <button
+                type="button"
+                className="text-sm font-medium text-primary"
+                onClick={resetColumnWidths}
+              >
                 إعادة المقاسات الافتراضية
               </button>
             </div>
@@ -431,6 +598,109 @@ function ReportsBody() {
                 </label>
               ))}
             </div>
+          </div>
+          <div className="space-y-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:col-span-2 lg:col-span-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-48 flex-1 space-y-1.5">
+                <Label htmlFor="template-name">حفظ القالب باسم</Label>
+                <Input
+                  id="template-name"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="كشف الفصل الأول"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={saveRosterTemplate}
+                disabled={!templateName.trim()}
+              >
+                <Save className="size-4" /> حفظ القالب
+              </Button>
+              <Button type="button" size="sm" variant="secondary" onClick={exportRosterExcel}>
+                <Download className="size-4" /> Excel
+              </Button>
+            </div>
+            {templates.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="flex items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-sm"
+                  >
+                    <button
+                      type="button"
+                      className="font-medium text-primary"
+                      onClick={() => loadRosterTemplate(template)}
+                    >
+                      {template.name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`حذف ${template.name}`}
+                      className="text-danger"
+                      onClick={() =>
+                        setTemplates((prev) => prev.filter((item) => item.id !== template.id))
+                      }
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="space-y-1">
+              <p className="text-sm font-medium">ترتيب الأعمدة</p>
+              <div className="flex flex-wrap gap-2">
+                {orderedRosterColumns.map((col, index) => (
+                  <div
+                    key={col.id}
+                    className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs"
+                  >
+                    <span>{col.label}</span>
+                    <button
+                      type="button"
+                      aria-label="تحريك لأعلى"
+                      disabled={index === 0}
+                      onClick={() => moveRosterColumn(col.id, -1)}
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="تحريك لأسفل"
+                      disabled={index === orderedRosterColumns.length - 1}
+                      onClick={() => moveRosterColumn(col.id, 1)}
+                    >
+                      <ArrowDown className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:col-span-2 lg:col-span-3">
+            <Label htmlFor="bulk-message">رسالة جماعية عبر واتساب</Label>
+            <p className="text-xs text-fg-muted">
+              المتغيرات: &#123;name&#125; و&#123;class&#125; — ستُفتح رسالة منفصلة لكل طالب لديه رقم
+              جوال.
+            </p>
+            <textarea
+              id="bulk-message"
+              className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
+              value={bulkMessage}
+              onChange={(e) => setBulkMessage(e.target.value)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={sendBulkWhatsApp}
+              disabled={!students.some((student: any) => student.parentPhone)}
+            >
+              فتح رسائل واتساب الجماعية
+            </Button>
           </div>
         </div>
       ) : null}
@@ -478,39 +748,39 @@ function ReportsBody() {
             </tbody>
           </table>
         ) : (
-        <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center sm:grid-cols-4">
-          {[
-            ["الصف / المرحلة", classLine],
-            ["اسم الطالب", "جميع الطلاب"],
-            ["نوع الملاحظة", mode === "messages" ? "رسائل أولياء الأمور" : typeLine],
-            ["الفترة", rangeLine],
-          ].map(([label, value]) => (
-            <div key={label} className="border-l border-black px-1.5 py-1.5 last:border-l-0">
-              <p className="text-[11px] font-semibold text-[#00857c]">{label}</p>
-              <p className="text-[13px] font-medium leading-5">{value}</p>
-            </div>
-          ))}
-        </div>
+          <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center sm:grid-cols-4">
+            {[
+              ["الصف / المرحلة", classLine],
+              ["اسم الطالب", "جميع الطلاب"],
+              ["نوع الملاحظة", mode === "messages" ? "رسائل أولياء الأمور" : typeLine],
+              ["الفترة", rangeLine],
+            ].map(([label, value]) => (
+              <div key={label} className="border-l border-black px-1.5 py-1.5 last:border-l-0">
+                <p className="text-[11px] font-semibold text-[#00857c]">{label}</p>
+                <p className="text-[13px] font-medium leading-5">{value}</p>
+              </div>
+            ))}
+          </div>
         )}
 
         {mode === "names" ? null : mode === "notes" ? (
-        <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
-          {(
-            [
-              ["غياب", counts.absence],
-              ["تأخر", counts.late],
-              ["واجب", counts.homework],
-              ["سلوك", counts.behavior],
-              ["مفتوحة", counts.open],
-              ["أُغلقت", counts.closed],
-            ] as const
-          ).map(([label, n]) => (
-            <div key={label} className="bg-[#f3faf8] px-1 py-1.5">
-              <p className="font-semibold text-[#0f4f4a]">{label}</p>
-              <p className="text-[13px] font-semibold tabular-nums">{n}</p>
-            </div>
-          ))}
-        </div>
+          <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
+            {(
+              [
+                ["غياب", counts.absence],
+                ["تأخر", counts.late],
+                ["واجب", counts.homework],
+                ["سلوك", counts.behavior],
+                ["مفتوحة", counts.open],
+                ["أُغلقت", counts.closed],
+              ] as const
+            ).map(([label, n]) => (
+              <div key={label} className="bg-[#f3faf8] px-1 py-1.5">
+                <p className="font-semibold text-[#0f4f4a]">{label}</p>
+                <p className="text-[13px] font-semibold tabular-nums">{n}</p>
+              </div>
+            ))}
+          </div>
         ) : (
           <p className="official-tint mb-2 rounded-sm border border-[#00857c] px-3 py-2 text-center text-[12px]">
             سجل الرسائل المرسلة إلى أولياء الأمور — عدد السجلات: {messages.length}
@@ -518,209 +788,247 @@ function ReportsBody() {
         )}
 
         <div className="overflow-x-auto">
-        {mode === "names" ? (
-        <table className="official-table official-report-table official-roster-table">
-          <colgroup>
-            {rosterColumns.map((col) => (
-              <col key={col.id} style={{ width: `${col.width}mm` }} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr>
-              <th>م</th>
-              <th>اسم الطالب</th>
-              {showStage ? <th>الصف</th> : null}
-              {showClass ? <th>الفصل</th> : null}
-              {showPhone ? <th>جوال ولي الأمر</th> : null}
-              {extraCols.map((col) => (
-                <th key={col.id}>{col.title.trim() || " "}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {students.length === 0 ? (
-              <tr>
-                <td colSpan={2 + (showStage ? 1 : 0) + (showClass ? 1 : 0) + (showPhone ? 1 : 0) + extraCols.length} className="py-8 text-center">
-                  لا يوجد طلاب ضمن الصف أو الفصل المحدد.
-                </td>
-              </tr>
-            ) : (
-              students.map((s: any, index: number) => (
-                <tr key={s.id}>
-                  <td className="tabular-nums">{index + 1}</td>
-                  <td className="text-right font-medium">{s.name}</td>
-                  {showStage ? <td>{s.stageName}</td> : null}
-                  {showClass ? <td>{s.label}</td> : null}
-                  {showPhone ? <td className="tabular-nums" dir="ltr">{s.parentPhone || ""}</td> : null}
-                  {extraCols.map((col) => (
-                    <td key={`b-${s.id}-${col.id}`} className="h-8" />
+          {mode === "names" ? (
+            <table className="official-table official-report-table official-roster-table">
+              <colgroup>
+                {orderedRosterColumns.map((col) => (
+                  <col key={col.id} style={{ width: `${col.width}mm` }} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr>
+                  {orderedRosterColumns.map((col) => (
+                    <th key={col.id}>{col.label}</th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        ) : mode === "messages" ? (
-        <table className="official-table official-report-table">
-          <thead>
-            <tr>
-              <th className="w-8">م</th>
-              <th>اسم الطالب</th>
-              <th>النوع</th>
-              <th>المرسل</th>
-              <th>التاريخ</th>
-              <th>نص الرسالة</th>
-              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {messages.length === 0 ? (
-              <tr>
-                <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
-                  لا توجد رسائل ضمن الفترة المحددة.
-                </td>
-              </tr>
-            ) : (
-              messages.map((msg, index) => (
-                <tr key={msg.id}>
-                  <td className="tabular-nums">{index + 1}</td>
-                  <td className="text-right">
-                    <span className="block font-medium leading-5">{msg.studentName}</span>
-                    <span className="block text-[10px] leading-4">
-                      {classLabel(msg.shortName, msg.className)}
-                    </span>
-                  </td>
-                  <td>{messageKindLabel(msg.kind)}</td>
-                  <td>{msg.staffName}</td>
-                  <td className="whitespace-nowrap">{formatStamp(msg.createdAt)}</td>
-                  <td className="text-right text-[11px] leading-5">{msg.body}</td>
-                  {canEditRecords ? (
-                    <td className="no-print whitespace-nowrap">
-                      <MessageRecordTools id={msg.id} body={msg.body} />
+              </thead>
+              <tbody>
+                {students.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={
+                        2 +
+                        (showStage ? 1 : 0) +
+                        (showClass ? 1 : 0) +
+                        (showPhone ? 1 : 0) +
+                        extraCols.length
+                      }
+                      className="py-8 text-center"
+                    >
+                      لا يوجد طلاب ضمن الصف أو الفصل المحدد.
                     </td>
-                  ) : null}
+                  </tr>
+                ) : (
+                  students.map((s: any, index: number) => (
+                    <tr key={s.id}>
+                      {orderedRosterColumns.map((col) => (
+                        <td
+                          key={`b-${s.id}-${col.id}`}
+                          className={
+                            col.id === "name"
+                              ? "text-right font-medium"
+                              : col.id === "phone"
+                                ? "tabular-nums"
+                                : "h-8"
+                          }
+                          dir={col.id === "phone" ? "ltr" : undefined}
+                        >
+                          {col.id === "number"
+                            ? index + 1
+                            : col.id === "name"
+                              ? s.name
+                              : col.id === "stage"
+                                ? s.stageName
+                                : col.id === "class"
+                                  ? s.label
+                                  : col.id === "phone"
+                                    ? s.parentPhone || ""
+                                    : ""}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : mode === "messages" ? (
+            <table className="official-table official-report-table">
+              <thead>
+                <tr>
+                  <th className="w-8">م</th>
+                  <th>اسم الطالب</th>
+                  <th>النوع</th>
+                  <th>المرسل</th>
+                  <th>التاريخ</th>
+                  <th>نص الرسالة</th>
+                  {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        ) : (
-        <table className="official-table official-report-table">
-          <thead>
-            <tr>
-              <th className="w-8">م</th>
-              <th>اسم الطالب</th>
-              <th>النوع / المخالفة</th>
-              <th>الحصة · المادة</th>
-              <th>التاريخ</th>
-              <th>الحالة / الإجراء</th>
-              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {notes.length === 0 ? (
-              <tr>
-                <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
-                  لا توجد نتائج ضمن عوامل التصفية الحالية.
-                </td>
-              </tr>
-            ) : (
-              notes.map((note: any, index: number) => (
-                <tr key={note.id}>
-                  <td className="tabular-nums">{index + 1}</td>
-                  <td className="text-right">
-                    <span className="block font-medium leading-5">{note.studentName}</span>
-                    <span className="block text-[10px] leading-4">
-                      {classLabel(note.shortName, note.className)}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <span className="block leading-5">{NOTE_META[note.type as NoteType].label}</span>
-                    {note.behaviorTypeName ? (
-                      <span className="block text-[10px] leading-4">
-                        {note.behaviorTypeName}
-                        {note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}
-                      </span>
-                    ) : note.details ? (
-                      <span className="block text-[10px] leading-4">{note.details}</span>
-                    ) : null}
-                  </td>
-                  <td>
-                    <span className="block leading-5">
-                      {periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}
-                    </span>
-                    <span className="block text-[10px] leading-4">
-                      {note.teacherSubject || note.teacherName || "—"}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap">{formatDay(note.createdAt)}</td>
-                  <td className="text-right">
-                    {note.status === "closed"
-                      ? note.actionTaken || "أُغلقت"
-                      : "قيد المتابعة"}
-                  </td>
-                  {canEditRecords ? (
-                    <td className="no-print whitespace-nowrap">
-                      <NoteRecordTools note={note} />
+              </thead>
+              <tbody>
+                {messages.length === 0 ? (
+                  <tr>
+                    <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
+                      لا توجد رسائل ضمن الفترة المحددة.
                     </td>
-                  ) : null}
+                  </tr>
+                ) : (
+                  messages.map((msg, index) => (
+                    <tr key={msg.id}>
+                      <td className="tabular-nums">{index + 1}</td>
+                      <td className="text-right">
+                        <span className="block font-medium leading-5">{msg.studentName}</span>
+                        <span className="block text-[10px] leading-4">
+                          {classLabel(msg.shortName, msg.className)}
+                        </span>
+                      </td>
+                      <td>{messageKindLabel(msg.kind)}</td>
+                      <td>{msg.staffName}</td>
+                      <td className="whitespace-nowrap">{formatStamp(msg.createdAt)}</td>
+                      <td className="text-right text-[11px] leading-5">{msg.body}</td>
+                      {canEditRecords ? (
+                        <td className="no-print whitespace-nowrap">
+                          <MessageRecordTools id={msg.id} body={msg.body} />
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="official-table official-report-table">
+              <thead>
+                <tr>
+                  <th className="w-8">م</th>
+                  <th>اسم الطالب</th>
+                  <th>النوع / المخالفة</th>
+                  <th>الحصة · المادة</th>
+                  <th>التاريخ</th>
+                  <th>الحالة / الإجراء</th>
+                  {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        )}
+              </thead>
+              <tbody>
+                {notes.length === 0 ? (
+                  <tr>
+                    <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
+                      لا توجد نتائج ضمن عوامل التصفية الحالية.
+                    </td>
+                  </tr>
+                ) : (
+                  notes.map((note: any, index: number) => (
+                    <tr key={note.id}>
+                      <td className="tabular-nums">{index + 1}</td>
+                      <td className="text-right">
+                        <span className="block font-medium leading-5">{note.studentName}</span>
+                        <span className="block text-[10px] leading-4">
+                          {classLabel(note.shortName, note.className)}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        <span className="block leading-5">
+                          {NOTE_META[note.type as NoteType].label}
+                        </span>
+                        {note.behaviorTypeName ? (
+                          <span className="block text-[10px] leading-4">
+                            {note.behaviorTypeName}
+                            {note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}
+                          </span>
+                        ) : note.details ? (
+                          <span className="block text-[10px] leading-4">{note.details}</span>
+                        ) : null}
+                      </td>
+                      <td>
+                        <span className="block leading-5">
+                          {periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}
+                        </span>
+                        <span className="block text-[10px] leading-4">
+                          {note.teacherSubject || note.teacherName || "—"}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap">{formatDay(note.createdAt)}</td>
+                      <td className="text-right">
+                        {note.status === "closed" ? note.actionTaken || "أُغلقت" : "قيد المتابعة"}
+                      </td>
+                      {canEditRecords ? (
+                        <td className="no-print whitespace-nowrap">
+                          <NoteRecordTools note={note} />
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <p className="mt-2 text-[10px] leading-5">
           أعدّ الكشف: {staff.displayName} · عدد السجلات:{" "}
-          {mode === "messages" ? messages.length : mode === "names" ? students.length : notes.length} · طُبع في {todayLabel()}
+          {mode === "messages"
+            ? messages.length
+            : mode === "names"
+              ? students.length
+              : notes.length}{" "}
+          · طُبع في {todayLabel()}
           {scopedToTeacher && mode === "notes" ? " · ملاحظات هذا المعلم فقط" : ""}
         </p>
 
         <div className="no-print mt-3 flex flex-wrap gap-4 text-sm">
           <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={showTeacherSign} onChange={(e) => setShowTeacherSign(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={showTeacherSign}
+              onChange={(e) => setShowTeacherSign(e.target.checked)}
+            />
             إظهار المعلم
           </label>
           <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={showCounselorSign} onChange={(e) => setShowCounselorSign(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={showCounselorSign}
+              onChange={(e) => setShowCounselorSign(e.target.checked)}
+            />
             إظهار اسم الوكيل
           </label>
           <label className="inline-flex items-center gap-2">
-            <input type="checkbox" checked={showPrincipalSign} onChange={(e) => setShowPrincipalSign(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={showPrincipalSign}
+              onChange={(e) => setShowPrincipalSign(e.target.checked)}
+            />
             إظهار اسم المدير
           </label>
         </div>
         {showTeacherSign || showCounselorSign || showPrincipalSign ? (
-        <footer
-          className="mt-4 grid gap-3 text-center text-[12px] leading-6"
-          style={{
-            gridTemplateColumns: `repeat(${[showTeacherSign, showCounselorSign, showPrincipalSign].filter(Boolean).length}, minmax(0, 1fr))`,
-          }}
-        >
-          {showTeacherSign ? (
-            <div>
-              <p className="font-semibold">المعلم</p>
-              <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
-              <p>التوقيع: ………………</p>
-            </div>
-          ) : null}
-          {showCounselorSign ? (
-            <div>
-              <p className="font-semibold">{counselor}</p>
-              <p>الاسم: {reportSchool.counselorName || "………………"}</p>
-              <p>التوقيع: ………………</p>
-            </div>
-          ) : null}
-          {showPrincipalSign ? (
-            <div>
-              <p className="font-semibold">{principal}</p>
-              <p>الاسم: {reportSchool.principalName || "………………"}</p>
-              <p>التوقيع: ………………</p>
-            </div>
-          ) : null}
-        </footer>
+          <footer
+            className="mt-4 grid gap-3 text-center text-[12px] leading-6"
+            style={{
+              gridTemplateColumns: `repeat(${[showTeacherSign, showCounselorSign, showPrincipalSign].filter(Boolean).length}, minmax(0, 1fr))`,
+            }}
+          >
+            {showTeacherSign ? (
+              <div>
+                <p className="font-semibold">المعلم</p>
+                <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
+                <p>التوقيع: ………………</p>
+              </div>
+            ) : null}
+            {showCounselorSign ? (
+              <div>
+                <p className="font-semibold">{counselor}</p>
+                <p>الاسم: {reportSchool.counselorName || "………………"}</p>
+                <p>التوقيع: ………………</p>
+              </div>
+            ) : null}
+            {showPrincipalSign ? (
+              <div>
+                <p className="font-semibold">{principal}</p>
+                <p>الاسم: {reportSchool.principalName || "………………"}</p>
+                <p>التوقيع: ………………</p>
+              </div>
+            ) : null}
+          </footer>
         ) : null}
       </article>
     </div>
