@@ -196,7 +196,6 @@ export type NoteRecord = {
 export type DailyAttendanceRow = {
   studentId: number;
   studentName: string;
-  parentPhone: string;
   classId: number;
   classLabel: string;
   kind: DailyKind | null;

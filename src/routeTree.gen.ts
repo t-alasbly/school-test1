@@ -17,7 +17,6 @@ import { Route as CounselingRouteImport } from './routes/counseling'
 import { Route as FormsRouteImport } from './routes/forms'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StaffRouteImport } from './routes/staff'
@@ -77,11 +76,6 @@ const ImportRoute = ImportRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MessagesRoute = MessagesRouteImport.update({
-  id: '/messages',
-  path: '/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportsRoute = ReportsRouteImport.update({
@@ -194,7 +188,6 @@ export interface FileRoutesByFullPath {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
-  '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
@@ -225,7 +218,6 @@ export interface FileRoutesByTo {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
-  '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
@@ -256,7 +248,6 @@ export interface FileRoutesById {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
-  '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
@@ -289,7 +280,6 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
-    | '/messages'
     | '/reports'
     | '/settings'
     | '/staff'
@@ -320,7 +310,6 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
-    | '/messages'
     | '/reports'
     | '/staff'
     | '/class/$classId'
@@ -350,7 +339,6 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
-    | '/messages'
     | '/reports'
     | '/settings'
     | '/staff'
@@ -382,7 +370,6 @@ export interface RootRouteChildren {
   FormsRoute: typeof FormsRoute
   ImportRoute: typeof ImportRoute
   LoginRoute: typeof LoginRoute
-  MessagesRoute: typeof MessagesRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   StaffRoute: typeof StaffRoute
@@ -447,13 +434,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/messages': {
-      id: '/messages'
-      path: '/messages'
-      fullPath: '/messages'
-      preLoaderRoute: typeof MessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reports': {
@@ -646,7 +626,6 @@ const rootRouteChildren: RootRouteChildren = {
   FormsRoute: FormsRoute,
   ImportRoute: ImportRoute,
   LoginRoute: LoginRoute,
-  MessagesRoute: MessagesRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRouteWithChildren,
   StaffRoute: StaffRoute,
