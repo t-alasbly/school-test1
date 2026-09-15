@@ -34,6 +34,14 @@ export const NOTE_META: Record<NoteType, { label: string; tone: NoteTone; short:
 	}
 };
 export const NOTE_TYPES = Object.keys(NOTE_META) as NoteType[];
+export const DEFAULT_INVITE_REASONS = [
+	"مناقشة مشكلة سلوكية وتعديل السلوك",
+	"مناقشة الغياب والتأخر والمواظبة",
+	"متابعة المستوى الدراسي",
+	"التوقيع على تعهد سلوكي",
+	"حضور لجنة التوجيه الطلابي",
+	"استكمال إجراءات مخالفة متكررة",
+];
 export const ROLE_LABEL: Record<StaffRole, string> = {
 	admin: "مدير التطبيق",
 	principal: "مدير مدرسة",

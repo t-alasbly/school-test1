@@ -1,6 +1,7 @@
 import { Printer } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,11 +9,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { getStudentNotes } from "@/lib/school/api";
+import { getStudentNotes, updateInviteReasons } from "@/lib/school/api";
 import {
   counselorTitle,
+  DEFAULT_INVITE_REASONS,
   degreeLabel,
   formatDay,
   formatStamp,
@@ -60,8 +63,127 @@ export type FormOverrides = {
   subject?: string;
   actionText?: string;
   extra?: string;
+  appointment?: string;
+  inviteReason?: string;
 };
 
+function todayISODate() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function inviteReasonList(custom: string[] | undefined) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of [...(custom ?? []), ...DEFAULT_INVITE_REASONS]) {
+    const text = item.trim();
+    if (text.length < 4 || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
+export function InviteOptionsPanel({
+  overrides,
+  onChange,
+  showViolation,
+  onShowViolation,
+}: {
+  overrides: FormOverrides;
+  onChange: (next: FormOverrides) => void;
+  showViolation: boolean;
+  onShowViolation: (value: boolean) => void;
+}) {
+  const { school } = useWorkspace();
+  const queryClient = useQueryClient();
+  const reasons = inviteReasonList(school.inviteReasons);
+  const appointment = overrides.appointment || todayISODate();
+  const reason = overrides.inviteReason || reasons[0] || "";
+  const stamp = `${appointment}T12:00:00`;
+
+  const saveReason = useMutation({
+    mutationFn: (next: string[]) => updateInviteReasons({ data: { reasons: next } }),
+    onSuccess: () => {
+      toast.success("أُضيفت العبارة إلى الخيارات الثابتة");
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+  });
+
+  return (
+    <div className="no-print mb-4 space-y-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
+      <p className="text-sm font-semibold">موعد استدعاء ولي الأمر</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="invite-date">التاريخ</Label>
+          <Input
+            id="invite-date"
+            type="date"
+            value={appointment}
+            onChange={(e) =>
+              onChange({
+                ...overrides,
+                appointment: e.target.value,
+                day: formatDay(`${e.target.value}T12:00:00`),
+                weekday: weekdayName(`${e.target.value}T12:00:00`),
+              })
+            }
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>اليوم</Label>
+          <p className="flex h-11 items-center rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm">
+            {weekdayName(stamp) || "—"}
+          </p>
+        </div>
+      </div>
+      <label className="flex min-h-11 items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-4 accent-primary"
+          checked={showViolation}
+          onChange={(e) => onShowViolation(e.target.checked)}
+        />
+        إظهار نوع المخالفة في الخطاب
+      </label>
+      <div className="space-y-1.5">
+        <Label htmlFor="invite-reason-pick">سبب الاستدعاء / الدعوة</Label>
+        <Select
+          id="invite-reason-pick"
+          value={reasons.includes(reason) ? reason : ""}
+          onChange={(e) => onChange({ ...overrides, inviteReason: e.target.value })}
+        >
+          <option value="">عبارة مخصصة…</option>
+          {reasons.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="invite-reason">تعديل العبارة</Label>
+        <textarea
+          id="invite-reason"
+          className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm leading-7"
+          value={reason}
+          onChange={(e) => onChange({ ...overrides, inviteReason: e.target.value })}
+        />
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        disabled={reason.trim().length < 4 || reasons.includes(reason.trim()) || saveReason.isPending}
+        onClick={() => saveReason.mutate([...reasons, reason.trim()])}
+      >
+        حفظ العبارة كخيار ثابت
+      </Button>
+    </div>
+  );
+}
 
 export type PrintableStudent = {
   name: string;
@@ -226,6 +348,7 @@ export function PrintFormsDialog({
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState<FormOverrides>({});
   const [showCompensation, setShowCompensation] = useState(true);
+  const [showViolation, setShowViolation] = useState(true);
   const sheetRef = useRef<HTMLElement>(null);
 
   const history = useQuery({
@@ -313,6 +436,14 @@ export function PrintFormsDialog({
             إظهار فرص التعويض في التعهد والخطاب
           </label>
         </div>
+        {kind === "invite" ? (
+          <InviteOptionsPanel
+            overrides={overrides}
+            onChange={setOverrides}
+            showViolation={showViolation}
+            onShowViolation={setShowViolation}
+          />
+        ) : null}
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
             {(
@@ -366,8 +497,9 @@ export function PrintFormsDialog({
           notes={allNotes}
           selectedNote={selected}
           school={school}
-          overrides={manual ? overrides : undefined}
+          overrides={kind === "invite" || manual ? overrides : undefined}
           showCompensation={showCompensation && Boolean(selected?.compensation)}
+          showViolation={kind === "invite" ? showViolation : true}
         />
       </DialogContent>
     </Dialog>
@@ -382,6 +514,7 @@ export function OfficialForm({
   school,
   overrides,
   showCompensation = false,
+  showViolation = true,
   ref,
 }: {
   kind: FormKind;
@@ -391,6 +524,7 @@ export function OfficialForm({
   school: School;
   overrides?: FormOverrides;
   showCompensation?: boolean;
+  showViolation?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const { behaviorTypes } = useWorkspace();
@@ -402,11 +536,13 @@ export function OfficialForm({
     notes[0] ??
     null;
   const stamp = focus?.occurredAt || focus?.createdAt;
+  const inviteStamp = `${overrides?.appointment || todayISODate()}T12:00:00`;
+  const dateStamp = kind === "invite" ? inviteStamp : stamp;
   const violation = overrides?.violation || focus?.behaviorTypeName || focus?.details || "……………………";
   const degree = overrides?.degree || degreeLabel(focus?.behaviorDegree) || "…………";
-  const weekday = overrides?.weekday || (stamp ? weekdayName(stamp) : "…………");
-  const day = overrides?.day || (stamp ? formatDay(stamp) : "…………");
-  const hijri = stamp ? hijriDate(stamp) : "…………";
+  const weekday = overrides?.weekday || (dateStamp ? weekdayName(dateStamp) : "…………");
+  const day = overrides?.day || (dateStamp ? formatDay(dateStamp) : "…………");
+  const hijri = dateStamp ? hijriDate(dateStamp) : "…………";
   const studentWord = studentNoun(school.studentGender);
   const principal = principalTitle(school.leadershipGender);
   const counselor = counselorTitle(school.leadershipGender);
@@ -464,6 +600,9 @@ export function OfficialForm({
     stageLabel: procedureStageLabel(stageIdx + 1),
     compensation: focus?.compensation || "",
     showCompensation: Boolean(showCompensation && focus?.compensation),
+    inviteReason:
+      overrides?.inviteReason?.trim() || inviteReasonList(school.inviteReasons)[0] || "",
+    showViolation,
   };
 
   return (
@@ -471,7 +610,7 @@ export function OfficialForm({
       <FormHeader school={school} confidential={FORM_META[kind].confidential} />
       <h2 className="mb-2 text-center text-[20px] font-semibold tracking-wide">{FORM_META[kind].title}</h2>
       <StudentIdentity name={ctx.name} classLine={ctx.classLine} studentWord={ctx.studentWord} />
-      {kind === "receipt" || kind === "commitment" || kind === "excellence" ? null : (
+      {kind === "receipt" || kind === "commitment" || kind === "excellence" || (kind === "invite" && !showViolation) ? null : (
         <ViolationStrip
           violation={ctx.violation}
           degree={ctx.degree}
@@ -540,6 +679,8 @@ type FormCtx = {
   stageLabel: string;
   compensation: string;
   showCompensation: boolean;
+  inviteReason: string;
+  showViolation: boolean;
 };
 
 function parseActionTaken(action: string | undefined): { steps: string[]; note: string } {
@@ -972,6 +1113,7 @@ function NoticeBody({ ctx }: { ctx: FormCtx }) {
 }
 
 function InviteBody({ ctx }: { ctx: FormCtx }) {
+  const reason = ctx.inviteReason || "مناقشة وضع الطالب مع إدارة المدرسة";
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
       <p>
@@ -982,8 +1124,14 @@ function InviteBody({ ctx }: { ctx: FormCtx }) {
       <p>
         نأمل منكم الحضور إلى المدرسة في يوم <Dotted value={ctx.weekday} /> الموافق{" "}
         <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} /> لمقابلة {ctx.principal}، وذلك
-        بهدف مناقشة مشكلة سلوكية ({ctx.violation}).
+        بهدف <Dotted value={reason} />.
       </p>
+      {ctx.showViolation ? (
+        <p>
+          نوع المخالفة: <Dotted value={ctx.violation} />
+          {ctx.degree && ctx.degree !== "…………" ? <> — درجتها <Dotted value={ctx.degree} /></> : null}
+        </p>
+      ) : null}
       <p>شاكرين لكم تعاونكم معنا لتحقيق مصلحة {ctx.studentWord}.</p>
       <NamesTail note={ctx.actionNote}>
       <div className="mt-4 flex justify-between">

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ import {
 import { staffCan } from "@/lib/school/permissions";
 import type { BehaviorImprovement, ImprovementStatus, NoteRecord } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
+import { MessageCircle } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   validateSearch: (search: Record<string, unknown>): { student?: number } => ({
@@ -62,13 +63,14 @@ function AdminBody() {
   const { staff } = useWorkspace();
   const canAct = staffCan(staff, "takeActions");
   const canImprove = staffCan(staff, "acceptImprovements");
-  const allowed = canAct || canImprove;
+  const canMessage = staffCan(staff, "sendMessages");
+  const allowed = canAct || canImprove || canMessage;
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const query = useQuery({
     queryKey: ["admin"],
     queryFn: () => getAdminDashboard(),
     refetchInterval: 5000,
-    enabled: allowed,
+    enabled: canAct || canImprove,
   });
 
   useEffect(() => {
@@ -76,21 +78,25 @@ function AdminBody() {
   }, [studentParam]);
 
   if (!allowed) {
-    return <p className="text-fg-muted">هذه الصفحة مخصصة لمن مُنح صلاحية الإجراءات أو قبول التحسين.</p>;
+    return <p className="text-fg-muted">هذه الصفحة مخصصة لمن مُنح صلاحية الإجراءات أو الرسائل أو قبول التحسين.</p>;
   }
-  if (query.isPending) return <p className="text-fg-muted">جارٍ تحميل اللوحة…</p>;
-  if (query.isError || !query.data) return <p className="text-danger">تعذر تحميل البيانات.</p>;
+  if ((canAct || canImprove) && query.isPending) return <p className="text-fg-muted">جارٍ تحميل اللوحة…</p>;
+  if ((canAct || canImprove) && (query.isError || !query.data)) {
+    return <p className="text-danger">تعذر تحميل البيانات.</p>;
+  }
 
-  const { stats, feed, improvements = [] } = query.data;
-  const tiles = [
-    { label: "غياب اليوم", value: stats.absenceToday, tone: "danger" as const },
-    { label: "مخالفات اليوم", value: stats.behaviorToday, tone: "danger" as const },
-    { label: "تأخر اليوم", value: stats.lateToday, tone: "warn" as const },
-    { label: "واجبات اليوم", value: stats.homeworkToday, tone: "warn" as const },
-    { label: "ملاحظات مفتوحة", value: stats.openTotal, tone: "warn" as const },
-    { label: "خطط تحسين مفتوحة", value: stats.improvementsOpen, tone: "ok" as const },
-    { label: "إجمالي الطلاب", value: stats.studentsTotal, tone: "ok" as const },
-  ];
+  const { stats, feed, improvements = [] } = query.data ?? { stats: null, feed: [], improvements: [] };
+  const tiles = stats
+    ? [
+        { label: "غياب اليوم", value: stats.absenceToday, tone: "danger" as const },
+        { label: "مخالفات اليوم", value: stats.behaviorToday, tone: "danger" as const },
+        { label: "تأخر اليوم", value: stats.lateToday, tone: "warn" as const },
+        { label: "واجبات اليوم", value: stats.homeworkToday, tone: "warn" as const },
+        { label: "ملاحظات مفتوحة", value: stats.openTotal, tone: "warn" as const },
+        { label: "خطط تحسين مفتوحة", value: stats.improvementsOpen, tone: "ok" as const },
+        { label: "إجمالي الطلاب", value: stats.studentsTotal, tone: "ok" as const },
+      ]
+    : [];
 
   const isCounselor = staff.role === "counselor";
 
@@ -106,6 +112,15 @@ function AdminBody() {
           {isCounselor ? "شؤون الطلاب" : "لوحة الإدارة"}
         </h1>
       </header>
+      {canMessage ? (
+        <section className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-semibold">الرسائل الجماعية</h2><p className="text-sm text-fg-muted">إرسال رسائل لأولياء الأمور حسب الغياب أو التأخر أو الاختيار اليدوي.</p></div>
+            <Link to="/messages" className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-fg"><MessageCircle className="size-4" />فتح صفحة الرسائل</Link>
+          </div>
+        </section>
+      ) : null}
+      {tiles.length > 0 ? (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         {tiles.map((tile) => (
           <div
@@ -127,6 +142,7 @@ function AdminBody() {
           </div>
         ))}
       </div>
+      ) : null}
       {canAct ? (
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">المخالفات الواردة من المعلمين</h2>

@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Download, Printer, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { MessageRecordTools, NoteRecordTools } from "@/components/record-actions";
@@ -10,7 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { getReport, listParentMessages } from "@/lib/school/api";
+import {
+  deleteRosterTemplate,
+  getDailyAttendanceReport,
+  getReport,
+  listParentMessages,
+  listRosterTemplates,
+  saveRosterTemplate,
+} from "@/lib/school/api";
 import {
   NOTE_META,
   NOTE_TYPES,
@@ -18,6 +26,7 @@ import {
   counselorTitle,
   formatDay,
   formatStamp,
+  formatTime,
   hijriDate,
   messageKindLabel,
   occurrenceLabel,
@@ -27,23 +36,12 @@ import {
 } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
-import type { NoteType } from "@/lib/school/types";
+import type { NoteType, RosterTemplate } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/reports")({ component: ReportsPage });
 
 type RosterColumn = { id: string; label: string; width: number };
-type RosterTemplate = {
-  id: string;
-  name: string;
-  title: string;
-  showPhone: boolean;
-  showClass: boolean;
-  showStage: boolean;
-  extraCols: { id: string; title: string }[];
-  order: string[];
-  widths: Record<string, number>;
-};
 
 const DEFAULT_ROSTER_WIDTHS: Record<string, number> = {
   number: 10,
@@ -68,6 +66,7 @@ function ReportsPage() {
 
 function ReportsBody() {
   const { staff, school } = useWorkspace();
+  const queryClient = useQueryClient();
   const canEditRecords = staffCan(staff, "editRecords");
   const [stageId, setStageId] = useState<string>("");
   const [classId, setClassId] = useState<string>("");
@@ -75,7 +74,7 @@ function ReportsBody() {
   const [type, setType] = useState<"all" | NoteType>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [mode, setMode] = useState<"notes" | "messages" | "names">("notes");
+  const [mode, setMode] = useState<"notes" | "messages" | "names" | "dailyAttendance">("notes");
   const [rosterTitle, setRosterTitle] = useState("بيانات الطلاب");
   const [showPhone, setShowPhone] = useState(false);
   const [showClass, setShowClass] = useState(false);
@@ -92,25 +91,25 @@ function ReportsBody() {
       return DEFAULT_ROSTER_WIDTHS;
     }
   });
-  const [templates, setTemplates] = useState<RosterTemplate[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("reports.rosterTemplates") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [templates, setTemplates] = useState<RosterTemplate[]>([]);
   const [templateName, setTemplateName] = useState("");
+  const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
-  const [bulkMessage, setBulkMessage] = useState("السلام عليكم، نود إشعاركم بخصوص الطالب {name}.");
   const sheetRef = useRef<HTMLElement>(null);
+
+  const templatesQuery = useQuery({
+    queryKey: ["roster-templates"],
+    queryFn: () => listRosterTemplates(),
+  });
+
+  useEffect(() => {
+    const list = (templatesQuery.data as { templates?: RosterTemplate[] } | undefined)?.templates;
+    if (list) setTemplates(list);
+  }, [templatesQuery.data]);
 
   useEffect(() => {
     localStorage.setItem("reports.rosterColumnWidths", JSON.stringify(columnWidths));
   }, [columnWidths]);
-
-  useEffect(() => {
-    localStorage.setItem("reports.rosterTemplates", JSON.stringify(templates));
-  }, [templates]);
 
   const filters = useMemo(
     () => ({
@@ -153,6 +152,19 @@ function ReportsBody() {
     enabled: mode === "messages",
   });
   const messages = messagesQuery.data?.messages ?? [];
+  const dailyAttendanceQuery = useQuery({
+    queryKey: ["daily-attendance-report", from, to, stageId, classId, studentId],
+    queryFn: () => getDailyAttendanceReport({ data: {
+      from: from || new Date().toISOString().slice(0, 10),
+      to: to || from || new Date().toISOString().slice(0, 10),
+      stageId: stageId ? Number(stageId) : undefined,
+      classId: classId ? Number(classId) : undefined,
+      studentId: studentId ? Number(studentId) : undefined,
+    }}),
+    enabled: mode === "dailyAttendance",
+  });
+  const dailyAttendance = dailyAttendanceQuery.data?.rows ?? [];
+  const dailySummary = dailyAttendanceQuery.data?.summary ?? { absence: 0, late: 0, students: 0, days: 0 };
   const scopedToTeacher = query.data?.scopedToTeacher;
   const notes = query.data?.notes ?? [];
   const reportSchool = query.data?.school ?? school;
@@ -231,41 +243,67 @@ function ReportsBody() {
     });
   }
 
-  function saveRosterTemplate() {
+  function currentPayload() {
+    return {
+      title: rosterTitle,
+      showPhone,
+      showClass,
+      showStage,
+      extraCols,
+      order: orderedRosterColumns.map((col) => col.id),
+      widths: columnWidths,
+    };
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (input: { id?: number; name: string }) =>
+      saveRosterTemplate({ data: { id: input.id, name: input.name, payload: currentPayload() } }),
+    onSuccess: (res: { id: number; name: string }) => {
+      toast.success(staff.role === "admin" ? "حُفظ القالب لجميع المعلمين" : "حُفظ القالب");
+      setTemplateName("");
+      setActiveTemplateId(res.id);
+      void queryClient.invalidateQueries({ queryKey: ["roster-templates"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ القالب"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteRosterTemplate({ data: { id } }),
+    onSuccess: (_, id) => {
+      if (activeTemplateId === id) setActiveTemplateId(null);
+      toast.success("حُذف القالب");
+      void queryClient.invalidateQueries({ queryKey: ["roster-templates"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+  });
+
+  function persistTemplate(asNew: boolean) {
     const name = templateName.trim();
-    if (!name) return;
-    setTemplates((prev) => [
-      ...prev,
-      {
-        id: `tpl-${Date.now()}`,
-        name,
-        title: rosterTitle,
-        showPhone,
-        showClass,
-        showStage,
-        extraCols,
-        order: orderedRosterColumns.map((col) => col.id),
-        widths: columnWidths,
-      },
-    ]);
-    try {
-      const activity = JSON.parse(localStorage.getItem("school.activityLog") || "[]");
-      activity.unshift({ action: "حفظ قالب كشف", name, at: new Date().toISOString() });
-      localStorage.setItem("school.activityLog", JSON.stringify(activity.slice(0, 100)));
-    } catch {
-      // Ignore unavailable browser storage.
+    if (!name) {
+      toast.error("اكتب اسم القالب");
+      return;
     }
-    setTemplateName("");
+    const owned =
+      !asNew &&
+      activeTemplateId &&
+      templates.find(
+        (t) =>
+          t.id === activeTemplateId &&
+          (t.createdBy === staff.userId || staff.role === "admin"),
+      );
+    saveMutation.mutate({ id: owned ? owned.id : undefined, name });
   }
 
   function loadRosterTemplate(template: RosterTemplate) {
-    setRosterTitle(template.title);
-    setShowPhone(template.showPhone);
-    setShowClass(template.showClass);
-    setShowStage(template.showStage);
-    setExtraCols(template.extraCols);
-    setColumnOrder(template.order);
-    setColumnWidths({ ...DEFAULT_ROSTER_WIDTHS, ...template.widths });
+    setActiveTemplateId(template.id);
+    setTemplateName(template.name);
+    setRosterTitle(template.payload.title);
+    setShowPhone(template.payload.showPhone);
+    setShowClass(template.payload.showClass);
+    setShowStage(template.payload.showStage);
+    setExtraCols(template.payload.extraCols);
+    setColumnOrder(template.payload.order);
+    setColumnWidths({ ...DEFAULT_ROSTER_WIDTHS, ...template.payload.widths });
   }
 
   function moveRosterColumn(id: string, direction: -1 | 1) {
@@ -307,21 +345,6 @@ function ReportsBody() {
     );
   }
 
-  function sendBulkWhatsApp() {
-    const recipients = students.filter((student: any) => String(student.parentPhone || "").trim());
-    for (const student of recipients) {
-      const text = bulkMessage
-        .replaceAll("{name}", student.name)
-        .replaceAll("{class}", student.label || "");
-      const phone = String(student.parentPhone).replace(/\D/g, "");
-      window.open(
-        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-    }
-  }
-
   const counts = useMemo(() => {
     const empty = { absence: 0, late: 0, homework: 0, behavior: 0, open: 0, closed: 0 };
     for (const n of notes) {
@@ -349,7 +372,7 @@ function ReportsBody() {
           <h1 className="text-3xl font-semibold tracking-tight">التقارير</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border">
+          <div className="grid grid-cols-4 overflow-hidden rounded-[var(--radius-sm)] border border-border">
             <button
               type="button"
               onClick={() => setMode("notes")}
@@ -372,6 +395,7 @@ function ReportsBody() {
             >
               الرسائل
             </button>
+            <button type="button" onClick={() => setMode("dailyAttendance")} className={mode === "dailyAttendance" ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg" : "h-11 px-3 text-sm bg-bg-elevated"}>الغياب والتأخر</button>
             <button
               type="button"
               onClick={() => setMode("names")}
@@ -386,12 +410,14 @@ function ReportsBody() {
           </div>
           <Button
             onClick={handlePrint}
-            disabled={mode === "messages" ? messagesQuery.isPending : query.isPending}
+            disabled={mode === "messages" ? messagesQuery.isPending : mode === "dailyAttendance" ? dailyAttendanceQuery.isPending : query.isPending}
           >
             <Printer className="size-4" />
             {mode === "messages"
               ? "طباعة الرسائل"
-              : mode === "names"
+              : mode === "dailyAttendance"
+                ? "طباعة الغياب والتأخر"
+                : mode === "names"
                 ? "طباعة كشف الأسماء"
                 : "طباعة الكشف"}
           </Button>
@@ -479,6 +505,14 @@ function ReportsBody() {
           </>
         ) : null}
       </form>
+      {mode === "dailyAttendance" ? (
+        <div className="no-print grid grid-cols-2 gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-4">
+          <div><p className="text-xs text-fg-muted">إجمالي الغياب</p><p className="mt-1 text-2xl font-semibold text-danger">{dailySummary.absence}</p></div>
+          <div><p className="text-xs text-fg-muted">إجمالي التأخر</p><p className="mt-1 text-2xl font-semibold text-warn">{dailySummary.late}</p></div>
+          <div><p className="text-xs text-fg-muted">عدد الطلاب</p><p className="mt-1 text-2xl font-semibold">{dailySummary.students}</p></div>
+          <div><p className="text-xs text-fg-muted">عدد الأيام</p><p className="mt-1 text-2xl font-semibold">{dailySummary.days}</p></div>
+        </div>
+      ) : null}
       {mode === "names" ? (
         <div className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-2">
@@ -613,41 +647,62 @@ function ReportsBody() {
               <Button
                 type="button"
                 size="sm"
-                onClick={saveRosterTemplate}
-                disabled={!templateName.trim()}
+                onClick={() => persistTemplate(false)}
+                disabled={!templateName.trim() || saveMutation.isPending}
               >
                 <Save className="size-4" /> حفظ القالب
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => persistTemplate(true)}
+                disabled={!templateName.trim() || saveMutation.isPending}
+              >
+                حفظ باسم جديد
               </Button>
               <Button type="button" size="sm" variant="secondary" onClick={exportRosterExcel}>
                 <Download className="size-4" /> Excel
               </Button>
             </div>
+            <p className="text-xs text-fg-muted">
+              القوالب تظهر لجميع المعلمين. إذا صمّمها مدير التطبيق تظهر كقالب البرنامج، ويمكنك تعديلها وحفظها باسم جديد.
+            </p>
             {templates.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="flex items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-sm"
-                  >
-                    <button
-                      type="button"
-                      className="font-medium text-primary"
-                      onClick={() => loadRosterTemplate(template)}
+                {templates.map((template) => {
+                  const canDelete =
+                    staff.role === "admin" ||
+                    (template.createdBy === staff.userId && !template.isProgram);
+                  const author = template.isProgram
+                    ? "قالب البرنامج"
+                    : template.createdByName || "معلم";
+                  return (
+                    <div
+                      key={template.id}
+                      className="flex items-center gap-1 rounded-full border border-border bg-card px-2 py-1 text-sm"
                     >
-                      {template.name}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`حذف ${template.name}`}
-                      className="text-danger"
-                      onClick={() =>
-                        setTemplates((prev) => prev.filter((item) => item.id !== template.id))
-                      }
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        type="button"
+                        className="font-medium text-primary"
+                        onClick={() => loadRosterTemplate(template)}
+                      >
+                        {template.name}
+                        <span className="ms-1 text-xs font-normal text-fg-muted">· {author}</span>
+                      </button>
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          aria-label={`حذف ${template.name}`}
+                          className="text-danger"
+                          onClick={() => deleteMutation.mutate(template.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
             <div className="space-y-1">
@@ -680,28 +735,6 @@ function ReportsBody() {
               </div>
             </div>
           </div>
-          <div className="space-y-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:col-span-2 lg:col-span-3">
-            <Label htmlFor="bulk-message">رسالة جماعية عبر واتساب</Label>
-            <p className="text-xs text-fg-muted">
-              المتغيرات: &#123;name&#125; و&#123;class&#125; — ستُفتح رسالة منفصلة لكل طالب لديه رقم
-              جوال.
-            </p>
-            <textarea
-              id="bulk-message"
-              className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
-              value={bulkMessage}
-              onChange={(e) => setBulkMessage(e.target.value)}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={sendBulkWhatsApp}
-              disabled={!students.some((student: any) => student.parentPhone)}
-            >
-              فتح رسائل واتساب الجماعية
-            </Button>
-          </div>
         </div>
       ) : null}
 
@@ -713,7 +746,9 @@ function ReportsBody() {
         <h2 className="mt-2 text-center text-[20px] font-semibold tracking-wide">
           {mode === "messages"
             ? "كشف رسائل أولياء الأمور"
-            : mode === "names"
+            : mode === "dailyAttendance"
+              ? "كشف الغياب اليومي والتأخر الصباحي"
+              : mode === "names"
               ? rosterTitle.trim() || "بيانات الطلاب"
               : "كشف متابعة الطلاب"}
         </h2>
@@ -752,7 +787,7 @@ function ReportsBody() {
             {[
               ["الصف / المرحلة", classLine],
               ["اسم الطالب", "جميع الطلاب"],
-              ["نوع الملاحظة", mode === "messages" ? "رسائل أولياء الأمور" : typeLine],
+              ["نوع الملاحظة", mode === "messages" ? "رسائل أولياء الأمور" : mode === "dailyAttendance" ? "الغياب والتأخر اليومي" : typeLine],
               ["الفترة", rangeLine],
             ].map(([label, value]) => (
               <div key={label} className="border-l border-black px-1.5 py-1.5 last:border-l-0">
@@ -849,6 +884,15 @@ function ReportsBody() {
                     </tr>
                   ))
                 )}
+              </tbody>
+            </table>
+          ) : mode === "dailyAttendance" ? (
+            <table className="official-table official-report-table">
+              <thead><tr><th>م</th><th>التاريخ</th><th>اسم الطالب</th><th>الصف / الفصل</th><th>النوع</th><th>وقت الحضور</th></tr></thead>
+              <tbody>
+                {dailyAttendance.length === 0 ? <tr><td colSpan={6} className="py-8 text-center">لا يوجد غياب أو تأخر ضمن الفترة المحددة.</td></tr> : dailyAttendance.map((row, index) => (
+                  <tr key={`${row.day}-${row.studentId}-${row.kind}`}><td>{index + 1}</td><td>{formatDay(`${row.day}T12:00:00`)}</td><td className="font-semibold">{row.studentName}</td><td>{row.classLabel}</td><td>{row.kind === "absence" ? "غياب يومي" : "تأخر صباحي"}</td><td>{row.kind === "late" && row.arrivedAt ? formatTime(row.arrivedAt) : "—"}</td></tr>
+                ))}
               </tbody>
             </table>
           ) : mode === "messages" ? (
@@ -967,9 +1011,11 @@ function ReportsBody() {
           أعدّ الكشف: {staff.displayName} · عدد السجلات:{" "}
           {mode === "messages"
             ? messages.length
-            : mode === "names"
-              ? students.length
-              : notes.length}{" "}
+            : mode === "dailyAttendance"
+              ? dailyAttendance.length
+              : mode === "names"
+                ? students.length
+                : notes.length}{" "}
           · طُبع في {todayLabel()}
           {scopedToTeacher && mode === "notes" ? " · ملاحظات هذا المعلم فقط" : ""}
         </p>

@@ -33,6 +33,9 @@ import {
   phoneToLoginEmail,
   procedureLadder,
   withOccurrence,
+  fillTemplate,
+  formatDay,
+  weekdayName,
 } from "./constants";
 import { parsePermissions, defaultPermissions } from "./permissions";
 import { parseAppearance, parseOptionalAppearance } from "./theme";
@@ -67,10 +70,23 @@ function mapSchool(school) {
 		schedules: parseSchedules(school.schedules),
 		messageTemplates: parseMessageTemplates(school.message_templates),
 		customMessages: parseCustomMessages(school.custom_messages),
+		inviteReasons: parseInviteReasons(school.invite_reasons),
 		teachersCanMessage: school.teachers_can_message !== false,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
-		appearance: parseAppearance(school.appearance)
+		appearance: parseAppearance(school.appearance),
+		roleLabels: parseRoleLabels(school.role_labels)
 	};
+}
+function parseRoleLabels(raw) {
+	let value = raw;
+	if (typeof raw === "string") try { value = JSON.parse(raw); } catch { return {}; }
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	const out = {};
+	for (const [key, val] of Object.entries(value)) {
+		const text = String(val ?? "").trim().slice(0, 80);
+		if (text.length >= 2) out[key] = text;
+	}
+	return out;
 }
 function parseMessageTemplates(raw) {
 	let value = raw;
@@ -96,6 +112,25 @@ function parseCustomMessages(raw) {
 		body: String(item.body).trim().slice(0, 2e3)
 	})).filter((item) => item.id && item.title.length >= 2 && item.body.length >= 4);
 }
+function parseInviteReasons(raw) {
+	let value = raw;
+	if (typeof raw === "string") try {
+		value = JSON.parse(raw);
+	} catch {
+		return [];
+	}
+	if (!Array.isArray(value)) return [];
+	const seen = new Set();
+	const out = [];
+	for (const item of value) {
+		const text = String(item ?? "").trim().slice(0, 160);
+		if (text.length < 4 || seen.has(text)) continue;
+		seen.add(text);
+		out.push(text);
+		if (out.length >= 24) break;
+	}
+	return out;
+}
 async function loadSchool(sql, schoolId) {
 	const row = (await sql`
     select id, name, coalesce(principal_name, '') as principal_name,
@@ -110,7 +145,8 @@ async function loadSchool(sql, schoolId) {
            coalesce(message_templates::text, '{}') as message_templates,
            coalesce(teachers_can_message, true) as teachers_can_message,
            coalesce(teachers_can_view_all, false) as teachers_can_view_all,
-           coalesce(appearance::text, '{}') as appearance
+           coalesce(appearance::text, '{}') as appearance,
+           coalesce(role_labels::text, '{}') as role_labels
     from schools where id = ${schoolId}
   `)[0] ?? null;
 	if (!row) return null;
@@ -118,8 +154,10 @@ async function loadSchool(sql, schoolId) {
 	let print_margins = DEFAULT_PRINT_MARGINS;
 	let extra_logo_url = "";
 	let custom_messages = "[]";
+	let invite_reasons = "[]";
 	let print_school_logo = false;
 	let schedules = "{}";
+	let role_labels = "{}";
 	try {
 		await sql`alter table schools add column if not exists print_school_logo boolean not null default false`;
 	} catch {}
@@ -127,20 +165,27 @@ async function loadSchool(sql, schoolId) {
 		await sql`alter table schools add column if not exists schedules jsonb not null default '{}'::jsonb`;
 	} catch {}
 	try {
+		await sql`alter table schools add column if not exists invite_reasons jsonb not null default '[]'::jsonb`;
+	} catch {}
+	try {
 		const extra = (await sql`
       select coalesce(tagline, '') as tagline, coalesce(print_margins::text, '{}') as print_margins,
              coalesce(extra_logo_url, '') as extra_logo_url,
              coalesce(custom_messages::text, '[]') as custom_messages,
+             coalesce(invite_reasons::text, '[]') as invite_reasons,
              coalesce(print_school_logo, false) as print_school_logo,
-             coalesce(schedules::text, '{}') as schedules
+             coalesce(schedules::text, '{}') as schedules,
+             coalesce(role_labels::text, '{}') as role_labels
       from schools where id = ${schoolId}
     `)[0];
 		tagline = extra?.tagline ?? "";
 		print_margins = extra?.print_margins ?? DEFAULT_PRINT_MARGINS;
 		extra_logo_url = extra?.extra_logo_url ?? "";
 		custom_messages = extra?.custom_messages ?? "[]";
+		invite_reasons = extra?.invite_reasons ?? "[]";
 		print_school_logo = Boolean(extra?.print_school_logo);
 		schedules = extra?.schedules ?? "{}";
+		role_labels = extra?.role_labels ?? "{}";
 	} catch {
 		try {
 			const extra = (await sql`
@@ -165,8 +210,10 @@ async function loadSchool(sql, schoolId) {
 		print_margins,
 		extra_logo_url,
 		custom_messages,
+		invite_reasons,
 		print_school_logo,
-		schedules
+		schedules,
+		role_labels
 	};
 }
 async function getStaff(sql, userId) {
@@ -185,7 +232,8 @@ async function getStaff(sql, userId) {
     select user_id, school_id, display_name, role,
            coalesce(subject, '') as subject, coalesce(phone, '') as phone,
            coalesce(permissions::text, '{}') as permissions,
-           coalesce(appearance::text, '{}') as appearance
+           coalesce(appearance::text, '{}') as appearance,
+           coalesce(active, true) as active
     from staff
     where user_id = ${userId}
   `)[0] ?? null;
@@ -352,6 +400,31 @@ async function listClassOptions(sql, schoolId) {
 async function seedSchool(sql, schoolId) {
 	await ensureBehaviorTypes(sql, schoolId);
 	await ensureActionTypes(sql, schoolId);
+	const stageCount = (await sql`select count(*)::int as n from stages where school_id = ${schoolId}`)[0]?.n ?? 0;
+	if (stageCount > 0) return;
+	const demoNames = ["أحمد محمد العتيبي", "خالد سعد القحطاني", "عبدالله فهد الدوسري", "سلطان نايف الشمري", "فهد عبدالعزيز الحربي"];
+	for (const def of DEFAULT_STAGES) {
+		const stage = (await sql`
+      insert into stages (school_id, name, short_name, sort_order)
+      values (${schoolId}, ${def.name}, ${def.shortName}, ${def.sortOrder})
+      returning id
+    `)[0];
+		for (let i = 1; i <= 5; i += 1) {
+			const cls = (await sql`
+        insert into classes (school_id, stage_id, name, sort_order)
+        values (${schoolId}, ${stage.id}, ${String(i)}, ${i})
+        returning id
+      `)[0];
+			if (i > 2) continue;
+			for (let n = 0; n < demoNames.length; n += 1) {
+				const phone = `05057${String(def.sortOrder)}${String(i)}${String(n).padStart(3, "0")}`;
+				await sql`
+          insert into students (school_id, class_id, name, parent_phone)
+          values (${schoolId}, ${cls.id}, ${demoNames[n]}, ${phone})
+        `;
+			}
+		}
+	}
 }
 async function ensureSchoolAndAdmin(sql) {
 	const phone = normalizeSaudiPhone(DEFAULT_ADMIN_PHONE);
@@ -400,6 +473,7 @@ async function ensureSchoolAndAdmin(sql) {
       set role = 'admin', phone = ${phone}
       where user_id = ${user.id} and school_id = ${schoolId}
     `;
+	await seedSchool(sql, schoolId);
 }
 async function ensureStaffRoleConstraint(sql) {
 	if (ensureStaffRoleConstraint.done) return;
@@ -1711,6 +1785,7 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 		left: z.number().min(0).max(40)
 	}).optional(),
 	printSchoolLogo: z.boolean().optional(),
+	roleLabels: z.record(z.string(), z.string().min(2).max(80)).optional(),
 	schedules: z.object({
 		winter: z.array(z.object({
 			key: z.string().min(1).max(40),
@@ -1748,6 +1823,7 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 	const printMargins = data.printMargins ? parsePrintMargins(data.printMargins) : parsePrintMargins(current.print_margins);
 	const printSchoolLogo = data.printSchoolLogo !== void 0 ? data.printSchoolLogo : Boolean(current.print_school_logo);
 	const schedules = data.schedules !== void 0 ? parseSchedules(data.schedules) : parseSchedules(current.schedules);
+	const roleLabels = data.roleLabels !== void 0 ? parseRoleLabels(data.roleLabels) : parseRoleLabels(current.role_labels);
 	await sql`
       update schools
       set name = ${name},
@@ -1776,6 +1852,9 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 	try {
 		await sql.query(`update schools set schedules = $1::jsonb where id = $2`, [JSON.stringify(schedules), staff.school_id]);
 	} catch {}
+	try {
+		await sql.query(`update schools set role_labels = $1::jsonb where id = $2`, [JSON.stringify(roleLabels), staff.school_id]);
+	} catch {}
 	return {
 		name,
 		principalName,
@@ -1791,7 +1870,8 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 		tagline,
 		printMargins,
 		printSchoolLogo,
-		schedules
+		schedules,
+		roleLabels
 	};
 });
 export const updateMessageTemplates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -2467,6 +2547,30 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 			arrivedAt: r.arrived_at || null
 		}))
 	};
+});
+export const getDailyAttendanceReport = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	from: z.string().min(8).max(12),
+	to: z.string().min(8).max(12),
+	stageId: z.number().optional(),
+	classId: z.number().optional(),
+	studentId: z.number().optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requirePerm(context.userId, "dailyAttendance");
+	if (data.from > data.to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية");
+	const params = [staff.school_id, data.from, data.to];
+	let where = `a.school_id = $1 and a.day between $2::date and $3::date`;
+	if (data.stageId) { params.push(data.stageId); where += ` and c.stage_id = $${params.length}`; }
+	if (data.classId) { params.push(data.classId); where += ` and s.class_id = $${params.length}`; }
+	if (data.studentId) { params.push(data.studentId); where += ` and s.id = $${params.length}`; }
+	const rows = await sql.query(`select a.day::text as day, s.id as student_id, s.name as student_name, c.name as class_name, st.short_name, a.kind, coalesce(a.excused,false) as excused, a.arrived_at::text as arrived_at
+		from daily_attendance a
+		join students s on s.id = a.student_id
+		join classes c on c.id = s.class_id
+		join stages st on st.id = c.stage_id
+		where ${where}
+		order by a.day, st.sort_order, c.sort_order, s.name`, params);
+	const mapped = rows.map(r => ({ day: r.day, studentId: r.student_id, studentName: r.student_name, classLabel: classLabel(r.short_name, r.class_name), kind: r.kind, excused: Boolean(r.excused), arrivedAt: r.arrived_at || null }));
+	return { from: data.from, to: data.to, rows: mapped, summary: { absence: mapped.filter(r => r.kind === "absence").length, late: mapped.filter(r => r.kind === "late").length, students: new Set(mapped.map(r => r.studentId)).size, days: new Set(mapped.map(r => r.day)).size } };
 });
 export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	day: z.string().min(8).max(12),
@@ -3279,4 +3383,182 @@ export const deleteClassRow = createServerFn({ method: "POST" }).middleware([aut
 	const row = (await sql`delete from classes where id = ${data.id} and school_id = ${staff.school_id} returning id`)[0];
 	if (!row) throw new Error("الفصل غير موجود");
 	return { stages: await classStructurePayload(sql, staff.school_id) };
+});
+
+const rosterPayloadSchema = z.object({
+	title: z.string().max(80),
+	showPhone: z.boolean(),
+	showClass: z.boolean(),
+	showStage: z.boolean(),
+	extraCols: z.array(z.object({ id: z.string().min(1).max(40), title: z.string().max(40) })).max(12),
+	order: z.array(z.string().max(40)).max(20),
+	widths: z.record(z.string(), z.number().min(8).max(80)),
+});
+
+function parseRosterPayload(raw) {
+	let value = raw;
+	if (typeof raw === "string") try {
+		value = JSON.parse(raw);
+	} catch {
+		return null;
+	}
+	const parsed = rosterPayloadSchema.safeParse(value);
+	return parsed.success ? parsed.data : null;
+}
+
+export const updateInviteReasons = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	reasons: z.array(z.string().min(4).max(160)).max(24),
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const reasons = parseInviteReasons(data.reasons);
+	try {
+		await sql.query(`update schools set invite_reasons = $1::jsonb where id = $2`, [JSON.stringify(reasons), staff.school_id]);
+	} catch {
+		throw new Error("تعذر حفظ عبارات الاستدعاء — أعد تشغيل التطبيق بعد التحديث");
+	}
+	return { reasons };
+});
+
+export const logBulkParentMessages = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	studentIds: z.array(z.number().int().positive()).min(1).max(300),
+	kind: z.enum(["absence", "late", "homework", "behavior", "general"]),
+	body: z.string().min(2).max(2000),
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	if (!mappedPerms(staff, school).sendMessages) throw new Error("إرسال رسائل أولياء الأمور غير مفعّل لحسابك");
+	const ids = [...new Set(data.studentIds)];
+	const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
+	const students = await sql.query(`
+    select s.id, s.name, coalesce(s.parent_phone, '') as parent_phone,
+           c.name as class_name, st.short_name
+    from students s
+    join classes c on c.id = s.class_id
+    join stages st on st.id = c.stage_id
+    where s.school_id = $1 and s.id in (${placeholders})
+    order by st.sort_order, c.sort_order, s.name
+  `, [staff.school_id, ...ids]);
+	const now = new Date().toISOString();
+	const sent = [];
+	const skipped = [];
+	for (const s of students) {
+		const label = classLabel(s.short_name, s.class_name);
+		const body = fillTemplate(data.body, {
+			name: s.name,
+			class: label,
+			school: school.name,
+			date: formatDay(now),
+			weekday: weekdayName(now),
+			details: "",
+			session: "",
+		});
+		if (!String(s.parent_phone || "").trim()) {
+			skipped.push({ id: s.id, name: s.name });
+			continue;
+		}
+		await sql`
+      insert into parent_messages (school_id, student_id, staff_id, kind, body, parent_phone)
+      values (${staff.school_id}, ${s.id}, ${staff.user_id}, ${data.kind}, ${body}, ${s.parent_phone})
+    `;
+		sent.push({
+			id: s.id,
+			name: s.name,
+			parentPhone: s.parent_phone,
+			body,
+		});
+	}
+	return { sent, skipped };
+});
+
+export const listRosterTemplates = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	try {
+		await sql.query(`
+      create table if not exists roster_templates (
+        id serial primary key,
+        school_id integer not null references schools (id) on delete cascade,
+        name text not null,
+        created_by text not null,
+        created_by_name text not null,
+        is_program boolean not null default false,
+        payload jsonb not null,
+        created_at timestamptz not null default now()
+      )
+    `);
+		const rows = await sql`
+      select id, name, created_by, created_by_name, is_program, payload::text as payload, created_at
+      from roster_templates
+      where school_id = ${staff.school_id}
+      order by is_program desc, created_at desc
+    `;
+		return {
+			templates: rows.map((row) => ({
+				id: row.id,
+				name: row.name,
+				createdBy: row.created_by,
+				createdByName: row.created_by_name,
+				isProgram: Boolean(row.is_program),
+				payload: parseRosterPayload(row.payload) ?? {
+					title: "بيانات الطلاب",
+					showPhone: false,
+					showClass: false,
+					showStage: false,
+					extraCols: [],
+					order: [],
+					widths: {},
+				},
+				createdAt: row.created_at,
+			})),
+		};
+	} catch {
+		return { templates: [] };
+	}
+});
+
+export const saveRosterTemplate = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	id: z.number().optional(),
+	name: z.string().min(2).max(80),
+	payload: rosterPayloadSchema,
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const name = data.name.trim();
+	const isProgram = staff.role === "admin";
+	const payload = JSON.stringify(data.payload);
+	if (data.id) {
+		const existing = (await sql`
+      select id, created_by, is_program from roster_templates
+      where id = ${data.id} and school_id = ${staff.school_id}
+    `)[0];
+		if (!existing) throw new Error("القالب غير موجود");
+		if (existing.created_by !== staff.user_id && staff.role !== "admin") {
+			throw new Error("يمكن تعديل قالبك فقط، أو احفظه باسم جديد");
+		}
+		await sql.query(
+			`update roster_templates set name = $1, payload = $2::jsonb, is_program = $3
+       where id = $4 and school_id = $5`,
+			[name, payload, Boolean(existing.is_program) || isProgram, data.id, staff.school_id],
+		);
+		return { id: data.id, name };
+	}
+	const row = (await sql.query(
+		`insert into roster_templates (school_id, name, created_by, created_by_name, is_program, payload)
+     values ($1, $2, $3, $4, $5, $6::jsonb) returning id`,
+		[staff.school_id, name, staff.user_id, staff.display_name, isProgram, payload],
+	))[0];
+	return { id: row.id, name };
+});
+
+export const deleteRosterTemplate = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	id: z.number(),
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const existing = (await sql`
+    select id, created_by, is_program from roster_templates
+    where id = ${data.id} and school_id = ${staff.school_id}
+  `)[0];
+	if (!existing) throw new Error("القالب غير موجود");
+	if (staff.role !== "admin" && (existing.created_by !== staff.user_id || existing.is_program)) {
+		throw new Error("لا يمكن حذف قوالب البرنامج إلا من مدير التطبيق");
+	}
+	await sql`delete from roster_templates where id = ${data.id} and school_id = ${staff.school_id}`;
+	return { ok: true };
 });

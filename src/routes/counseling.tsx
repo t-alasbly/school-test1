@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import { staffCan } from "@/lib/school/permissions";
 import type { CatalogItem, CounselingCase } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
+import { MessageCircle } from "lucide-react";
 
 export const Route = createFileRoute("/counseling")({ component: CounselingPage });
 
@@ -126,6 +127,12 @@ function CounselingBody() {
 
   return (
     <div className="space-y-6">
+      {staffCan(staff, "sendMessages") ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4">
+          <div><h2 className="font-semibold">الرسائل الجماعية</h2><p className="text-sm text-fg-muted">فتح شاشة مستقلة لاختيار المتأخرين أو الغائبين حسب اليوم.</p></div>
+          <Link to="/messages" className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-fg"><MessageCircle className="size-4" />الرسائل الجماعية</Link>
+        </div>
+      ) : null}
       <header>
         <p className="text-sm text-fg-muted">
           الإحالات من وكيل شؤون الطلاب، مراسلات المعلمين، خطط التحسين، والملاحظات الصحية

@@ -18,6 +18,7 @@ import { Route as FormsRouteImport } from './routes/forms'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StaffRouteImport } from './routes/staff'
 import { Route as ClassClassIdRouteImport } from './routes/class.$classId'
@@ -81,6 +82,11 @@ const LoginRoute = LoginRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MessagesRoute = MessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -189,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/messages': typeof MessagesRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/messages': typeof MessagesRoute
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
   '/settings/actions': typeof SettingsActionsRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/messages': typeof MessagesRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
   '/class/$classId': typeof ClassClassIdRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/login'
     | '/reports'
+    | '/messages'
     | '/settings'
     | '/staff'
     | '/class/$classId'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/login'
     | '/reports'
+    | '/messages'
     | '/staff'
     | '/class/$classId'
     | '/settings/actions'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/import'
     | '/login'
     | '/reports'
+    | '/messages'
     | '/settings'
     | '/staff'
     | '/class/$classId'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   ImportRoute: typeof ImportRoute
   LoginRoute: typeof LoginRoute
   ReportsRoute: typeof ReportsRoute
+  MessagesRoute: typeof MessagesRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   StaffRoute: typeof StaffRoute
   ClassClassIdRoute: typeof ClassClassIdRoute
@@ -627,6 +640,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImportRoute: ImportRoute,
   LoginRoute: LoginRoute,
   ReportsRoute: ReportsRoute,
+  MessagesRoute: MessagesRoute,
   SettingsRoute: SettingsRouteWithChildren,
   StaffRoute: StaffRoute,
   ClassClassIdRoute: ClassClassIdRoute,

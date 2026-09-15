@@ -70,11 +70,13 @@ function AttendanceBody() {
   const [day, setDay] = useState(todayISO);
   const allClassIds = useMemo(() => classes.map((c) => c.id), [classes]);
   const [classIds, setClassIds] = useState<number[] | null>(null);
+  const [openStages, setOpenStages] = useState<Set<number>>(new Set());
   const selectedIds = classIds ?? allClassIds;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [draft, setDraft] = useState<Record<number, Draft>>({});
   const [printKind, setPrintKind] = useState<PrintKind>("all");
   const [showSheet, setShowSheet] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const dirty = Object.keys(draft).length > 0;
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
@@ -103,15 +105,19 @@ function AttendanceBody() {
     const ids = classes.filter((c) => c.stageId === stageId).map((c) => c.id);
     return ids.length > 0 && ids.every((id) => selectedSet.has(id));
   }
-  function toggleStage(stageId: number, on: boolean) {
+  function selectStage(stageId: number, on: boolean) {
     const ids = classes.filter((c) => c.stageId === stageId).map((c) => c.id);
     setClassIds(() => {
       const cur = new Set(selectedIds);
-      for (const id of ids) {
-        if (on) cur.add(id);
-        else cur.delete(id);
-      }
+      for (const id of ids) on ? cur.add(id) : cur.delete(id);
       return [...cur];
+    });
+  }
+  function toggleStageOpen(stageId: number) {
+    setOpenStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId); else next.add(stageId);
+      return next;
     });
   }
   function toggleClass(id: number, on: boolean) {
@@ -198,23 +204,6 @@ function AttendanceBody() {
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">الغياب اليومي والتأخر</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => printSheet("absence")}>
-            <Printer className="size-4" />
-            طباعة الغياب
-          </Button>
-          <Button variant="secondary" onClick={() => printSheet("late")}>
-            <Printer className="size-4" />
-            طباعة التأخر
-          </Button>
-          <Button variant="secondary" onClick={() => printSheet("all")}>
-            <Printer className="size-4" />
-            طباعة الكل
-          </Button>
-          <Button variant={showSheet ? "default" : "secondary"} onClick={() => setShowSheet((v) => !v)}>
-            {showSheet ? "إخفاء الكشف" : "الكشف"}
-          </Button>
-        </div>
       </header>
 
       <form className="no-print space-y-4 rounded-[var(--radius-lg)] border border-border bg-card p-4">
@@ -227,51 +216,29 @@ function AttendanceBody() {
           <div className="flex flex-wrap gap-1.5">
             {stages.map((stage) => {
               const on = stageOn(stage.id);
+              const open = openStages.has(stage.id);
               return (
-                <button
-                  key={stage.id}
-                  type="button"
-                  onClick={() => toggleStage(stage.id, !on)}
-                  className={cn(
-                    "h-10 rounded-full border px-3 text-sm font-medium",
-                    on
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-bg-elevated text-fg-muted",
-                  )}
-                >
-                  {stage.shortName || stage.name}
-                </button>
+                <div key={stage.id} className="w-full rounded-[var(--radius-sm)] border border-border bg-bg-elevated p-2 sm:w-auto sm:min-w-40">
+                  <button type="button" onClick={() => toggleStageOpen(stage.id)} className="flex w-full items-center justify-between gap-3 px-2 py-1.5 text-sm font-semibold">
+                    <span>{stage.shortName || stage.name}</span><span className="text-xs text-fg-muted">{open ? "إخفاء" : "عرض الفصول"}</span>
+                  </button>
+                  {open ? (
+                    <div className="mt-2 space-y-2 border-t border-border pt-2">
+                      <button type="button" onClick={() => selectStage(stage.id, !on)} className="text-xs font-medium text-primary">{on ? "إلغاء تحديد المرحلة" : "تحديد كل فصول المرحلة"}</button>
+                      <div className="flex flex-wrap gap-1.5">
+                        {classes.filter((c) => c.stageId === stage.id).map((cls) => {
+                          const checked = selectedSet.has(cls.id);
+                          return <button key={cls.id} type="button" onClick={() => toggleClass(cls.id, !checked)} className={cn("h-9 rounded-full border px-3 text-xs font-medium", checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-fg-muted")}>{cls.label || cls.name}</button>;
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
           </div>
         </div>
-        {stages.map((stage) => (
-          <div key={stage.id} className="space-y-1.5">
-            <p className="text-xs font-medium text-fg-muted">{stage.name}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {classes
-                .filter((c) => c.stageId === stage.id)
-                .map((cls) => {
-                  const on = selectedSet.has(cls.id);
-                  return (
-                    <button
-                      key={cls.id}
-                      type="button"
-                      onClick={() => toggleClass(cls.id, !on)}
-                      className={cn(
-                        "h-10 rounded-full border px-3 text-sm font-medium",
-                        on
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-bg-elevated text-fg-muted",
-                      )}
-                    >
-                      {cls.label || cls.name}
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        ))}
+
       </form>
 
       <ul className="no-print divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
@@ -437,19 +404,71 @@ function AttendanceBody() {
 
       <div className="no-print pointer-events-none h-20 md:h-16" />
       <div className="no-print fixed inset-x-0 bottom-[3.6rem] z-30 border-t border-border bg-bg-elevated/95 p-3 backdrop-blur-sm md:bottom-0">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-1">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-1">
           <p className="text-xs text-fg-muted">
             {dirty ? "هناك تغييرات غير محفوظة" : "لا تغييرات بانتظار الحفظ"}
           </p>
-          <Button
-            disabled={!dirty || mutation.isPending}
-            className={dirty ? "" : "opacity-40"}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? "جارٍ الحفظ…" : "حفظ الكشف"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={showSheet ? "default" : "secondary"}
+              onClick={() => setShowSheet((v) => !v)}
+            >
+              {showSheet ? "إخفاء الكشوف" : "الكشوف"}
+            </Button>
+            <Button variant="secondary" onClick={() => setPrintOpen(true)}>
+              <Printer className="size-4" />
+              طباعة
+            </Button>
+            <Button
+              disabled={!dirty || mutation.isPending}
+              className={dirty ? "" : "opacity-40"}
+              onClick={() => mutation.mutate()}
+            >
+              {mutation.isPending ? "جارٍ الحفظ…" : "حفظ الكشف"}
+            </Button>
+          </div>
         </div>
       </div>
+
+      <Dialog open={printOpen} onOpenChange={setPrintOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>طباعة كشف الغياب</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-fg-muted">اختر الكشف المراد طباعته لهذا اليوم.</p>
+          <div className="flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                printSheet("late");
+                setPrintOpen(false);
+              }}
+            >
+              <Printer className="size-4" />
+              طباعة المتأخرين
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                printSheet("absence");
+                setPrintOpen(false);
+              }}
+            >
+              <Printer className="size-4" />
+              طباعة الغياب
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                printSheet("all");
+                setPrintOpen(false);
+              }}
+            >
+              <Printer className="size-4" />
+              طباعة الكل
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={blocker.status === "blocked"} onOpenChange={(open) => !open && blocker.reset?.()}>
         <DialogContent>

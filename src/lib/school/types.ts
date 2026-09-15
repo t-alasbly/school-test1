@@ -52,6 +52,26 @@ export type CustomMessage = {
   body: string;
 };
 
+export type RosterTemplatePayload = {
+  title: string;
+  showPhone: boolean;
+  showClass: boolean;
+  showStage: boolean;
+  extraCols: { id: string; title: string }[];
+  order: string[];
+  widths: Record<string, number>;
+};
+
+export type RosterTemplate = {
+  id: number;
+  name: string;
+  createdBy: string;
+  createdByName: string;
+  isProgram: boolean;
+  payload: RosterTemplatePayload;
+  createdAt: string;
+};
+
 export type PrintMargins = {
   top: number;
   right: number;
@@ -92,9 +112,11 @@ export type School = {
   schedules: SchoolSchedules;
   messageTemplates: MessageTemplates;
   customMessages: CustomMessage[];
+  inviteReasons: string[];
   teachersCanMessage: boolean;
   teachersCanViewAll: boolean;
   appearance: Appearance;
+  roleLabels: Partial<Record<StaffRole, string>>;
 };
 
 export type CatalogItem = {

@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
+import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, setStaffActive, updateSchool, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
 import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
 import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
 import type { StaffRole } from "@/lib/school/types";
@@ -31,7 +31,7 @@ function roleTone(role: StaffRole) {
 type StaffRow = Awaited<ReturnType<typeof listStaff>>[number];
 
 export function StaffManager({ compact = false }: { compact?: boolean }) {
-  const { staff } = useWorkspace();
+  const { staff, school } = useWorkspace();
   const queryClient = useQueryClient();
   const canManage = staffCan(staff, "editStaff");
   const query = useQuery({
@@ -50,6 +50,15 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
   const [permsFor, setPermsFor] = useState<StaffRow | null>(null);
   const [cancelFor, setCancelFor] = useState<StaffRow | null>(null);
   const [deleteFor, setDeleteFor] = useState<StaffRow | null>(null);
+  const [roleLabels, setRoleLabels] = useState<Record<string, string>>(() => ({ ...(school.roleLabels ?? {}) }));
+  const roleLabel = (role: StaffRole) => roleLabels[role] || ROLE_LABEL[role];
+  const roleLabelKeys: StaffRole[] = ["counselor", "student_counselor", "health_counselor", "teachers_vp", "school_vp", "activity_leader", "teacher", "security", "admin_assistant", "admin_staff"];
+  const roleLabelsMutation = useMutation({
+    mutationFn: () => updateSchool({ data: { name: school.name, roleLabels } }),
+    onSuccess: () => { toast.success("تم حفظ المسميات الوظيفية"); void queryClient.invalidateQueries({ queryKey: ["workspace"] }); },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ المسميات"),
+  });
+
   const [editing, setEditing] = useState<{
     userId: string;
     displayName: string;
@@ -242,7 +251,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               >
                 {CREATE_ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
+                    {roleLabel(r)}
                   </option>
                 ))}
               </Select>
@@ -263,6 +272,24 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
           </form>
         </CardContent>
       </Card>
+
+{staff.role === "admin" ? (
+      <Card>
+        <CardHeader><CardTitle>المسميات الوظيفية</CardTitle></CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-fg-muted">يمكن تعديل المسمى الظاهر في النظام دون تغيير الصلاحية. مثال: مرشد طلابي ← موجه طلابي، ومرشد صحي ← موجه صحي.</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {roleLabelKeys.map((r) => (
+              <div key={r} className="space-y-1.5">
+                <Label htmlFor={`role-label-${r}`}>{ROLE_LABEL[r]}</Label>
+                <Input id={`role-label-${r}`} value={roleLabels[r] ?? ""} placeholder={ROLE_LABEL[r]} onChange={(e) => setRoleLabels(prev => ({ ...prev, [r]: e.target.value }))} />
+              </div>
+            ))}
+          </div>
+          <Button className="mt-4" type="button" disabled={roleLabelsMutation.isPending} onClick={() => roleLabelsMutation.mutate()}>حفظ المسميات</Button>
+        </CardContent>
+      </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -323,7 +350,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                   {` · ${formatStamp(member.createdAt)}`}
                 </p>
               </div>
-              <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
+              <Badge tone={roleTone(member.role)}>{roleLabel(member.role)}</Badge>
               {member.active === false ? <Badge tone="danger">ملغى</Badge> : null}
               {member.role === "admin" ? (
                 <span className="text-xs text-fg-muted">كل الصلاحيات</span>
@@ -461,7 +488,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 >
                   {ASSIGNABLE_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {ROLE_LABEL[r]}
+                      {roleLabel(r)}
                     </option>
                   ))}
                 </Select>

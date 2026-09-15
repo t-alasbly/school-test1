@@ -6,6 +6,7 @@ import { AppGate } from "@/components/app-gate";
 import {
   FORM_META,
   FORM_ORDER,
+  InviteOptionsPanel,
   OfficialForm,
   notesToPrintable,
   type FormKind,
@@ -40,6 +41,7 @@ function FormsBody() {
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState<FormOverrides>({});
   const [showCompensation, setShowCompensation] = useState(true);
+  const [showViolation, setShowViolation] = useState(true);
 
   const report = useQuery({
     queryKey: ["report", "forms"],
@@ -195,6 +197,15 @@ function FormsBody() {
         </label>
       </form>
 
+      {selectedStudent && kind === "invite" ? (
+        <InviteOptionsPanel
+          overrides={overrides}
+          onChange={setOverrides}
+          showViolation={showViolation}
+          onShowViolation={setShowViolation}
+        />
+      ) : null}
+
       {selectedStudent && manual ? (
         <div className="no-print grid gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3 sm:grid-cols-2">
           {(
@@ -255,8 +266,9 @@ function FormsBody() {
           notes={notes}
           selectedNote={selectedNote}
           school={school}
-          overrides={manual ? overrides : undefined}
+          overrides={kind === "invite" || manual ? overrides : undefined}
           showCompensation={showCompensation && Boolean(selectedNote?.compensation)}
+          showViolation={kind === "invite" ? showViolation : true}
         />
       ) : (
         <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-10 text-center text-sm text-fg-muted">

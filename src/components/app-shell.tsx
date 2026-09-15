@@ -6,6 +6,7 @@ import {
   HeartHandshake,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Printer,
   Settings,
   Upload,
@@ -37,6 +38,7 @@ const NAV: {
   { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck },
   { to: "/counseling", label: "الإرشاد", icon: HeartHandshake },
   { to: "/reports", label: "التقارير", icon: ClipboardList },
+  { to: "/messages", label: "الرسائل الجماعية", icon: MessageCircle },
   { to: "/forms", label: "طباعة نماذج", icon: Printer },
   { to: "/import", label: "الاستيراد", icon: Upload },
   { to: "/staff", label: "الموظفون", icon: Users },
@@ -53,9 +55,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (staff.role === "pending") return false;
     if (item.to === "/staff") return staffCan(staff, "editStaff");
     if (item.to === "/admin") {
-      return staffCan(staff, "takeActions") || staffCan(staff, "acceptImprovements");
+      return (
+        staffCan(staff, "takeActions") ||
+        staffCan(staff, "acceptImprovements") ||
+        staffCan(staff, "sendMessages")
+      );
     }
     if (item.to === "/attendance") return staffCan(staff, "dailyAttendance");
+    if (item.to === "/messages") return staffCan(staff, "sendMessages");
     if (item.to === "/counseling") return staffCan(staff, "counseling");
     if (item.to === "/import") return staff.role === "admin";
     return true;
