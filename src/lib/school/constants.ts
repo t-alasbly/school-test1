@@ -480,11 +480,11 @@ export const DEFAULT_ADMIN_PASSWORD = "1234";
 export const DEFAULT_ADMIN_NAME = "مدير التطبيق";
 export const WHATSAPP_TEMPLATES: Record<MessageKind, { title: string; body: string }> = {
 	absence: {
-		title: "إشعار غياب",
+		title: "الغياب اليومي",
 		body: "السلام عليكم ولي أمر الطالب {name}،\nنود إعلامكم بتغيّب ابنكم{session} يوم {weekday} بتاريخ {date} في صف {class}.\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n{school}"
 	},
 	late: {
-		title: "إشعار تأخر",
+		title: "التأخر اليومي",
 		body: "السلام عليكم ولي أمر الطالب {name}،\nنود إعلامكم بتأخر ابنكم{session} يوم {weekday} بتاريخ {date} في صف {class}.\nنرجو الحرص على الحضور في الوقت المحدد.\n\n{school}"
 	},
 	homework: {

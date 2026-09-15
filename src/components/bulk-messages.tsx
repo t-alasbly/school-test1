@@ -61,14 +61,17 @@ export function BulkMessagesPanel() {
     const rows = attendanceQuery.data?.students ?? [];
     return students.filter((s: any) => rows.some((r: any) => r.studentId === s.id && r.kind === picker));
   }, [attendanceQuery.data, picker, students]);
-  const selectedStudents = students.filter((s: any) => selected.has(s.id));
+  // For the daily absence/late templates, show only students who match the selected day.
+  // Other templates continue to show the normal filtered student list.
+  const visibleStudents = isAttendancePicker ? attendanceMatches : students;
+  const selectedStudents = visibleStudents.filter((s: any) => selected.has(s.id));
   const withPhone = selectedStudents.filter((s: any) => String(s.parentPhone || "").trim());
-  const allSelected = students.length > 0 && students.every((s: any) => selected.has(s.id));
+  const allSelected = visibleStudents.length > 0 && visibleStudents.every((s: any) => selected.has(s.id));
 
   useEffect(() => {
-    if (!isAttendancePicker || attendanceQuery.isPending) return;
+    if (!isAttendancePicker || attendanceQuery.isFetching) return;
     setSelected(new Set(attendanceMatches.map((s: any) => s.id)));
-  }, [attendanceDay, attendanceMatches, attendanceQuery.isPending, isAttendancePicker]);
+  }, [attendanceDay, attendanceMatches, attendanceQuery.isFetching, isAttendancePicker]);
 
   function applyTemplate(key: string) {
     setPicker(key);
@@ -85,7 +88,7 @@ export function BulkMessagesPanel() {
   function toggleAll(on: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const s of students) {
+      for (const s of visibleStudents) {
         if (on) next.add(s.id);
         else next.delete(s.id);
       }
@@ -221,14 +224,14 @@ export function BulkMessagesPanel() {
             checked={allSelected}
             onChange={(e) => toggleAll(e.target.checked)}
           />
-          اختيار الكل ({students.length})
+          اختيار الكل ({visibleStudents.length})
         </label>
         <p className="text-xs text-fg-muted">
           محدد: {selectedStudents.length} — لديهم جوال: {withPhone.length}
         </p>
       </div>
       <ul className="max-h-72 divide-y divide-border overflow-auto rounded-[var(--radius-md)] border border-border">
-        {students.map((s: any) => {
+        {visibleStudents.map((s: any) => {
           const on = selected.has(s.id);
           const phone = String(s.parentPhone || "").trim();
           return (
@@ -263,6 +266,13 @@ export function BulkMessagesPanel() {
             </li>
           );
         })}
+        {visibleStudents.length === 0 ? (
+          <li className="px-4 py-8 text-center text-sm text-fg-muted">
+            {isAttendancePicker
+              ? `لا يوجد ${picker === "late" ? "طلاب متأخرون" : "طلاب غائبون"} مسجلون في اليوم المحدد.`
+              : "لا يوجد طلاب في النطاق المحدد."}
+          </li>
+        ) : null}
       </ul>
       <div className="flex flex-wrap gap-2">
         <Button

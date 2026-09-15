@@ -213,22 +213,27 @@ function AttendanceBody() {
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">الصف</p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
             {stages.map((stage) => {
               const on = stageOn(stage.id);
               const open = openStages.has(stage.id);
               return (
-                <div key={stage.id} className="w-full rounded-[var(--radius-sm)] border border-border bg-bg-elevated p-2 sm:w-auto sm:min-w-40">
-                  <button type="button" onClick={() => toggleStageOpen(stage.id)} className="flex w-full items-center justify-between gap-3 px-2 py-1.5 text-sm font-semibold">
-                    <span>{stage.shortName || stage.name}</span><span className="text-xs text-fg-muted">{open ? "إخفاء" : "عرض الفصول"}</span>
+                <div key={stage.id} className="min-w-0 rounded-[var(--radius-sm)] border border-border bg-bg-elevated p-1.5 sm:p-2">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => toggleStageOpen(stage.id)}
+                    className="flex min-h-9 w-full items-center justify-center rounded-md px-1 text-sm font-semibold hover:bg-muted sm:min-h-10"
+                  >
+                    <span className="truncate">{stage.shortName || stage.name}</span>
                   </button>
                   {open ? (
-                    <div className="mt-2 space-y-2 border-t border-border pt-2">
-                      <button type="button" onClick={() => selectStage(stage.id, !on)} className="text-xs font-medium text-primary">{on ? "إلغاء تحديد المرحلة" : "تحديد كل فصول المرحلة"}</button>
-                      <div className="flex flex-wrap gap-1.5">
+                    <div className="mt-1.5 space-y-2 border-t border-border pt-2">
+                      <button type="button" onClick={() => selectStage(stage.id, !on)} className="w-full rounded-md px-1 py-1 text-xs font-medium text-primary">{on ? "إلغاء تحديد المرحلة" : "تحديد كل الفصول"}</button>
+                      <div className="flex flex-wrap justify-center gap-1.5">
                         {classes.filter((c) => c.stageId === stage.id).map((cls) => {
                           const checked = selectedSet.has(cls.id);
-                          return <button key={cls.id} type="button" onClick={() => toggleClass(cls.id, !checked)} className={cn("h-9 rounded-full border px-3 text-xs font-medium", checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-fg-muted")}>{cls.label || cls.name}</button>;
+                          return <button key={cls.id} type="button" onClick={() => toggleClass(cls.id, !checked)} className={cn("h-8 rounded-full border px-2.5 text-xs font-medium", checked ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-fg-muted")}>{cls.label || cls.name}</button>;
                         })}
                       </div>
                     </div>
@@ -411,9 +416,10 @@ function AttendanceBody() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant={showSheet ? "default" : "secondary"}
+              className="h-9 px-2.5 text-xs sm:h-10 sm:px-3 sm:text-sm"
               onClick={() => setShowSheet((v) => !v)}
             >
-              {showSheet ? "إخفاء الكشوف" : "الكشوف"}
+              {showSheet ? "إخفاء الكشف" : "الكشف"}
             </Button>
             <Button variant="secondary" onClick={() => setPrintOpen(true)}>
               <Printer className="size-4" />
