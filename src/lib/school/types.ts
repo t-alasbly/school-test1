@@ -14,6 +14,9 @@ export type StaffRole =
   | "health_counselor"
   | "activity_leader"
   | "teacher"
+  | "security"
+  | "admin_assistant"
+  | "admin_staff"
   | "pending";
 export type NoteType = "absence" | "late" | "homework" | "behavior";
 export type NoteStatus = "open" | "closed";

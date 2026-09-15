@@ -401,8 +401,22 @@ async function ensureSchoolAndAdmin(sql) {
       where user_id = ${user.id} and school_id = ${schoolId}
     `;
 }
+async function ensureStaffRoleConstraint(sql) {
+	if (ensureStaffRoleConstraint.done) return;
+	try {
+		await sql`alter table staff drop constraint if exists staff_role_check`;
+		await sql`alter table staff add constraint staff_role_check
+      check (role in (
+        'admin','principal','school_vp','teachers_vp','counselor',
+        'student_counselor','health_counselor','activity_leader','teacher',
+        'security','admin_assistant','admin_staff','pending'
+      ))`;
+		ensureStaffRoleConstraint.done = true;
+	} catch {}
+}
 export const ensureAppReady = createServerFn({ method: "GET" }).handler(async () => {
 	const sql = await getSql();
+	await ensureStaffRoleConstraint(sql);
 	await ensureSchoolAndAdmin(sql);
 	let name = "";
 	let logoUrl = "";
@@ -470,6 +484,7 @@ async function listStageSummaries(sql, schoolId, teacherId) {
 }
 export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const sql = await getSql();
+	await ensureStaffRoleConstraint(sql);
 	await ensureSchoolAndAdmin(sql);
 	const userId = context.userId;
 	const users = await sql`
@@ -1386,6 +1401,21 @@ async function insertCredentialStaff(sql, opts) {
   `;
 	return id;
 }
+async function setCredentialPassword(sql, userId, password) {
+	const hashed = await hashPassword(password);
+	const account = await sql`
+    select id from "account"
+    where "userId" = ${userId} and "providerId" = 'credential'
+  `;
+	if (account[0]) await sql`
+      update "account" set password = ${hashed}, "updatedAt" = now()
+      where id = ${account[0].id}
+    `;
+	else await sql`
+      insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
+      values (${userId}, ${userId}, ${"credential"}, ${userId}, ${hashed}, now(), now())
+    `;
+}
 export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	const mapped = mapSchool(school);
@@ -1407,7 +1437,8 @@ export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddl
           when 'pending' then 0 when 'admin' then 1 when 'principal' then 2
           when 'school_vp' then 3 when 'teachers_vp' then 4 when 'counselor' then 5
           when 'student_counselor' then 6 when 'health_counselor' then 7
-          when 'activity_leader' then 8 else 9
+          when 'activity_leader' then 8 when 'security' then 9
+          when 'admin_assistant' then 10 when 'admin_staff' then 11 else 12
         end,
         st.created_at
     `;
@@ -1454,6 +1485,9 @@ export const setStaffRole = createServerFn({ method: "POST" }).middleware([authM
 		"health_counselor",
 		"activity_leader",
 		"teacher",
+		"security",
+		"admin_assistant",
+		"admin_staff",
 		"pending"
 	])
 })).handler(async ({ context, data }) => {
@@ -1491,10 +1525,14 @@ export const updateStaffMember = createServerFn({ method: "POST" }).middleware([
 		"health_counselor",
 		"activity_leader",
 		"teacher",
+		"security",
+		"admin_assistant",
+		"admin_staff",
 		"pending"
 	]),
 	subject: z.string().max(80).optional(),
-	phone: z.string().max(20).optional()
+	phone: z.string().max(20).optional(),
+	password: z.string().max(80).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	if (data.userId === staff.user_id && data.role !== "admin") throw new Error("لا يمكنك إزالة صلاحية المدير عن حسابك");
@@ -1527,6 +1565,11 @@ export const updateStaffMember = createServerFn({ method: "POST" }).middleware([
       update "user" set name = ${name}, "updatedAt" = now()
       where id = ${data.userId}
     `;
+	const pass = data.password?.trim() ?? "";
+	if (pass) {
+		if (pass.length < 4) throw new Error("كلمة المرور يجب ألا تقل عن 4 خانات");
+		await setCredentialPassword(sql, data.userId, pass);
+	}
 	return { ok: true };
 });
 export const createStaffUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -1543,7 +1586,10 @@ export const createStaffUser = createServerFn({ method: "POST" }).middleware([au
 		"student_counselor",
 		"health_counselor",
 		"activity_leader",
-		"teacher"
+		"teacher",
+		"security",
+		"admin_assistant",
+		"admin_staff"
 	]),
 	subject: z.string().max(80).optional()
 })).handler(async ({ context, data }) => {
@@ -1804,19 +1850,7 @@ export const updateStaffName = createServerFn({ method: "POST" }).middleware([au
         where id = ${staff.user_id}
       `;
 	if (data.password && data.password.trim().length >= 4) {
-		const hashed = await hashPassword(data.password.trim());
-		const account = await sql`
-        select id from "account"
-        where "userId" = ${staff.user_id} and "providerId" = 'credential'
-      `;
-		if (account[0]) await sql`
-          update "account" set password = ${hashed}, "updatedAt" = now()
-          where id = ${account[0].id}
-        `;
-		else await sql`
-          insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
-          values (${staff.user_id}, ${staff.user_id}, ${"credential"}, ${staff.user_id}, ${hashed}, now(), now())
-        `;
+		await setCredentialPassword(sql, staff.user_id, data.password.trim());
 	}
 	return {
 		name,

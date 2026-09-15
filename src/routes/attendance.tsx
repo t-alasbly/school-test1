@@ -223,26 +223,24 @@ function AttendanceBody() {
           <Input id="att-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
         </div>
         <div className="space-y-2">
-          <p className="text-sm font-medium">المراحل</p>
-          <div className="flex flex-wrap gap-2">
+          <p className="text-sm font-medium">الصف</p>
+          <div className="flex flex-wrap gap-1.5">
             {stages.map((stage) => {
               const on = stageOn(stage.id);
               return (
-                <label
+                <button
                   key={stage.id}
+                  type="button"
+                  onClick={() => toggleStage(stage.id, !on)}
                   className={cn(
-                    "inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm font-medium",
-                    on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg-elevated text-fg-muted",
+                    "h-10 rounded-full border px-3 text-sm font-medium",
+                    on
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-bg-elevated text-fg-muted",
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={on}
-                    onChange={(e) => toggleStage(stage.id, e.target.checked)}
-                  />
                   {stage.shortName || stage.name}
-                </label>
+                </button>
               );
             })}
           </div>
@@ -256,21 +254,19 @@ function AttendanceBody() {
                 .map((cls) => {
                   const on = selectedSet.has(cls.id);
                   return (
-                    <label
+                    <button
                       key={cls.id}
+                      type="button"
+                      onClick={() => toggleClass(cls.id, !on)}
                       className={cn(
-                        "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-sm",
-                        on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg-elevated text-fg-muted",
+                        "h-10 rounded-full border px-3 text-sm font-medium",
+                        on
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-bg-elevated text-fg-muted",
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-primary"
-                        checked={on}
-                        onChange={(e) => toggleClass(cls.id, e.target.checked)}
-                      />
-                      {cls.name}
-                    </label>
+                      {cls.label || cls.name}
+                    </button>
                   );
                 })}
             </div>

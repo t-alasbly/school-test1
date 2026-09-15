@@ -44,10 +44,16 @@ export const ROLE_LABEL: Record<StaffRole, string> = {
 	health_counselor: "مرشد صحي",
 	activity_leader: "رائد نشاط",
 	teacher: "معلم",
+	security: "رجل أمن",
+	admin_assistant: "مساعد إداري",
+	admin_staff: "موظف إداري",
 	pending: "بانتظار الموافقة"
 };
 export const ASSIGNABLE_ROLES: StaffRole[] = [
 	"teacher",
+	"security",
+	"admin_assistant",
+	"admin_staff",
 	"activity_leader",
 	"health_counselor",
 	"student_counselor",
@@ -60,6 +66,9 @@ export const ASSIGNABLE_ROLES: StaffRole[] = [
 ];
 export const CREATE_ROLES: Exclude<StaffRole, "pending">[] = [
 	"teacher",
+	"security",
+	"admin_assistant",
+	"admin_staff",
 	"activity_leader",
 	"health_counselor",
 	"student_counselor",

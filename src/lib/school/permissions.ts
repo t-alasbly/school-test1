@@ -199,6 +199,34 @@ export function defaultPermissions(
       editClasses: false,
     };
   }
+  if (role === "security") {
+    return {
+      editStudents: false,
+      sendMessages: true,
+      viewAllViolations: false,
+      editStaff: false,
+      takeActions: false,
+      acceptImprovements: false,
+      dailyAttendance: true,
+      counseling: false,
+      editRecords: false,
+      editClasses: false,
+    };
+  }
+  if (role === "admin_assistant" || role === "admin_staff") {
+    return {
+      editStudents: true,
+      sendMessages: true,
+      viewAllViolations: false,
+      editStaff: false,
+      takeActions: false,
+      acceptImprovements: false,
+      dailyAttendance: true,
+      counseling: false,
+      editRecords: false,
+      editClasses: false,
+    };
+  }
   if (role === "teacher") {
     return {
       editStudents: false,

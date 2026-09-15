@@ -56,6 +56,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
     role: StaffRole;
     subject: string;
     phone: string;
+    password: string;
   } | null>(null);
 
   const createMutation = useMutation({
@@ -84,7 +85,14 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       role: StaffRole;
       subject: string;
       phone: string;
-    }) => updateStaffMember({ data: input }),
+      password?: string;
+    }) =>
+      updateStaffMember({
+        data: {
+          ...input,
+          password: input.password?.trim() ? input.password.trim() : undefined,
+        },
+      }),
     onSuccess: () => {
       toast.success("تم حفظ بيانات المستخدم");
       setEditing(null);
@@ -340,6 +348,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                     role: member.role,
                     subject: member.subject,
                     phone: member.phone,
+                    password: "",
                   })
                 }
               >
@@ -420,6 +429,20 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="edit-pass">كلمة المرور</Label>
+                <Input
+                  id="edit-pass"
+                  type="text"
+                  value={editing.password}
+                  onChange={(e) => setEditing({ ...editing, password: e.target.value })}
+                  placeholder="اتركه فارغاً إن لم ترد التغيير"
+                  dir="ltr"
+                  className="text-left"
+                  autoComplete="new-password"
+                />
+                <p className="text-xs text-fg-muted">إن كُتبت بالخطأ يمكنك تصحيحها هنا دون إنشاء حساب جديد.</p>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="edit-subject">المادة</Label>
                 <Input
                   id="edit-subject"
@@ -447,7 +470,9 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 type="submit"
                 className="w-full"
                 disabled={
-                  updateMutation.isPending || editing.displayName.trim().length < 2
+                  updateMutation.isPending ||
+                  editing.displayName.trim().length < 2 ||
+                  (editing.password.trim().length > 0 && editing.password.trim().length < 4)
                 }
               >
                 حفظ التعديلات
