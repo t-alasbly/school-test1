@@ -14,7 +14,7 @@ import {
 import { useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { ROLE_LABEL, todayLabel } from "@/lib/school/constants";
+import { ROLE_LABEL, todayLabel, schoolLogoSrc } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
+  const schoolLogo = schoolLogoSrc(school.logoUrl);
   const items = NAV.filter((item) => {
     if (staff.role === "pending") return false;
     if (item.to === "/staff") return staffCan(staff, "editStaff");
@@ -65,7 +66,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Link to="/" className="flex min-w-0 items-center gap-3">
-            <SchoolMark size="sm" src={school.logoUrl || undefined} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
               <span className="block truncate text-xs text-fg-muted">
@@ -128,6 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <LogOut className="size-4" />
               </button>
             ) : null}
+            {schoolLogo ? <SchoolMark size="sm" src={schoolLogo} /> : null}
           </div>
         </div>
       </header>

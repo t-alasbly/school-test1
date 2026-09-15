@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { importStudents, importTeachers, listRoster } from "@/lib/school/api";
+import { bulkDeleteStudents, importStudents, importTeachers, listRoster } from "@/lib/school/api";
 import { DEFAULT_TEACHER_PASSWORD } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -66,6 +66,7 @@ type RosterClass = {
 };
 
 type RosterStage = {
+  id: number;
   name: string;
   classes: RosterClass[];
 };
@@ -119,6 +120,18 @@ function StudentImport() {
   const [q, setQ] = useState("");
   const [openStage, setOpenStage] = useState<Record<string, boolean>>({});
   const [showExcel, setShowExcel] = useState(false);
+
+  const bulkMutation = useMutation({
+    mutationFn: (input: { scope: "all" | "stage" | "class"; stageId?: number; classId?: number }) =>
+      bulkDeleteStudents({ data: input }),
+    onSuccess: (res) => {
+      toast.success(`حُذف ${res.deleted} طالب`);
+      void queryClient.invalidateQueries({ queryKey: ["roster"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+      void queryClient.invalidateQueries({ queryKey: ["class"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+  });
 
   const stages = useMemo(() => {
     const list: RosterStage[] = roster.data?.stages ?? [];
@@ -176,9 +189,26 @@ function StudentImport() {
         <p className="text-danger">تعذر تحميل قائمة الطلاب.</p>
       ) : (
         <div className="space-y-5">
-          <p className="text-sm text-fg-muted">
-            {roster.data?.studentCount ?? 0} طالب في {roster.data?.classCount ?? 0} فصل
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-fg-muted">
+              {roster.data?.studentCount ?? 0} طالب في {roster.data?.classCount ?? 0} فصل
+            </p>
+            {(roster.data?.studentCount ?? 0) > 0 ? (
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={bulkMutation.isPending}
+                onClick={() => {
+                  const n = roster.data?.studentCount ?? 0;
+                  if (window.confirm(`حذف جميع الطلاب (${n}) من كل المراحل؟ لا يمكن التراجع.`)) {
+                    bulkMutation.mutate({ scope: "all" });
+                  }
+                }}
+              >
+                حذف جميع الطلاب
+              </Button>
+            ) : null}
+          </div>
           {stages.length === 0 ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-fg-muted">
@@ -192,10 +222,11 @@ function StudentImport() {
             const open = openStage[stage.name] !== false;
             const count = stage.classes.reduce((n: number, c: RosterClass) => n + c.students.length, 0);
             return (
-              <section key={stage.name} className="space-y-3">
+              <section key={stage.id ?? stage.name} className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] bg-muted px-3 py-2">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-[var(--radius-md)] bg-muted px-3 py-2 text-right"
+                  className="flex min-w-0 flex-1 items-center justify-between text-right"
                   onClick={() =>
                     setOpenStage((prev) => ({ ...prev, [stage.name]: !open }))
                   }
@@ -206,6 +237,22 @@ function StudentImport() {
                     <ChevronDown className={cn("size-4 transition", open ? "rotate-180" : "")} />
                   </span>
                 </button>
+                {count > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={bulkMutation.isPending}
+                    onClick={() => {
+                      if (window.confirm(`حذف ${count} طالب في «${stage.name}»؟ لا يمكن التراجع.`)) {
+                        bulkMutation.mutate({ scope: "stage", stageId: stage.id });
+                      }
+                    }}
+                  >
+                    حذف المرحلة
+                  </Button>
+                ) : null}
+                </div>
                 {open
                   ? stage.classes.map((cls: RosterClass) => (
                       <Card key={cls.id}>
@@ -217,6 +264,21 @@ function StudentImport() {
                           <div className="flex items-center gap-2">
                             <Badge>{cls.students.length} طالب</Badge>
                             <AddStudentButton classId={cls.id} />
+                            {cls.students.length > 0 ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="danger"
+                                disabled={bulkMutation.isPending}
+                                onClick={() => {
+                                  if (window.confirm(`حذف ${cls.students.length} طالب في «${cls.label}»؟ لا يمكن التراجع.`)) {
+                                    bulkMutation.mutate({ scope: "class", classId: cls.id });
+                                  }
+                                }}
+                              >
+                                حذف الفصل
+                              </Button>
+                            ) : null}
                           </div>
                         </CardHeader>
                         <CardContent className="p-0">

@@ -23,7 +23,7 @@ function StaffBody() {
     <div className="space-y-6">
       <header>
         <p className="text-sm text-fg-muted">
-          اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف دخول الموظف دون حذف سجله.
+          اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف الدخول دون حذف السجل. «حذف نهائي» يزيل الحساب تماماً — يُمنح عبر صلاحية تعديل الموظفين.
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">الموظفون</h1>
       </header>

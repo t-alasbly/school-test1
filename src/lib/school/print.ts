@@ -10,6 +10,8 @@ export function printElement(el: HTMLElement) {
   mount.innerHTML = "";
   const clone = el.cloneNode(true) as HTMLElement;
   clone.classList.add("print-form");
+  clone.classList.remove("hidden");
+  clone.style.removeProperty("display");
   mount.appendChild(clone);
   document.body.classList.add("printing-form");
   let cleaned = false;

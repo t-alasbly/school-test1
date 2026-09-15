@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { ensureAppReady } from "@/lib/school/api";
-import { APP_NAME, DEFAULT_APP_PHRASE, phoneToLoginEmail } from "@/lib/school/constants";
+import { APP_NAME, DEFAULT_APP_PHRASE, phoneToLoginEmail, schoolLogoSrc } from "@/lib/school/constants";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
@@ -77,7 +77,7 @@ function LoginForm() {
       </div>
       <div className="relative w-full max-w-md space-y-6">
         <div className="text-center">
-          <SchoolMark size="lg" src={brand.logoUrl || undefined} className="mx-auto" />
+          <SchoolMark size="lg" src={schoolLogoSrc(brand.logoUrl) || undefined} className="mx-auto" />
           <h1 className="mt-4 text-3xl font-semibold tracking-tight">{APP_NAME}</h1>
           <p className="mt-1 text-sm text-fg-muted">{phrase}</p>
           {brand.name ? <p className="mt-1 text-xs text-fg-subtle">{brand.name}</p> : null}

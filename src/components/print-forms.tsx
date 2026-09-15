@@ -22,6 +22,7 @@ import {
   periodShort,
   principalTitle,
   procedureLadder,
+  schoolLogoSrc,
   procedureStageLabel,
   proceduresFor,
   stageIndexFor,
@@ -29,7 +30,7 @@ import {
   weekdayName,
 } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
-import type { NoteType, School, Season } from "@/lib/school/types";
+import type { NoteType, School, SchoolSchedules, Season } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export type PrintableNote = {
@@ -429,8 +430,8 @@ export function OfficialForm({
       ? parsedAction.steps
       : official.length
         ? official
-        : ["…………………………………………"];
-  const period = overrides?.period || (focus?.periodKey ? periodShort(focus.periodKey, school.season) : "");
+        : [];
+  const period = overrides?.period || (focus?.periodKey ? periodShort(focus.periodKey, school.season, school.schedules) : "");
   const subject = overrides?.subject || focus?.teacherSubject?.trim() || "";
   const ctx: FormCtx = {
     name: overrides?.name || student.name,
@@ -454,6 +455,7 @@ export function OfficialForm({
     did,
     schoolName: school.name,
     season: school.season,
+    schedules: school.schedules,
     focus,
     behaviorNotes,
     absenceNotes,
@@ -529,6 +531,7 @@ type FormCtx = {
   did: string;
   schoolName: string;
   season: Season;
+  schedules?: SchoolSchedules;
   focus: PrintableNote | null;
   behaviorNotes: PrintableNote[];
   absenceNotes: PrintableNote[];
@@ -637,25 +640,27 @@ export function OfficialLetterhead({
             alt="شعار وزارة التعليم"
             className="h-[62px] w-auto max-w-[6.5rem] object-contain"
           />
-          {school.logoUrl ? (
-            <img
-              src={school.logoUrl}
-              alt="شعار المدرسة"
-              className="h-[62px] w-auto max-w-[6.5rem] object-contain"
-            />
-          ) : null}
           {school.extraLogoUrl ? (
             <img
               src={school.extraLogoUrl}
-              alt="شعار إضافي"
+              alt="شعار الرؤية"
               className="h-[62px] w-auto max-w-[6.5rem] object-contain"
             />
           ) : null}
         </div>
-        <div className="px-1 text-center text-[12px] leading-5">
-          <p>{eduLine || "إدارة التعليم: ………………"}</p>
-          {gov ? <p>{gov.startsWith("محافظة") ? gov : `محافظة ${gov}`}</p> : null}
-          <p className="font-semibold">{schoolLine}</p>
+        <div className="flex items-center justify-center gap-2 px-1">
+          {school.printSchoolLogo && schoolLogoSrc(school.logoUrl) ? (
+            <img
+              src={schoolLogoSrc(school.logoUrl)}
+              alt="شعار المدرسة"
+              className="h-[62px] w-auto max-w-[5.5rem] object-contain"
+            />
+          ) : null}
+          <div className="text-center text-[12px] leading-5">
+            <p>{eduLine || "إدارة التعليم: ………………"}</p>
+            {gov ? <p>{gov.startsWith("محافظة") ? gov : `محافظة ${gov}`}</p> : null}
+            <p className="font-semibold">{schoolLine}</p>
+          </div>
         </div>
       </div>
       <div className="official-accent h-px bg-[#00857c]" />
@@ -784,7 +789,7 @@ function RepeatBox({ ctx }: { ctx: FormCtx }) {
               <tr key={`${n.createdAt}-${i}`}>
                 <td>{occurrenceLabel(n.occurrence || i + 1)}</td>
                 <td>{formatStamp(n.createdAt)}</td>
-                <td>{n.periodKey ? periodShort(n.periodKey, ctx.season) : "—"}</td>
+                <td>{n.periodKey ? periodShort(n.periodKey, ctx.season, ctx.schedules) : "—"}</td>
                 <td>{n.teacherSubject || "—"}</td>
                 <td>{actionDisplay(n.actionTaken) || "—"}</td>
               </tr>
@@ -797,8 +802,8 @@ function RepeatBox({ ctx }: { ctx: FormCtx }) {
 }
 
 function ProcedureList({ ctx }: { ctx: FormCtx }) {
-  const list = [...(ctx.actionSteps.length ? ctx.actionSteps : ["…………………………………………"])];
-  while (list.length < 3) list.push("…………………………………………");
+  const list = ctx.actionSteps.filter((s) => s.trim() && s.replace(/[.…\s]/g, "").length > 0);
+  if (!list.length) return null;
   return (
     <div className="my-2 rounded-sm border border-black px-3 py-2">
       <p className="font-semibold">
@@ -1052,7 +1057,10 @@ function AttendanceBody({ ctx }: { ctx: FormCtx }) {
 }
 
 function RecordBody({ ctx }: { ctx: FormCtx }) {
-  const rows = ctx.behaviorNotes.length ? ctx.behaviorNotes.slice(0, 6) : [null];
+  const rows = ctx.behaviorNotes.slice(0, 6);
+  if (!rows.length) {
+    return <p className="py-4 text-center text-[13px]">لا توجد مخالفات مسجّلة في السجل.</p>;
+  }
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1097,8 +1105,13 @@ function RecordBody({ ctx }: { ctx: FormCtx }) {
 }
 
 function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
-  const rows = ctx.behaviorNotes.length ? ctx.behaviorNotes.slice(0, 7) : [null];
+  const rows = ctx.behaviorNotes.slice(0, 7);
   const teacher = ctx.behaviorNotes.find((n) => n.teacherName)?.teacherName || "";
+  if (!rows.length) {
+    return (
+      <p className="py-4 text-center text-[13px]">لا توجد مخالفات مسجّلة لعرضها في السجل.</p>
+    );
+  }
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1126,7 +1139,7 @@ function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
               <td />
               <td>{n?.occurrence ? occurrenceLabel(n.occurrence) : ""}</td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
-              <td>{n ? periodShort(n.periodKey, ctx.season) : ""}</td>
+              <td>{n ? periodShort(n.periodKey, ctx.season, ctx.schedules) : ""}</td>
             </tr>
           ))}
         </tbody>
@@ -1148,13 +1161,18 @@ function PlanBody({ ctx }: { ctx: FormCtx }) {
         المشكلة: <Dotted value={ctx.violation} /> درجتها: <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
-      <p>وصف المشكلة / المظاهر: {ctx.focus?.details || "…………………………………………"}</p>
+      <p>وصف المشكلة / المظاهر: {ctx.focus?.details || "—"}</p>
       <p className="font-semibold">ثالثاً: الإجراءات المستخدمة</p>
-      <ol className="list-decimal pr-5">
-        {(ctx.actionSteps.length ? ctx.actionSteps : ["", "", ""]).slice(0, 6).map((s, i) => (
-          <li key={i}>{s || "…………………………………………"}</li>
-        ))}
-      </ol>
+      {ctx.actionSteps.filter((s) => s.trim()).length ? (
+        <ol className="list-decimal pr-5">
+          {ctx.actionSteps
+            .filter((s) => s.trim())
+            .slice(0, 6)
+            .map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+        </ol>
+      ) : null}
       <p className="font-semibold">رابعاً: تقييم فاعلية الخطة</p>
       <p>رأي {ctx.counselor}: …………………………………………</p>
       <p>رأي معلم الفصل: …………………………………………</p>
@@ -1172,7 +1190,10 @@ function PlanBody({ ctx }: { ctx: FormCtx }) {
 }
 
 function CompensationBody({ ctx }: { ctx: FormCtx }) {
-  const rows = ctx.behaviorNotes.length ? ctx.behaviorNotes.slice(0, 5) : [null];
+  const rows = ctx.behaviorNotes.slice(0, 5);
+  if (!rows.length) {
+    return <p className="py-4 text-center text-[13px]">لا توجد مخالفات لعرض فرص التعويض.</p>;
+  }
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1297,11 +1318,16 @@ function CommitteeBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <RepeatBox ctx={ctx} />
       <p>قرارات اللجنة:</p>
-      <ol className="list-decimal pr-5">
-        {(ctx.actionSteps.length ? ctx.actionSteps : ["", "", ""]).slice(0, 4).map((s, i) => (
-          <li key={i}>{s || "…………………………………………"}</li>
-        ))}
-      </ol>
+      {ctx.actionSteps.filter((s) => s.trim()).length ? (
+        <ol className="list-decimal pr-5">
+          {ctx.actionSteps
+            .filter((s) => s.trim())
+            .slice(0, 4)
+            .map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+        </ol>
+      ) : null}
       <table className="official-table">
         <thead>
           <tr>

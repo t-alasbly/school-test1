@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { OptionChips } from "@/components/option-chips";
 import { PrintFormsButton } from "@/components/print-forms";
+import {
+  CaseRecordTools,
+  ImprovementRecordTools,
+  NoteRecordTools,
+} from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -180,6 +185,7 @@ function CounselingBody() {
               {item.details ? <p className="text-sm text-fg-muted">{item.details}</p> : null}
               <ReferralCompensation noteId={item.id} current={item.compensation ?? ""} />
               <div className="flex flex-wrap gap-2">
+              <NoteRecordTools note={item} />
               <PrintFormsButton
                 student={{
                   name: item.studentName,
@@ -258,6 +264,9 @@ function CounselingBody() {
                 <Badge tone={item.kind === "health" ? "warn" : item.kind === "psych" ? "danger" : "primary"}>
                   {caseKindLabel(item.kind)}
                 </Badge>
+                <span className="ms-auto">
+                  <CaseRecordTools id={item.id} body={item.body} />
+                </span>
               </div>
               <p className="text-sm">{item.body}</p>
               <p className="text-xs text-fg-subtle">
@@ -288,6 +297,9 @@ function CounselingBody() {
                 </button>
                 <span className="text-xs text-fg-muted">{item.classLabel}</span>
                 <Badge tone={item.status === "closed" ? "ok" : "warn"}>{IMPROVEMENT_STATUS[item.status as keyof typeof IMPROVEMENT_STATUS]}</Badge>
+                <span className="ms-auto">
+                  <ImprovementRecordTools id={item.id} plan={item.plan} />
+                </span>
               </div>
               <p className="mt-1 text-sm">{item.plan}</p>
               <p className="mt-1 text-xs text-fg-subtle">

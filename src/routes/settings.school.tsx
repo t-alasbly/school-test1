@@ -11,11 +11,14 @@ import { updateSchool } from "@/lib/school/api";
 import {
   SAUDI_REGIONS,
   SEASON_LABEL,
+  SUMMER_SCHEDULE,
+  WINTER_SCHEDULE,
   counselorTitle,
   principalTitle,
+  rebuildSlot,
   scheduleFor,
 } from "@/lib/school/constants";
-import type { SchoolGender, Season } from "@/lib/school/types";
+import type { SchoolGender, SchoolSchedules, Season } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/settings/school")({ component: SchoolSettings });
@@ -32,6 +35,10 @@ function SchoolSettings() {
   const [leadershipGender, setLeadershipGender] = useState<SchoolGender>(school.leadershipGender);
   const [studentGender, setStudentGender] = useState<SchoolGender>(school.studentGender);
   const [season, setSeason] = useState<Season>(school.season);
+  const [schedules, setSchedules] = useState<SchoolSchedules>(() => ({
+    winter: school.schedules?.winter?.length ? school.schedules.winter : WINTER_SCHEDULE,
+    summer: school.schedules?.summer?.length ? school.schedules.summer : SUMMER_SCHEDULE,
+  }));
 
   const schoolMutation = useMutation({
     mutationFn: () =>
@@ -46,6 +53,7 @@ function SchoolSettings() {
           leadershipGender,
           studentGender,
           season,
+          schedules,
         },
       }),
     onSuccess: () => {
@@ -64,7 +72,22 @@ function SchoolSettings() {
     );
   }
 
-  const slots = scheduleFor(season);
+  const slots = scheduleFor(season, schedules);
+
+  function patchSlot(index: number, field: "label" | "from" | "to", value: string) {
+    setSchedules((prev) => {
+      const list = [...prev[season]];
+      const current = list[index];
+      if (!current) return prev;
+      list[index] = rebuildSlot({
+        key: current.key,
+        label: field === "label" ? value : current.label,
+        from: field === "from" ? value : current.from,
+        to: field === "to" ? value : current.to,
+      });
+      return { ...prev, [season]: list };
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -204,7 +227,8 @@ function SchoolSettings() {
         <CardHeader>
           <CardTitle>جدول الحصص ({SEASON_LABEL[season]})</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-fg-muted">عدّل أوقات الحصص للتوقيت المعروض أعلاه ثم احفظ بيانات المدرسة.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -215,16 +239,34 @@ function SchoolSettings() {
                 </tr>
               </thead>
               <tbody>
-                {slots.map((s) => (
+                {slots.map((s, i) => (
                   <tr key={s.key} className="border-t border-border">
-                    <td className="px-3 py-2">{s.label}</td>
-                    <td className="px-3 py-2 tabular-nums">{s.from}</td>
-                    <td className="px-3 py-2 tabular-nums">{s.to}</td>
+                    <td className="px-2 py-2">
+                      <Input value={s.label} onChange={(e) => patchSlot(i, "label", e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="time" dir="ltr" value={s.from} onChange={(e) => patchSlot(i, "from", e.target.value)} />
+                    </td>
+                    <td className="px-2 py-2">
+                      <Input type="time" dir="ltr" value={s.to} onChange={(e) => patchSlot(i, "to", e.target.value)} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              setSchedules((prev) => ({
+                ...prev,
+                [season]: season === "summer" ? SUMMER_SCHEDULE : WINTER_SCHEDULE,
+              }))
+            }
+          >
+            إعادة الجدول الافتراضي لهذا التوقيت
+          </Button>
         </CardContent>
       </Card>
     </div>

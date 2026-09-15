@@ -9,6 +9,8 @@ export const PERMISSION_KEYS = [
   "acceptImprovements",
   "dailyAttendance",
   "counseling",
+  "editRecords",
+  "editClasses",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -68,6 +70,18 @@ export const PERMISSION_META: {
     short: "الإرشاد",
     hint: "لوحة المرشد الطلابي: الإحالات ومراسلات المعلمين والحالات الصحية — التحويل من وكيل الشؤون فقط",
   },
+  {
+    key: "editRecords",
+    label: "تعديل وحذف السجلات",
+    short: "الأرشيف",
+    hint: "تصحيح أو حذف ملاحظة أو رسالة أو خطة تحسين سُجّلت بالخطأ — يظهر في الأرشيف وشاشات المخالفات والرسائل",
+  },
+  {
+    key: "editClasses",
+    label: "تنسيق الصفوف والفصول",
+    short: "الفصول",
+    hint: "تسمية المراحل (الصف الأول/الثاني/الثالث متوسط) وعدد الأقسام داخل كل صف وإعادة ترتيبها",
+  },
 ];
 
 const ALL_ON: StaffPermissions = {
@@ -79,6 +93,8 @@ const ALL_ON: StaffPermissions = {
   acceptImprovements: true,
   dailyAttendance: true,
   counseling: true,
+  editRecords: true,
+  editClasses: true,
 };
 
 const ALL_OFF: StaffPermissions = {
@@ -90,6 +106,8 @@ const ALL_OFF: StaffPermissions = {
   acceptImprovements: false,
   dailyAttendance: false,
   counseling: false,
+  editRecords: false,
+  editClasses: false,
 };
 
 export function defaultPermissions(
@@ -107,6 +125,8 @@ export function defaultPermissions(
       acceptImprovements: true,
       dailyAttendance: false,
       counseling: false,
+      editRecords: true,
+      editClasses: false,
     };
   }
   if (role === "school_vp") {
@@ -119,6 +139,8 @@ export function defaultPermissions(
       acceptImprovements: true,
       dailyAttendance: true,
       counseling: false,
+      editRecords: true,
+      editClasses: true,
     };
   }
   if (role === "teachers_vp") {
@@ -131,6 +153,8 @@ export function defaultPermissions(
       acceptImprovements: false,
       dailyAttendance: false,
       counseling: false,
+      editRecords: false,
+      editClasses: true,
     };
   }
   if (role === "student_counselor") {
@@ -143,6 +167,8 @@ export function defaultPermissions(
       acceptImprovements: true,
       dailyAttendance: false,
       counseling: true,
+      editRecords: false,
+      editClasses: false,
     };
   }
   if (role === "health_counselor") {
@@ -155,6 +181,8 @@ export function defaultPermissions(
       acceptImprovements: false,
       dailyAttendance: true,
       counseling: true,
+      editRecords: false,
+      editClasses: false,
     };
   }
   if (role === "activity_leader") {
@@ -167,6 +195,8 @@ export function defaultPermissions(
       acceptImprovements: false,
       dailyAttendance: true,
       counseling: false,
+      editRecords: false,
+      editClasses: false,
     };
   }
   if (role === "teacher") {
@@ -179,6 +209,8 @@ export function defaultPermissions(
       acceptImprovements: false,
       dailyAttendance: false,
       counseling: false,
+      editRecords: false,
+      editClasses: false,
     };
   }
   return { ...ALL_OFF };

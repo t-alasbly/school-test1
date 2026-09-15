@@ -23,6 +23,7 @@ export type SchoolGender = "male" | "female";
 export type MessageKind = NoteType | "general";
 export type ImprovementStatus = "open" | "following" | "closed";
 export type DailyKind = "absence" | "late";
+export type CounselingKind = "health" | "psych" | "learning";
 
 export type Staff = {
   userId: string;
@@ -55,6 +56,20 @@ export type PrintMargins = {
   left: number;
 };
 
+export type PeriodSlot = {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  startMin: number;
+  endMin: number;
+};
+
+export type SchoolSchedules = {
+  winter: PeriodSlot[];
+  summer: PeriodSlot[];
+};
+
 export type School = {
   id: number;
   name: string;
@@ -70,6 +85,8 @@ export type School = {
   extraLogoUrl: string;
   tagline: string;
   printMargins: PrintMargins;
+  printSchoolLogo: boolean;
+  schedules: SchoolSchedules;
   messageTemplates: MessageTemplates;
   customMessages: CustomMessage[];
   teachersCanMessage: boolean;
@@ -125,13 +142,13 @@ export type TodayNote = {
   behaviorTypeName: string | null;
   behaviorDegree: number | null;
   periodKey: string;
-  actionTaken: string;
+  actionTaken: string | null;
   createdAt: string;
   occurredAt: string;
   teacherId: string;
   teacherName: string;
   teacherSubject: string;
-  referCounselor?: boolean;
+  referCounselor: boolean;
 };
 
 export type StudentRow = {
@@ -158,12 +175,12 @@ export type NoteRecord = {
   teacherSubject: string;
   type: NoteType;
   details: string;
-  behaviorTypeName: string | null;
   behaviorTypeId: number | null;
+  behaviorTypeName: string | null;
   behaviorDegree: number | null;
   periodKey: string;
   status: NoteStatus;
-  actionTaken: string;
+  actionTaken: string | null;
   createdAt: string;
   occurredAt: string;
   closedAt: string | null;
@@ -171,77 +188,6 @@ export type NoteRecord = {
   referCounselor: boolean;
   suggestedAction: string;
   compensation: string;
-};
-
-export type NotificationItem = {
-  id: number;
-  noteId: number | null;
-  kind: string;
-  title: string;
-  body: string;
-  tone: string;
-  read: boolean;
-  createdAt: string;
-};
-
-export type AdminStats = {
-  absenceToday: number;
-  lateToday: number;
-  homeworkToday: number;
-  behaviorToday: number;
-  openTotal: number;
-  studentsTotal: number;
-  improvementsOpen: number;
-};
-
-export type ImportRow = {
-  name: string;
-  parentPhone: string;
-  stageName: string;
-  className: string;
-};
-
-export type TeacherImportRow = {
-  name: string;
-  phone: string;
-  subject: string;
-};
-
-export type ReportStudent = {
-  id: number;
-  name: string;
-  classId: number;
-  stageId: number;
-};
-
-export type ParentMessage = {
-  id: number;
-  studentId: number;
-  studentName: string;
-  className: string;
-  shortName: string;
-  staffName: string;
-  kind: MessageKind;
-  body: string;
-  parentPhone: string;
-  createdAt: string;
-};
-
-export type BehaviorImprovement = {
-  id: number;
-  studentId: number;
-  studentName: string;
-  classLabel: string;
-  teacherId: string;
-  teacherName: string;
-  teacherSubject: string;
-  noteId: number | null;
-  plan: string;
-  teacherFollowup: string;
-  counselorNote: string;
-  status: ImprovementStatus;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type DailyAttendanceRow = {
@@ -261,9 +207,26 @@ export type CounselingCase = {
   studentName: string;
   classLabel: string;
   authorName: string;
-  kind: "health" | "psych" | "learning";
+  kind: CounselingKind;
   body: string;
   createdAt: string;
+};
+
+export type BehaviorImprovement = {
+  id: number;
+  studentId: number;
+  studentName: string;
+  classLabel: string;
+  teacherId: string;
+  teacherName: string;
+  teacherSubject: string;
+  noteId: number | null;
+  plan: string;
+  teacherFollowup: string | null;
+  counselorNote: string | null;
+  status: ImprovementStatus;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Workspace = {

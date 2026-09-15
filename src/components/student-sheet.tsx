@@ -6,23 +6,25 @@ import { NoteSession } from "@/components/note-session";
 import { NoteActions } from "@/components/note-actions";
 import { CounselorCaseDialog } from "@/components/counselor-case-dialog";
 import { PrintFormsButton } from "@/components/print-forms";
+import { NoteRecordTools, ImprovementRecordTools, MessageRecordTools } from "@/components/record-actions";
 import { EditStudentButton } from "@/components/student-editor";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { followImprovement, getStudentNotes, listImprovements } from "@/lib/school/api";
+import { followImprovement, getStudentNotes, listImprovements, listParentMessages } from "@/lib/school/api";
 import {
   IMPROVEMENT_STATUS,
   NOTE_META,
   degreeLabel,
   formatStamp,
+  messageKindLabel,
   noteTone,
   occurrenceLabel,
 } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
-import type { BehaviorImprovement, ImprovementStatus } from "@/lib/school/types";
+import type { BehaviorImprovement, ImprovementStatus, MessageKind } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export function StudentSheet({
@@ -45,10 +47,16 @@ export function StudentSheet({
     queryFn: () => listImprovements({ data: { studentId: studentId! } }),
     enabled: open && studentId != null,
   });
+  const messages = useQuery({
+    queryKey: ["parent-messages", studentId],
+    queryFn: () => listParentMessages({ data: { studentId: studentId! } }),
+    enabled: open && studentId != null,
+  });
 
   const student = query.data?.student;
   const notes = query.data?.notes ?? [];
   const scoped = query.data?.scopedToTeacher;
+  const canEditRecords = staffCan(staff, "editRecords");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -128,7 +136,7 @@ export function StudentSheet({
                 <p className="text-sm text-fg-muted">لا توجد ملاحظات مسجّلة بعد.</p>
               ) : (
             <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
-              <table className="w-full min-w-[52rem] border-collapse text-sm">
+              <table className="w-full min-w-[60rem] border-collapse text-sm">
                 <thead>
                   <tr className="bg-muted text-right">
                     <th className="border-b border-border px-3 py-2 font-medium">التاريخ</th>
@@ -141,6 +149,11 @@ export function StudentSheet({
                     <th className="border-b border-border px-3 py-2 font-medium">التفاصيل</th>
                     <th className="border-b border-border px-3 py-2 font-medium">الحالة</th>
                     <th className="border-b border-border px-3 py-2 font-medium">الإجراء</th>
+                    {canEditRecords ? (
+                      <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
+                        تصحيح
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -195,6 +208,11 @@ export function StudentSheet({
                         <td className="border-b border-border px-3 py-2">
                           {note.status === "closed" ? note.actionTaken || "—" : "—"}
                         </td>
+                        {canEditRecords ? (
+                          <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
+                            <NoteRecordTools note={note} />
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}
@@ -208,6 +226,7 @@ export function StudentSheet({
                 lead={staffCan(staff, "acceptImprovements")}
                 teacherId={staff.userId}
               />
+              <MessagesBlock items={messages.data?.messages ?? []} />
             </div>
           )}
         </div>
@@ -281,6 +300,9 @@ function ImprovementCard({
           {item.teacherName}
           {item.teacherSubject ? ` · ${item.teacherSubject}` : ""}
         </span>
+        <span className="ms-auto">
+          <ImprovementRecordTools id={item.id} plan={item.plan} />
+        </span>
       </div>
       <p className="mt-2 font-medium">{item.plan}</p>
       {item.teacherFollowup ? (
@@ -337,5 +359,34 @@ function ImprovementCard({
         </div>
       ) : null}
     </li>
+  );
+}
+
+function MessagesBlock({
+  items,
+}: {
+  items: { id: number; body: string; kind: string; staffName: string; createdAt: string }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="space-y-3">
+      <h3 className="text-base font-semibold">رسائل ولي الأمر</h3>
+      <ul className="space-y-2">
+        {items.map((msg) => (
+          <li key={msg.id} className="rounded-[var(--radius-md)] border border-border bg-card p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{messageKindLabel(msg.kind as MessageKind)}</Badge>
+              <span className="text-xs text-fg-subtle">
+                {msg.staffName} · {formatStamp(msg.createdAt)}
+              </span>
+              <span className="ms-auto">
+                <MessageRecordTools id={msg.id} body={msg.body} />
+              </span>
+            </div>
+            <p className="mt-2 whitespace-pre-wrap">{msg.body}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

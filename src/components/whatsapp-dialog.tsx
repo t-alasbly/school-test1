@@ -63,7 +63,7 @@ export function WhatsAppDialog({
   const number = toWhatsAppNumber(parentPhone);
   const stamp = createdAt || new Date().toISOString();
   const subjectName = (subject ?? staff.subject).trim();
-  const period = periodKey ? periodShort(periodKey, school.season) : "";
+  const period = periodKey ? periodShort(periodKey, school.season, school.schedules) : "";
   const session = [period, subjectName ? `مادة ${subjectName}` : ""].filter(Boolean).join(" — ");
 
   function templateOf(key: string): MessageTemplate {

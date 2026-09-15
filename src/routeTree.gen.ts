@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as ArchiveRouteImport } from './routes/archive'
 import { Route as AttendanceRouteImport } from './routes/attendance'
 import { Route as CounselingRouteImport } from './routes/counseling'
 import { Route as FormsRouteImport } from './routes/forms'
@@ -24,6 +25,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActionsRouteImport } from './routes/settings.actions'
 import { Route as SettingsAppRouteImport } from './routes/settings.app'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
+import { Route as SettingsClassesRouteImport } from './routes/settings.classes'
 import { Route as SettingsCompensationRouteImport } from './routes/settings.compensation'
 import { Route as SettingsHealthRouteImport } from './routes/settings.health'
 import { Route as SettingsImproveRouteImport } from './routes/settings.improve'
@@ -44,6 +46,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ArchiveRoute = ArchiveRouteImport.update({
+  id: '/archive',
+  path: '/archive',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AttendanceRoute = AttendanceRouteImport.update({
@@ -111,6 +118,11 @@ const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   path: '/appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsClassesRoute = SettingsClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsCompensationRoute = SettingsCompensationRouteImport.update({
   id: '/compensation',
   path: '/compensation',
@@ -170,6 +182,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
   '/counseling': typeof CounselingRoute
   '/forms': typeof FormsRoute
@@ -182,6 +195,7 @@ export interface FileRoutesByFullPath {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
   '/settings/improve': typeof SettingsImproveRoute
@@ -198,6 +212,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
   '/counseling': typeof CounselingRoute
   '/forms': typeof FormsRoute
@@ -209,6 +224,7 @@ export interface FileRoutesByTo {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
   '/settings/improve': typeof SettingsImproveRoute
@@ -226,6 +242,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
   '/counseling': typeof CounselingRoute
   '/forms': typeof FormsRoute
@@ -238,6 +255,7 @@ export interface FileRoutesById {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
   '/settings/improve': typeof SettingsImproveRoute
@@ -256,6 +274,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/archive'
     | '/attendance'
     | '/counseling'
     | '/forms'
@@ -268,6 +287,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
     | '/settings/improve'
@@ -284,6 +304,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/archive'
     | '/attendance'
     | '/counseling'
     | '/forms'
@@ -295,6 +316,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
     | '/settings/improve'
@@ -311,6 +333,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/archive'
     | '/attendance'
     | '/counseling'
     | '/forms'
@@ -323,6 +346,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
     | '/settings/improve'
@@ -340,6 +364,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ArchiveRoute: typeof ArchiveRoute
   AttendanceRoute: typeof AttendanceRoute
   CounselingRoute: typeof CounselingRoute
   FormsRoute: typeof FormsRoute
@@ -367,6 +392,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/archive': {
+      id: '/archive'
+      path: '/archive'
+      fullPath: '/archive'
+      preLoaderRoute: typeof ArchiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/attendance': {
@@ -460,6 +492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/classes': {
+      id: '/settings/classes'
+      path: '/classes'
+      fullPath: '/settings/classes'
+      preLoaderRoute: typeof SettingsClassesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/compensation': {
       id: '/settings/compensation'
       path: '/compensation'
@@ -544,6 +583,7 @@ interface SettingsRouteChildren {
   SettingsActionsRoute: typeof SettingsActionsRoute
   SettingsAppRoute: typeof SettingsAppRoute
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsClassesRoute: typeof SettingsClassesRoute
   SettingsCompensationRoute: typeof SettingsCompensationRoute
   SettingsHealthRoute: typeof SettingsHealthRoute
   SettingsImproveRoute: typeof SettingsImproveRoute
@@ -560,6 +600,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsActionsRoute: SettingsActionsRoute,
   SettingsAppRoute: SettingsAppRoute,
   SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsClassesRoute: SettingsClassesRoute,
   SettingsCompensationRoute: SettingsCompensationRoute,
   SettingsHealthRoute: SettingsHealthRoute,
   SettingsImproveRoute: SettingsImproveRoute,
@@ -579,6 +620,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ArchiveRoute: ArchiveRoute,
   AttendanceRoute: AttendanceRoute,
   CounselingRoute: CounselingRoute,
   FormsRoute: FormsRoute,

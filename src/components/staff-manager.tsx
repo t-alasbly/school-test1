@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Check, Shield } from "lucide-react";
+import { Ban, Check, Shield, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { createStaffUser, listStaff, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
+import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
 import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
 import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
 import type { StaffRole } from "@/lib/school/types";
@@ -46,8 +46,10 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
   const [password, setPassword] = useState("1234");
   const [subject, setSubject] = useState("");
   const [role, setRole] = useState<Exclude<StaffRole, "pending">>("teacher");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [permsFor, setPermsFor] = useState<StaffRow | null>(null);
   const [cancelFor, setCancelFor] = useState<StaffRow | null>(null);
+  const [deleteFor, setDeleteFor] = useState<StaffRow | null>(null);
   const [editing, setEditing] = useState<{
     userId: string;
     displayName: string;
@@ -101,6 +103,29 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر تغيير حالة الحساب"),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (input: { scope: "teachers" | "selected"; userIds?: string[] }) =>
+      bulkDeleteStaff({ data: input }),
+    onSuccess: (res) => {
+      toast.success(`حُذف ${res.deleted} حساب` + (res.skipped?.length ? ` — تُرك ${res.skipped.length}` : ""));
+      setSelected({});
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => deleteStaffPermanent({ data: { userId } }),
+    onSuccess: (res) => {
+      toast.success(`حُذف حساب ${res.displayName} نهائياً`);
+      setDeleteFor(null);
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
   });
 
   const permMutation = useMutation({
@@ -231,10 +256,57 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
         </CardContent>
       </Card>
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="danger"
+          size="sm"
+          disabled={bulkDeleteMutation.isPending}
+          onClick={() => {
+            const n = (query.data ?? []).filter((m) => m.role === "teacher").length;
+            if (!n) {
+              toast.error("لا يوجد معلمون للحذف");
+              return;
+            }
+            if (window.confirm(`حذف جميع المعلمين (${n}) نهائياً؟ لا يُحذف حسابك. لا يمكن التراجع.`)) {
+              bulkDeleteMutation.mutate({ scope: "teachers" });
+            }
+          }}
+        >
+          حذف جميع المعلمين
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          size="sm"
+          disabled={bulkDeleteMutation.isPending || !Object.values(selected).some(Boolean)}
+          onClick={() => {
+            const ids = Object.keys(selected).filter((id) => selected[id]);
+            if (!ids.length) return;
+            if (window.confirm(`حذف ${ids.length} حساب محدد نهائياً؟ لا يمكن التراجع.`)) {
+              bulkDeleteMutation.mutate({ scope: "selected", userIds: ids });
+            }
+          }}
+        >
+          حذف المحددين
+        </Button>
+      </div>
+
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {(query.data ?? []).map((member) => (
           <li key={member.userId} className={cn("px-4 py-3", member.active === false && "opacity-60")}>
             <div className="flex flex-wrap items-center gap-2">
+              {member.userId !== staff.userId ? (
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={Boolean(selected[member.userId])}
+                  onChange={(e) =>
+                    setSelected((prev) => ({ ...prev, [member.userId]: e.target.checked }))
+                  }
+                  aria-label={`تحديد ${member.displayName}`}
+                />
+              ) : null}
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{member.displayName}</p>
                 <p className="text-xs text-fg-subtle">
@@ -295,6 +367,17 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                   إلغاء
                 </Button>
               )}
+              {member.userId !== staff.userId ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setDeleteFor(member)}
+                  aria-label={`حذف ${member.displayName} نهائياً`}
+                >
+                  <Trash2 className="size-4 text-danger" />
+                  حذف نهائي
+                </Button>
+              ) : null}
             </div>
           </li>
         ))}
@@ -454,6 +537,30 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               }
             >
               تأكيد الإلغاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteFor != null} onOpenChange={(open) => !open && setDeleteFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>حذف {deleteFor?.displayName} نهائياً</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-fg-muted">
+            يُحذف الحساب ولا يمكنه الدخول بعد ذلك. ملاحظاته ورسائله تبقى في السجل باسم «معلم». لا يمكن التراجع.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setDeleteFor(null)}>
+              تراجع
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              disabled={deleteMutation.isPending || !deleteFor}
+              onClick={() => deleteFor && deleteMutation.mutate(deleteFor.userId)}
+            >
+              تأكيد الحذف النهائي
             </Button>
           </div>
         </DialogContent>

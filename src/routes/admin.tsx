@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { NoteSession } from "@/components/note-session";
 import { PrintFormsButton } from "@/components/print-forms";
+import { ImprovementRecordTools, NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -308,7 +309,7 @@ function AdminNoteCard({
             {note.status === "closed" ? <Badge tone="ok">أُغلقت</Badge> : null}
             {note.referCounselor ? <Badge tone="warn">محال للإرشاد</Badge> : null}
             {note.periodKey ? (
-              <Badge tone="default">{periodShort(note.periodKey, school.season)}</Badge>
+              <Badge tone="default">{periodShort(note.periodKey, school.season, school.schedules)}</Badge>
             ) : null}
             {note.teacherSubject ? <Badge tone="primary">{note.teacherSubject}</Badge> : null}
             <span className="text-xs text-fg-subtle">{formatStamp(note.createdAt)}</span>
@@ -337,6 +338,7 @@ function AdminNoteCard({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-1">
+          <NoteRecordTools note={note} />
           {note.type === "behavior" || note.type === "absence" ? (
             <PrintFormsButton
               student={{
@@ -690,6 +692,9 @@ function CounselorImproveCard({
         </button>
         <span className="text-xs text-fg-muted">{item.classLabel}</span>
         <Badge tone={tone}>{IMPROVEMENT_STATUS[item.status]}</Badge>
+        <span className="ms-auto">
+          <ImprovementRecordTools id={item.id} plan={item.plan} />
+        </span>
       </div>
       <p className="mt-2 text-sm">{item.plan}</p>
       <p className="mt-1 text-xs text-fg-muted">

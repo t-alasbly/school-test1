@@ -4,6 +4,7 @@ import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { OfficialLetterhead } from "@/components/print-forms";
+import { MessageRecordTools, NoteRecordTools } from "@/components/record-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,13 +41,22 @@ function ReportsPage() {
 
 function ReportsBody() {
   const { staff, school } = useWorkspace();
+  const canEditRecords = staffCan(staff, "editRecords");
   const [stageId, setStageId] = useState<string>("");
   const [classId, setClassId] = useState<string>("");
   const [studentId, setStudentId] = useState<string>("");
   const [type, setType] = useState<"all" | NoteType>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [mode, setMode] = useState<"notes" | "messages">("notes");
+  const [mode, setMode] = useState<"notes" | "messages" | "names">("notes");
+  const [rosterTitle, setRosterTitle] = useState("بيانات الطلاب");
+  const [showPhone, setShowPhone] = useState(false);
+  const [showClass, setShowClass] = useState(false);
+  const [showStage, setShowStage] = useState(false);
+  const [extraCols, setExtraCols] = useState<{ id: string; title: string }[]>([]);
+  const [showTeacherSign, setShowTeacherSign] = useState(true);
+  const [showCounselorSign, setShowCounselorSign] = useState(true);
+  const [showPrincipalSign, setShowPrincipalSign] = useState(true);
   const sheetRef = useRef<HTMLElement>(null);
 
   const filters = useMemo(
@@ -131,21 +141,19 @@ function ReportsBody() {
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-fg-muted">
-            {staffCan(staff, "viewAllViolations")
-              ? "تظهر مخالفات جميع المعلمين — ويمكن طباعة رسائل أولياء الأمور حسب الفترة"
-              : "تقرير ملاحظاتك فقط — ورسائل أولياء الأمور التي أرسلتها"}
+            مخالفات ورسائل أولياء الأمور، أو كشف أسماء لفصل أو صف كامل
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">التقارير</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-border">
+          <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border">
             <button
               type="button"
               onClick={() => setMode("notes")}
               className={
                 mode === "notes"
-                  ? "h-11 px-4 text-sm font-medium bg-primary text-primary-fg"
-                  : "h-11 px-4 text-sm bg-bg-elevated"
+                  ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg"
+                  : "h-11 px-3 text-sm bg-bg-elevated"
               }
             >
               الملاحظات
@@ -155,19 +163,30 @@ function ReportsBody() {
               onClick={() => setMode("messages")}
               className={
                 mode === "messages"
-                  ? "h-11 px-4 text-sm font-medium bg-primary text-primary-fg"
-                  : "h-11 px-4 text-sm bg-bg-elevated"
+                  ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg"
+                  : "h-11 px-3 text-sm bg-bg-elevated"
               }
             >
-              رسائل أولياء الأمور
+              الرسائل
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("names")}
+              className={
+                mode === "names"
+                  ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg"
+                  : "h-11 px-3 text-sm bg-bg-elevated"
+              }
+            >
+              كشف الأسماء
             </button>
           </div>
           <Button
             onClick={handlePrint}
-            disabled={mode === "notes" ? query.isPending : messagesQuery.isPending}
+            disabled={mode === "messages" ? messagesQuery.isPending : query.isPending}
           >
             <Printer className="size-4" />
-            {mode === "messages" ? "طباعة الرسائل" : "طباعة الكشف"}
+            {mode === "messages" ? "طباعة الرسائل" : mode === "names" ? "طباعة كشف الأسماء" : "طباعة الكشف"}
           </Button>
         </div>
       </header>
@@ -210,6 +229,7 @@ function ReportsBody() {
             ))}
           </Select>
         </div>
+        {mode !== "names" ? (
         <div className="space-y-1.5">
           <Label htmlFor="student">اسم الطالب</Label>
           <Select id="student" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
@@ -221,6 +241,7 @@ function ReportsBody() {
             ))}
           </Select>
         </div>
+        ) : null}
         {mode === "notes" ? (
         <div className="space-y-1.5">
           <Label htmlFor="type">نوع الملاحظة</Label>
@@ -238,6 +259,8 @@ function ReportsBody() {
           </Select>
         </div>
         ) : null}
+        {mode !== "names" ? (
+        <>
         <div className="space-y-1.5">
           <Label htmlFor="from">من تاريخ</Label>
           <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -246,7 +269,81 @@ function ReportsBody() {
           <Label htmlFor="to">إلى تاريخ</Label>
           <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
+        </>
+        ) : null}
       </form>
+      {mode === "names" ? (
+        <div className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="roster-title">عنوان الكشف (يظهر فوق الجدول)</Label>
+            <Input
+              id="roster-title"
+              value={rosterTitle}
+              onChange={(e) => setRosterTitle(e.target.value)}
+              placeholder="بيانات الطلاب"
+              maxLength={80}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>أعمدة إضافية (اسم مختصر لكل عمود)</Label>
+              <button
+                type="button"
+                className="text-sm font-medium text-primary disabled:opacity-40"
+                disabled={extraCols.length >= 16}
+                onClick={() =>
+                  setExtraCols((prev) =>
+                    prev.length >= 16 ? prev : [...prev, { id: `c${Date.now()}`, title: "" }],
+                  )
+                }
+              >
+                إضافة عمود
+              </button>
+            </div>
+            {extraCols.length === 0 ? (
+              <p className="text-xs text-fg-muted">لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.</p>
+            ) : (
+              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {extraCols.map((col, i) => (
+                  <li key={col.id} className="flex items-center gap-1.5">
+                    <Input
+                      value={col.title}
+                      placeholder={`عمود ${i + 1}`}
+                      maxLength={20}
+                      onChange={(e) =>
+                        setExtraCols((prev) =>
+                          prev.map((c) => (c.id === col.id ? { ...c, title: e.target.value } : c)),
+                        )
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="text-xs text-danger"
+                      onClick={() => setExtraCols((prev) => prev.filter((c) => c.id !== col.id))}
+                    >
+                      حذف
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm sm:col-span-2 lg:col-span-3">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={showPhone} onChange={(e) => setShowPhone(e.target.checked)} />
+              جوال ولي الأمر
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={showClass} onChange={(e) => setShowClass(e.target.checked)} />
+              الفصل
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={showStage} onChange={(e) => setShowStage(e.target.checked)} />
+              الصف / المرحلة
+            </label>
+          </div>
+        </div>
+      ) : null}
 
       <article
         ref={sheetRef}
@@ -254,13 +351,28 @@ function ReportsBody() {
       >
         <OfficialLetterhead school={reportSchool} />
         <h2 className="mt-2 text-center text-[20px] font-semibold tracking-wide">
-          {mode === "messages" ? "كشف رسائل أولياء الأمور" : "كشف متابعة الطلاب"}
+          {mode === "messages"
+            ? "كشف رسائل أولياء الأمور"
+            : mode === "names"
+              ? rosterTitle.trim() || "بيانات الطلاب"
+              : "كشف متابعة الطلاب"}
         </h2>
         <p className="text-center text-[13px] text-[#00857c]">
           {todayLabel()} — {hijriDate()}
         </p>
 
-        {selectedStudent ? (
+        {mode === "names" ? (
+          <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center">
+            <div className="border-l border-black px-1.5 py-1.5">
+              <p className="text-[11px] font-semibold text-[#00857c]">الصف / الفصل</p>
+              <p className="text-[13px] font-medium leading-5">{classLine}</p>
+            </div>
+            <div className="px-1.5 py-1.5">
+              <p className="text-[11px] font-semibold text-[#00857c]">عدد الطلاب</p>
+              <p className="text-[13px] font-medium leading-5 tabular-nums">{students.length}</p>
+            </div>
+          </div>
+        ) : selectedStudent ? (
           <table className="official-table mb-3">
             <thead>
               <tr>
@@ -291,7 +403,7 @@ function ReportsBody() {
         </div>
         )}
 
-        {mode === "notes" ? (
+        {mode === "names" ? null : mode === "notes" ? (
         <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
           {(
             [
@@ -316,7 +428,44 @@ function ReportsBody() {
         )}
 
         <div className="overflow-x-auto">
-        {mode === "messages" ? (
+        {mode === "names" ? (
+        <table className="official-table official-report-table">
+          <thead>
+            <tr>
+              <th className="w-8">م</th>
+              <th>اسم الطالب</th>
+              {showStage ? <th>الصف</th> : null}
+              {showClass ? <th>الفصل</th> : null}
+              {showPhone ? <th>جوال ولي الأمر</th> : null}
+              {extraCols.map((col) => (
+                <th key={col.id}>{col.title.trim() || " "}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {students.length === 0 ? (
+              <tr>
+                <td colSpan={2 + (showStage ? 1 : 0) + (showClass ? 1 : 0) + (showPhone ? 1 : 0) + extraCols.length} className="py-8 text-center">
+                  لا يوجد طلاب ضمن الصف أو الفصل المحدد.
+                </td>
+              </tr>
+            ) : (
+              students.map((s: any, index: number) => (
+                <tr key={s.id}>
+                  <td className="tabular-nums">{index + 1}</td>
+                  <td className="text-right font-medium">{s.name}</td>
+                  {showStage ? <td>{s.stageName}</td> : null}
+                  {showClass ? <td>{s.label}</td> : null}
+                  {showPhone ? <td className="tabular-nums" dir="ltr">{s.parentPhone || ""}</td> : null}
+                  {extraCols.map((col) => (
+                    <td key={`b-${s.id}-${col.id}`} className="h-8" />
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        ) : mode === "messages" ? (
         <table className="official-table official-report-table">
           <thead>
             <tr>
@@ -326,12 +475,13 @@ function ReportsBody() {
               <th>المرسل</th>
               <th>التاريخ</th>
               <th>نص الرسالة</th>
+              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
             </tr>
           </thead>
           <tbody>
             {messages.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center">
+                <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
                   لا توجد رسائل ضمن الفترة المحددة.
                 </td>
               </tr>
@@ -349,6 +499,11 @@ function ReportsBody() {
                   <td>{msg.staffName}</td>
                   <td className="whitespace-nowrap">{formatStamp(msg.createdAt)}</td>
                   <td className="text-right text-[11px] leading-5">{msg.body}</td>
+                  {canEditRecords ? (
+                    <td className="no-print whitespace-nowrap">
+                      <MessageRecordTools id={msg.id} body={msg.body} />
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -364,12 +519,13 @@ function ReportsBody() {
               <th>الحصة · المادة</th>
               <th>التاريخ</th>
               <th>الحالة / الإجراء</th>
+              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
             </tr>
           </thead>
           <tbody>
             {notes.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center">
+                <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
                   لا توجد نتائج ضمن عوامل التصفية الحالية.
                 </td>
               </tr>
@@ -396,7 +552,7 @@ function ReportsBody() {
                   </td>
                   <td>
                     <span className="block leading-5">
-                      {periodShort(note.periodKey, reportSchool.season)}
+                      {periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}
                     </span>
                     <span className="block text-[10px] leading-4">
                       {note.teacherSubject || note.teacherName || "—"}
@@ -408,6 +564,11 @@ function ReportsBody() {
                       ? note.actionTaken || "أُغلقت"
                       : "قيد المتابعة"}
                   </td>
+                  {canEditRecords ? (
+                    <td className="no-print whitespace-nowrap">
+                      <NoteRecordTools note={note} />
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
@@ -418,27 +579,54 @@ function ReportsBody() {
 
         <p className="mt-2 text-[10px] leading-5">
           أعدّ الكشف: {staff.displayName} · عدد السجلات:{" "}
-          {mode === "messages" ? messages.length : notes.length} · طُبع في {todayLabel()}
+          {mode === "messages" ? messages.length : mode === "names" ? students.length : notes.length} · طُبع في {todayLabel()}
           {scopedToTeacher && mode === "notes" ? " · ملاحظات هذا المعلم فقط" : ""}
         </p>
 
-        <footer className="mt-4 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
-          <div>
-            <p className="font-semibold">المعلم</p>
-            <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
-            <p>التوقيع: ………………</p>
-          </div>
-          <div>
-            <p className="font-semibold">{counselor}</p>
-            <p>الاسم: {reportSchool.counselorName || "………………"}</p>
-            <p>التوقيع: ………………</p>
-          </div>
-          <div>
-            <p className="font-semibold">{principal}</p>
-            <p>الاسم: {reportSchool.principalName || "………………"}</p>
-            <p>التوقيع: ………………</p>
-          </div>
+        <div className="no-print mt-3 flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showTeacherSign} onChange={(e) => setShowTeacherSign(e.target.checked)} />
+            إظهار المعلم
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showCounselorSign} onChange={(e) => setShowCounselorSign(e.target.checked)} />
+            إظهار اسم الوكيل
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showPrincipalSign} onChange={(e) => setShowPrincipalSign(e.target.checked)} />
+            إظهار اسم المدير
+          </label>
+        </div>
+        {showTeacherSign || showCounselorSign || showPrincipalSign ? (
+        <footer
+          className="mt-4 grid gap-3 text-center text-[12px] leading-6"
+          style={{
+            gridTemplateColumns: `repeat(${[showTeacherSign, showCounselorSign, showPrincipalSign].filter(Boolean).length}, minmax(0, 1fr))`,
+          }}
+        >
+          {showTeacherSign ? (
+            <div>
+              <p className="font-semibold">المعلم</p>
+              <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
+              <p>التوقيع: ………………</p>
+            </div>
+          ) : null}
+          {showCounselorSign ? (
+            <div>
+              <p className="font-semibold">{counselor}</p>
+              <p>الاسم: {reportSchool.counselorName || "………………"}</p>
+              <p>التوقيع: ………………</p>
+            </div>
+          ) : null}
+          {showPrincipalSign ? (
+            <div>
+              <p className="font-semibold">{principal}</p>
+              <p>الاسم: {reportSchool.principalName || "………………"}</p>
+              <p>التوقيع: ………………</p>
+            </div>
+          ) : null}
         </footer>
+        ) : null}
       </article>
     </div>
   );

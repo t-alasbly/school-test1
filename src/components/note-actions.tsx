@@ -49,8 +49,8 @@ export function NoteActions({
   classId: number;
 }) {
   const { behaviorTypes, school, staff } = useWorkspace();
-  const slots = scheduleFor(school.season);
-  const auto = useMemo(() => currentPeriod(school.season)?.key ?? "", [school.season]);
+  const slots = scheduleFor(school.season, school.schedules);
+  const auto = useMemo(() => currentPeriod(school.season, new Date(), school.schedules)?.key ?? "", [school.season, school.schedules]);
   const [open, setOpen] = useState(false);
   const [whenOpen, setWhenOpen] = useState(false);
   const [details, setDetails] = useState("");
@@ -97,7 +97,7 @@ export function NoteActions({
     setDetails("");
     setType(null);
     setBehaviorTypeId(null);
-    setPeriodKey(currentPeriod(school.season)?.key ?? "");
+    setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
     setOccurredAt(toDatetimeLocalValue());
     setWhenOpen(false);
   }
@@ -105,7 +105,7 @@ export function NoteActions({
   function onOpenChange(next: boolean) {
     setOpen(next);
     if (next) {
-      setPeriodKey(currentPeriod(school.season)?.key ?? periodKey);
+      setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? periodKey);
       setOccurredAt(toDatetimeLocalValue());
       setWhenOpen(false);
     }

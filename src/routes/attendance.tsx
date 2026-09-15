@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useBlocker } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -7,6 +7,12 @@ import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { AppGate } from "@/components/app-gate";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getDailyAttendance, saveDailyAttendance } from "@/lib/school/api";
@@ -68,6 +74,15 @@ function AttendanceBody() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [draft, setDraft] = useState<Record<number, Draft>>({});
   const [printKind, setPrintKind] = useState<PrintKind>("all");
+  const [showSheet, setShowSheet] = useState(false);
+  const dirty = Object.keys(draft).length > 0;
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const blocker = useBlocker({
+    shouldBlockFn: () => dirtyRef.current,
+    withResolver: true,
+    enableBeforeUnload: dirty,
+  });
 
   const can = staffCan(staff, "dailyAttendance");
   const query = useQuery({
@@ -196,8 +211,8 @@ function AttendanceBody() {
             <Printer className="size-4" />
             طباعة الكل
           </Button>
-          <Button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-            حفظ الكشف
+          <Button variant={showSheet ? "default" : "secondary"} onClick={() => setShowSheet((v) => !v)}>
+            {showSheet ? "إخفاء الكشف" : "الكشف"}
           </Button>
         </div>
       </header>
@@ -348,7 +363,10 @@ function AttendanceBody() {
         ) : null}
       </ul>
 
-      <article ref={sheetRef} className="print-form official-sheet bg-white text-black font-naskh">
+      <article
+        ref={sheetRef}
+        className={cn("print-form official-sheet bg-white text-black font-naskh", !showSheet && "hidden")}
+      >
         <OfficialLetterhead school={school} />
         <h2 className="mt-2 text-center text-[20px] font-semibold">{printTitle}</h2>
         <p className="text-center text-[13px] text-[#00857c]">
@@ -420,6 +438,54 @@ function AttendanceBody() {
           {school.principalName ? `${school.principalName} — ` : ""}التوقيع: ……………… — الختم
         </p>
       </article>
+
+      <div className="no-print pointer-events-none h-20 md:h-16" />
+      <div className="no-print fixed inset-x-0 bottom-[3.6rem] z-30 border-t border-border bg-bg-elevated/95 p-3 backdrop-blur-sm md:bottom-0">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-1">
+          <p className="text-xs text-fg-muted">
+            {dirty ? "هناك تغييرات غير محفوظة" : "لا تغييرات بانتظار الحفظ"}
+          </p>
+          <Button
+            disabled={!dirty || mutation.isPending}
+            className={dirty ? "" : "opacity-40"}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "جارٍ الحفظ…" : "حفظ الكشف"}
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={blocker.status === "blocked"} onOpenChange={(open) => !open && blocker.reset?.()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>هل تريد حفظ التغيير؟</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-fg-muted">هناك تعديلات في كشف الغياب لم تُحفظ بعد.</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              className="flex-1"
+              disabled={mutation.isPending}
+              onClick={() => {
+                mutation.mutate(undefined, {
+                  onSuccess: () => blocker.proceed?.(),
+                });
+              }}
+            >
+              حفظ ثم مغادرة
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => blocker.proceed?.()}
+            >
+              مغادرة دون حفظ
+            </Button>
+            <Button variant="secondary" className="flex-1" onClick={() => blocker.reset?.()}>
+              البقاء
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
+  Archive,
   Award,
   Gavel,
   HeartPulse,
   KeyRound,
+  Layers,
   MessageCircle,
   Palette,
   Printer,
@@ -38,9 +40,16 @@ function SettingsHub() {
       show: admin,
     },
     {
+      to: "/settings/classes" as const,
+      title: "تنسيق الصفوف والفصول",
+      body: "مسميات الصفوف (الأول والثاني والثالث متوسط) وعدد الأقسام داخل كل صف مثل أولى/1 حتى أولى/5.",
+      icon: Layers,
+      show: staffCan(staff, "editClasses"),
+    },
+    {
       to: "/settings/app" as const,
       title: "أيقونة التطبيق",
-      body: "شعار المدرسة وعبارة التطبيق على الشاشة الرئيسية وشاشة الدخول.",
+      body: "شعار البرنامج للأيقونة، وشعار المدرسة عند التشغيل وفي رأس الصفحة، وشعار الرؤية بجانب الوزارة.",
       icon: Smartphone,
       show: admin,
     },
@@ -57,6 +66,13 @@ function SettingsHub() {
       body: "إضافة المعلمين وتعديل بياناتهم وتفعيل الصلاحيات أمام كل موظف.",
       icon: Users,
       show: staffCan(staff, "editStaff"),
+    },
+    {
+      to: "/archive" as const,
+      title: "الأرشيف",
+      body: "كل الملاحظات والرسائل وخطط التحسين والحالات — تصحيح أو حذف ما سُجّل بالخطأ لمن مُنح الصلاحية.",
+      icon: Archive,
+      show: staffCan(staff, "editRecords"),
     },
     {
       to: "/settings/appearance" as const,
