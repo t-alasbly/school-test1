@@ -42,7 +42,7 @@ function SettingsHub() {
     {
       to: "/settings/classes" as const,
       title: "تنسيق الصفوف والفصول",
-      body: "مسميات الصفوف (الأول والثاني والثالث متوسط) وعدد الأقسام داخل كل صف مثل أولى/1 حتى أولى/5.",
+      body: "صفوف المدرسة وأقسامها كما في ملف الطلاب. احذف الأقسام الفارغة القديمة من هنا.",
       icon: Layers,
       show: staffCan(staff, "editClasses"),
     },

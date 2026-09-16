@@ -321,6 +321,7 @@ function StudentImport() {
 function StudentExcelForm({ onImported }: { onImported: () => void }) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
+  const [keepEmpty, setKeepEmpty] = useState(false);
   const [mapping, setMapping] = useState<StudentMapping>({
     name: "",
     parentPhone: "",
@@ -330,10 +331,14 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
 
   const mutation = useMutation({
     mutationFn: (payload: Parameters<typeof importStudents>[0]["data"]["rows"]) =>
-      importStudents({ data: { rows: payload } }),
+      importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty } }),
     onSuccess: (result) => {
+      const extra =
+        result.removedClasses || result.removedStages
+          ? ` — أُزيل ${result.removedClasses ?? 0} قسماً فارغاً قديماً`
+          : "";
       toast.success(
-        `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز`,
+        `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز${extra}`,
       );
       onImported();
     },
@@ -373,7 +378,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4">
       <DropZone
-        hint="الأعمدة المتوقعة: الاسم، جوال ولي الأمر، المرحلة، الفصل"
+        hint="الأعمدة: الاسم، جوال ولي الأمر، المرحلة/الصف، الفصل. يُعتمد تقسيم الملف وتُحذف الأقسام الفارغة القديمة."
         onFile={onFile}
       />
       {headers.length > 0 ? (
@@ -396,6 +401,15 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             rows={preview.map((row) => [row.name, row.parentPhone, row.stageName, row.className])}
           />
           <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد</p>
+          <label className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={keepEmpty}
+              onChange={(e) => setKeepEmpty(e.target.checked)}
+            />
+            الإبقاء على الأقسام الفارغة من التقسيم القديم
+          </label>
           <Button
             disabled={mutation.isPending || !mapping.name || !mapping.stageName || !mapping.className}
             onClick={() => mutation.mutate(mappedRows())}

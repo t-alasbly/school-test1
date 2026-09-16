@@ -15,6 +15,7 @@ import {
   deleteClassRow,
   deleteStage,
   listClassStructure,
+  pruneEmptyDivisionsFn,
   repairClassStructureFn,
   updateClassRow,
   updateStage,
@@ -71,6 +72,16 @@ function ClassesSettings() {
       onSaved(res.stages);
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التطبيق"),
+  });
+
+  const pruneMutation = useMutation({
+    mutationFn: () => pruneEmptyDivisionsFn(),
+    onSuccess: (res) => {
+      const n = (res.removedClasses ?? 0) + (res.removedStages ?? 0);
+      toast.success(n ? `حُذف ${res.removedClasses ?? 0} قسماً فارغاً` : "لا توجد أقسام فارغة");
+      onSaved(res.stages);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
   });
 
   const mergeMutation = useMutation({
@@ -162,7 +173,7 @@ function ClassesSettings() {
         <SettingsBack />
         <h1 className="text-3xl font-semibold tracking-tight">تنسيق الصفوف والفصول</h1>
         <p className="text-sm text-fg-muted">
-          المسميات الرئيسية مثل الصف الأول متوسط، وداخل كل صف الأقسام ١ و٢ و٣ و٤ و٥ فتظهر بالشكل أولى/1.
+          التقسيم يظهر كما في ملف الطلاب: الصف ثم الفصل. الأقسام الفارغة من التقسيم القديم لا تظهر في الفصول والغياب بعد رفع الملف.
         </p>
       </div>
 
@@ -181,6 +192,18 @@ function ClassesSettings() {
           disabled={mergeMutation.isPending}
         >
           دمج الفصول المكررة
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            if (window.confirm("حذف كل الأقسام والصفوف التي لا طلاب فيها؟ التقسيم يبقى كما في أسماء الطلاب الحالية.")) {
+              pruneMutation.mutate();
+            }
+          }}
+          disabled={pruneMutation.isPending}
+        >
+          حذف الأقسام الفارغة
         </Button>
       </div>
 

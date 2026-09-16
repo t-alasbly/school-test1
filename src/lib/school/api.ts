@@ -438,6 +438,7 @@ async function listClassOptions(sql, schoolId) {
     from classes c
     join stages st on st.id = c.stage_id
     where c.school_id = ${schoolId}
+      and exists (select 1 from students s where s.class_id = c.id)
     order by st.sort_order, c.sort_order
   `).map((r) => ({
 		id: r.id,
@@ -617,7 +618,7 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 	if (!school) throw new Error("المدرسة غير موجودة");
 	const pending = staff.role === "pending";
 	const hideOthers = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
-	const stages = pending ? [] : await listStageSummaries(sql, school.id, hideOthers ? staff.user_id : void 0);
+	const stages = pending ? [] : (await listStageSummaries(sql, school.id, hideOthers ? staff.user_id : void 0)).filter((s) => s.studentCount > 0);
 	const classes = pending ? [] : await listClassOptions(sql, school.id);
 	if (!pending) {
 		await ensureBehaviorTypes(sql, school.id);
@@ -1120,6 +1121,7 @@ export const getReport = createServerFn({ method: "POST" }).middleware([authMidd
       from classes c
       join stages st on st.id = c.stage_id
       where c.school_id = ${staff.school_id}
+        and exists (select 1 from students s where s.class_id = c.id)
       order by st.sort_order, c.sort_order
     `;
 	const studentList = (await sql`
@@ -1351,6 +1353,27 @@ async function mergeDuplicateStages(sql, schoolId) {
 	if (merged) await mergeDuplicateClasses(sql, schoolId);
 	return merged;
 }
+async function pruneEmptyDivisions(sql, schoolId, keepClassIds) {
+	const keep = keepClassIds instanceof Set ? keepClassIds : null;
+	const classes = await sql`select id from classes where school_id = ${schoolId}`;
+	let removedClasses = 0;
+	for (const c of classes) {
+		if (keep && keep.has(c.id)) continue;
+		const n = (await sql`select count(*)::int as n from students where class_id = ${c.id}`)[0]?.n ?? 0;
+		if (n > 0) continue;
+		await sql`delete from classes where id = ${c.id} and school_id = ${schoolId}`;
+		removedClasses += 1;
+	}
+	const stages = await sql`select id from stages where school_id = ${schoolId}`;
+	let removedStages = 0;
+	for (const s of stages) {
+		const n = (await sql`select count(*)::int as n from classes where stage_id = ${s.id}`)[0]?.n ?? 0;
+		if (n > 0) continue;
+		await sql`delete from stages where id = ${s.id} and school_id = ${schoolId}`;
+		removedStages += 1;
+	}
+	return { removedClasses, removedStages };
+}
 async function repairClassStructure(sql, schoolId) {
 	const stagesMerged = await mergeDuplicateStages(sql, schoolId);
 	const classesMerged = await mergeDuplicateClasses(sql, schoolId);
@@ -1382,9 +1405,10 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 	parentPhone: z.string(),
 	stageName: z.string(),
 	className: z.string()
-})).max(800) })).handler(async ({ context, data }) => {
+})).max(800), replaceEmpty: z.boolean().optional() })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	await repairClassStructure(sql, staff.school_id);
+	const usedClassIds = new Set();
 	const stageList = (await sql`
       select id, name, short_name, sort_order from stages
       where school_id = ${staff.school_id}
@@ -1454,6 +1478,7 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 			};
 			classList.push(cls);
 		}
+		usedClassIds.add(cls.id);
 		let existing = (await sql`
         select id from students
         where school_id = ${staff.school_id} and class_id = ${cls.id} and name = ${name}
@@ -1490,10 +1515,14 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 		}
 	}
 	await repairClassStructure(sql, staff.school_id);
+	let pruned = { removedClasses: 0, removedStages: 0 };
+	if (data.replaceEmpty !== false) pruned = await pruneEmptyDivisions(sql, staff.school_id, usedClassIds);
 	return {
 		inserted,
 		updated,
-		skipped
+		skipped,
+		removedClasses: pruned.removedClasses,
+		removedStages: pruned.removedStages
 	};
 });
 async function insertCredentialStaff(sql, opts) {
@@ -3246,6 +3275,11 @@ export const listClassStructure = createServerFn({ method: "GET" }).middleware([
 export const repairClassStructureFn = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editClasses");
 	const result = await repairClassStructure(sql, staff.school_id);
+	return { ...result, stages: await classStructurePayload(sql, staff.school_id) };
+});
+export const pruneEmptyDivisionsFn = createServerFn({ method: "POST" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff } = await requirePerm(context.userId, "editClasses");
+	const result = await pruneEmptyDivisions(sql, staff.school_id, null);
 	return { ...result, stages: await classStructurePayload(sql, staff.school_id) };
 });
 
