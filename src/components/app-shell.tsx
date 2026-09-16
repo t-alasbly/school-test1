@@ -16,7 +16,7 @@ import { useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { ROLE_LABEL, todayLabel, schoolLogoSrc } from "@/lib/school/constants";
-import { staffCan } from "@/lib/school/permissions";
+import { pagePermissionForPath, staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -53,6 +53,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const schoolLogo = schoolLogoSrc(school.logoUrl);
   const items = NAV.filter((item) => {
     if (staff.role === "pending") return false;
+    const pageKey = pagePermissionForPath(item.to);
+    if (pageKey && !staffCan(staff, pageKey)) return false;
     if (item.to === "/staff") return staffCan(staff, "editStaff");
     if (item.to === "/admin") {
       return (

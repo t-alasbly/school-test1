@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, setStaffActive, updateSchool, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
 import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
-import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
+import { PAGE_PERMISSION_META, PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
 import type { StaffRole } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -519,8 +519,10 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               <p className="text-sm text-fg-muted">
                 اختر المسموح به لهذا الموظف ثم أغلق النافذة. لا تظهر صلاحيات الجميع في القائمة.
               </p>
-              <div className="grid grid-cols-1 gap-1.5">
-                {PERMISSION_META.map((item) => {
+              <div>
+                <p className="mb-2 text-sm font-semibold">صلاحيات العمليات</p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {PERMISSION_META.map((item) => {
                   const live = (query.data ?? []).find((m) => m.userId === permsFor.userId);
                   const on = (live ?? permsFor).permissions[item.key];
                   return (
@@ -559,7 +561,57 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                       </span>
                     </button>
                   );
-                })}
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 mt-4">
+                  <p className="text-sm font-semibold">صلاحيات ظهور الصفحات</p>
+                  <p className="mt-1 text-xs text-fg-muted">إخفاء الصفحة من القائمة ومنع فتحها مباشرة بالرابط. تغيير ظهور الصفحة لا يمنح صلاحيات التعديل بداخلها.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {PAGE_PERMISSION_META.map((item) => {
+                    const live = (query.data ?? []).find((m) => m.userId === permsFor.userId);
+                    const on = (live ?? permsFor).permissions[item.key];
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={on}
+                        disabled={permMutation.isPending}
+                        onClick={() =>
+                          permMutation.mutate({
+                            userId: permsFor.userId,
+                            permissions: { ...(live ?? permsFor).permissions, [item.key]: !on },
+                          })
+                        }
+                        className={cn(
+                          "flex min-h-12 items-start gap-2 rounded-[var(--radius-sm)] border px-2.5 py-2 text-right transition-colors",
+                          on
+                            ? "border-primary bg-primary/10 text-fg"
+                            : "border-border bg-bg-elevated text-fg-muted",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-[4px] border",
+                            on
+                              ? "border-primary bg-primary text-primary-fg"
+                              : "border-border-strong bg-card",
+                          )}
+                        >
+                          {on ? <Check className="size-3.5" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium leading-5">{item.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{item.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <Button type="button" className="w-full" variant="secondary" onClick={() => setPermsFor(null)}>
                 تم

@@ -11,6 +11,17 @@ export const PERMISSION_KEYS = [
   "counseling",
   "editRecords",
   "editClasses",
+  "viewClassesPage",
+  "viewStudentAffairsPage",
+  "viewAttendancePage",
+  "viewCounselingPage",
+  "viewReportsPage",
+  "viewMessagesPage",
+  "viewFormsPage",
+  "viewArchivePage",
+  "viewStaffPage",
+  "viewImportPage",
+  "viewSettingsPage",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -84,6 +95,48 @@ export const PERMISSION_META: {
   },
 ];
 
+export const PAGE_PERMISSION_META: {
+  key: PermissionKey;
+  label: string;
+  short: string;
+  hint: string;
+}[] = [
+  { key: "viewClassesPage", label: "الفصول", short: "الفصول", hint: "صفحة المراحل والفصول وملفات الطلاب" },
+  { key: "viewStudentAffairsPage", label: "شؤون الطلاب", short: "شؤون الطلاب", hint: "لوحة الإجراءات والمخالفات وشؤون الطلاب" },
+  { key: "viewAttendancePage", label: "الغياب اليومي", short: "الغياب", hint: "تسجيل ومتابعة الغياب والتأخر اليومي" },
+  { key: "viewCounselingPage", label: "الإرشاد الطلابي", short: "الإرشاد", hint: "الإحالات والحالات ومتابعة الإرشاد" },
+  { key: "viewReportsPage", label: "التقارير", short: "التقارير", hint: "التقارير والكشوف والإحصاءات" },
+  { key: "viewMessagesPage", label: "الرسائل الجماعية", short: "الرسائل", hint: "إعداد وإرسال الرسائل الجماعية" },
+  { key: "viewFormsPage", label: "طباعة النماذج", short: "النماذج", hint: "نماذج الطباعة والتعبئة" },
+  { key: "viewArchivePage", label: "الأرشيف", short: "الأرشيف", hint: "السجلات المؤرشفة والتعديلات" },
+  { key: "viewStaffPage", label: "الموظفون", short: "الموظفون", hint: "إدارة المستخدمين والموظفين وصلاحياتهم" },
+  { key: "viewImportPage", label: "الاستيراد", short: "الاستيراد", hint: "استيراد بيانات الطلاب والملفات" },
+  { key: "viewSettingsPage", label: "الإعدادات", short: "الإعدادات", hint: "إعدادات المدرسة والتطبيق والصلاحيات" },
+];
+
+export const PAGE_PERMISSION_BY_PATH: Record<string, PermissionKey> = {
+  "/": "viewClassesPage",
+  "/admin": "viewStudentAffairsPage",
+  "/attendance": "viewAttendancePage",
+  "/counseling": "viewCounselingPage",
+  "/reports": "viewReportsPage",
+  "/messages": "viewMessagesPage",
+  "/forms": "viewFormsPage",
+  "/archive": "viewArchivePage",
+  "/staff": "viewStaffPage",
+  "/import": "viewImportPage",
+  "/settings": "viewSettingsPage",
+};
+
+export function pagePermissionForPath(pathname: string): PermissionKey | null {
+  if (pathname.startsWith("/stage/") || pathname.startsWith("/class/")) return "viewClassesPage";
+  if (pathname.startsWith("/settings")) return "viewSettingsPage";
+  for (const [path, key] of Object.entries(PAGE_PERMISSION_BY_PATH)) {
+    if (pathname === path || pathname.startsWith(`${path}/`)) return key;
+  }
+  return null;
+}
+
 const ALL_ON: StaffPermissions = {
   editStudents: true,
   sendMessages: true,
@@ -95,6 +148,17 @@ const ALL_ON: StaffPermissions = {
   counseling: true,
   editRecords: true,
   editClasses: true,
+  viewClassesPage: true,
+  viewStudentAffairsPage: true,
+  viewAttendancePage: true,
+  viewCounselingPage: true,
+  viewReportsPage: true,
+  viewMessagesPage: true,
+  viewFormsPage: true,
+  viewArchivePage: true,
+  viewStaffPage: true,
+  viewImportPage: true,
+  viewSettingsPage: true,
 };
 
 const ALL_OFF: StaffPermissions = {
@@ -108,6 +172,17 @@ const ALL_OFF: StaffPermissions = {
   counseling: false,
   editRecords: false,
   editClasses: false,
+  viewClassesPage: true,
+  viewStudentAffairsPage: false,
+  viewAttendancePage: false,
+  viewCounselingPage: false,
+  viewReportsPage: true,
+  viewMessagesPage: false,
+  viewFormsPage: true,
+  viewArchivePage: false,
+  viewStaffPage: false,
+  viewImportPage: false,
+  viewSettingsPage: true,
 };
 
 export function defaultPermissions(
@@ -127,6 +202,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: true,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: true,
+      viewAttendancePage: false,
+      viewCounselingPage: true,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: true,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "school_vp") {
@@ -141,6 +227,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: true,
       editClasses: true,
+      viewClassesPage: true,
+      viewStudentAffairsPage: true,
+      viewAttendancePage: true,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: true,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "teachers_vp") {
@@ -155,6 +252,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: false,
       editClasses: true,
+      viewClassesPage: true,
+      viewStudentAffairsPage: true,
+      viewAttendancePage: false,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: true,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "student_counselor") {
@@ -169,6 +277,17 @@ export function defaultPermissions(
       counseling: true,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: false,
+      viewCounselingPage: true,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "health_counselor") {
@@ -183,6 +302,17 @@ export function defaultPermissions(
       counseling: true,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: true,
+      viewCounselingPage: true,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "activity_leader") {
@@ -197,6 +327,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: true,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "security") {
@@ -211,6 +352,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: true,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "admin_assistant" || role === "admin_staff") {
@@ -225,6 +377,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: true,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   if (role === "teacher") {
@@ -239,6 +402,17 @@ export function defaultPermissions(
       counseling: false,
       editRecords: false,
       editClasses: false,
+      viewClassesPage: true,
+      viewStudentAffairsPage: false,
+      viewAttendancePage: false,
+      viewCounselingPage: false,
+      viewReportsPage: true,
+      viewMessagesPage: true,
+      viewFormsPage: true,
+      viewArchivePage: false,
+      viewStaffPage: false,
+      viewImportPage: false,
+      viewSettingsPage: true,
     };
   }
   return { ...ALL_OFF };
