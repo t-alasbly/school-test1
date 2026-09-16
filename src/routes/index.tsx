@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Clock3,
   HeartHandshake,
+  MessageCircle,
 } from "lucide-react";
 import { AppGate } from "@/components/app-gate";
 import { ROLE_LABEL, schoolLogoSrc } from "@/lib/school/constants";
@@ -43,6 +44,7 @@ function WelcomeDesk() {
   const schoolLogo = schoolLogoSrc(school.logoUrl);
   const counsel = staffCan(staff, "counseling");
   const classes = staffCan(staff, "viewClasses");
+  const canMessage = staffCan(staff, "sendMessages");
 
   const cards = [
     {
@@ -146,6 +148,23 @@ function WelcomeDesk() {
         })}
       </div>
 
+      {canMessage ? (
+        <Link
+          to="/messages"
+          className="flex min-h-16 items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)] hover:border-primary"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-[var(--radius-sm)] bg-primary/10 text-primary">
+              <MessageCircle className="size-5" />
+            </span>
+            <span>
+              <span className="block font-semibold">رسائل جماعية</span>
+              <span className="block text-xs text-fg-muted">واتساب لفصل أو صف أو غائبي اليوم ومتأخريه</span>
+            </span>
+          </span>
+          <span className="text-sm text-primary">فتح</span>
+        </Link>
+      ) : null}
       {classes ? (
         <Link
           to="/classes"

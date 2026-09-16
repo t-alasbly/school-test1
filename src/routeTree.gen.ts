@@ -19,6 +19,7 @@ import { Route as DeskRouteImport } from './routes/desk'
 import { Route as FormsRouteImport } from './routes/forms'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as PrintRouteImport } from './routes/print'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -106,6 +107,11 @@ const ImportRoute = ImportRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MessagesRoute = MessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrintRoute = PrintRouteImport.update({
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
+  '/messages': typeof MessagesRoute
   '/print': typeof PrintRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -357,6 +364,7 @@ export interface FileRoutesByTo {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
+  '/messages': typeof MessagesRoute
   '/reports': typeof ReportsRoute
   '/staff': typeof StaffRoute
   '/admin/absence': typeof AdminAbsenceRoute
@@ -406,6 +414,7 @@ export interface FileRoutesById {
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
+  '/messages': typeof MessagesRoute
   '/print': typeof PrintRouteWithChildren
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -458,6 +467,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
+    | '/messages'
     | '/print'
     | '/reports'
     | '/settings'
@@ -505,6 +515,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
+    | '/messages'
     | '/reports'
     | '/staff'
     | '/admin/absence'
@@ -553,6 +564,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/import'
     | '/login'
+    | '/messages'
     | '/print'
     | '/reports'
     | '/settings'
@@ -604,6 +616,7 @@ export interface RootRouteChildren {
   FormsRoute: typeof FormsRoute
   ImportRoute: typeof ImportRoute
   LoginRoute: typeof LoginRoute
+  MessagesRoute: typeof MessagesRoute
   PrintRoute: typeof PrintRouteWithChildren
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -683,6 +696,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/messages': {
+      id: '/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof MessagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/print': {
@@ -1071,6 +1091,7 @@ const rootRouteChildren: RootRouteChildren = {
   FormsRoute: FormsRoute,
   ImportRoute: ImportRoute,
   LoginRoute: LoginRoute,
+  MessagesRoute: MessagesRoute,
   PrintRoute: PrintRouteWithChildren,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRouteWithChildren,

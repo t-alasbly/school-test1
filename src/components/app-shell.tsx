@@ -5,6 +5,7 @@ import {
   HeartHandshake,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Printer,
   Settings,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const NAV: {
     icon: LayoutDashboard,
   },
   { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck },
+  { to: "/messages", label: "الرسائل", icon: MessageCircle },
   { to: "/counseling", label: "الإرشاد", icon: HeartHandshake },
   { to: "/print", label: "الطباعة", icon: Printer },
   { to: "/settings", label: "الإعدادات", icon: Settings },
@@ -61,6 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (item.to === "/classes") return staffCan(staff, "viewClasses");
     if (item.to === "/admin") return canFollowup(staff);
     if (item.to === "/attendance") return staffCan(staff, "dailyAttendance");
+    if (item.to === "/messages") return staffCan(staff, "sendMessages");
     if (item.to === "/counseling") return staffCan(staff, "counseling");
     if (item.to === "/print") return staffCan(staff, "viewPrint");
     return true;

@@ -3846,6 +3846,62 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 		}))
 	};
 });
+export const listMessageRecipients = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	scope: z.enum(["all", "stage", "class", "absence", "late"]),
+	stageId: z.number().optional(),
+	classId: z.number().optional(),
+	day: z.string().max(12).optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	if (!mappedPerms(staff, school).sendMessages) throw new Error("إرسال الرسائل غير مفعّل لحسابك");
+	const day = data.day?.trim() || todayISODate();
+	const params = [staff.school_id];
+	let where = "s.school_id = $1";
+	if (data.scope === "class") {
+		if (!data.classId) throw new Error("حدد الفصل");
+		params.push(data.classId);
+		where += ` and s.class_id = $${params.length}`;
+	} else if (data.scope === "stage") {
+		if (!data.stageId) throw new Error("حدد الصف");
+		params.push(data.stageId);
+		where += ` and c.stage_id = $${params.length}`;
+	} else if (data.classId) {
+		params.push(data.classId);
+		where += ` and s.class_id = $${params.length}`;
+	} else if (data.stageId) {
+		params.push(data.stageId);
+		where += ` and c.stage_id = $${params.length}`;
+	}
+	let joinAtt = "";
+	if (data.scope === "absence" || data.scope === "late") {
+		params.push(day);
+		const dayIdx = params.length;
+		params.push(data.scope);
+		joinAtt = `join daily_attendance a on a.student_id = s.id and a.school_id = s.school_id and a.day = $${dayIdx}::date and a.kind = $${params.length}`;
+	}
+	const rows = await sql.query(`select s.id, s.name, s.class_id, coalesce(s.parent_phone, '') as parent_phone,
+      c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
+    from students s
+    join classes c on c.id = s.class_id
+    join stages st on st.id = c.stage_id
+    ${joinAtt}
+    where ${where}
+    order by st.sort_order, c.sort_order, s.name`, params);
+	return {
+		day,
+		students: rows.map((s) => ({
+			id: s.id,
+			name: s.name,
+			classId: s.class_id,
+			stageId: s.stage_id,
+			className: s.class_name,
+			stageName: s.stage_name,
+			shortName: s.short_name,
+			parentPhone: revealPhone(staff, school, s.parent_phone),
+			label: classLabel(s.short_name, s.class_name)
+		}))
+	};
+});
 export const getDeskNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	status: z.enum(["open", "closed", "all"]).optional(),
 	referred: z.boolean().optional()

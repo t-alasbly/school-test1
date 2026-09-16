@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -65,10 +65,13 @@ function MessagesSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">الرسائل</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">قوالب واتساب</h1>
         <p className="text-sm text-fg-muted">
           المتغيرات: {"{name}"} {"{class}"} {"{date}"} {"{weekday}"} {"{school}"} {"{details}"} {"{session}"}
         </p>
+        <Link to="/messages" className="mt-2 inline-flex text-sm font-medium text-primary">
+          إلى الرسائل الجماعية
+        </Link>
       </div>
       {KEYS.map((key) => (
         <Card key={key}>

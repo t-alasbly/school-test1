@@ -124,9 +124,16 @@ function SettingsHub() {
       show: admin || staffCan(staff, "counseling") || staffCan(staff, "acceptImprovements"),
     },
     {
+      to: "/messages" as const,
+      title: "رسائل جماعية",
+      body: "إرسال واتساب لفصل أو صف كامل أو غائبي اليوم ومتأخريه، بالقالب الذي تختاره.",
+      icon: MessageCircle,
+      show: staffCan(staff, "sendMessages"),
+    },
+    {
       to: "/settings/messages" as const,
-      title: "الرسائل",
-      body: "قوالب واتساب للغياب والتأخر والواجب والسلوك، مع رسائل عامة مخصصة تُضاف للقائمة.",
+      title: "قوالب واتساب",
+      body: "نصوص الغياب والتأخر والواجب والسلوك، مع رسائل عامة مخصصة تُضاف للقائمة.",
       icon: MessageCircle,
       show: admin,
     },
