@@ -17,7 +17,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     queryFn: () => getWorkspace(),
     enabled: Boolean(user),
   });
-
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   if (isPending) return <BootScreen />;
   if (!user) return <RedirectToSignIn />;
   if (workspace.isPending) return <BootScreen />;
@@ -37,7 +37,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  
 
   if (workspace.data.staff.role !== "admin") {
     const pagePermission = pagePermissionForPath(pathname);
