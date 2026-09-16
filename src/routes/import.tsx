@@ -4,6 +4,7 @@ import { ChevronDown, Search, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
+import { SettingsBack } from "@/components/settings-back";
 import { StaffManager } from "@/components/staff-manager";
 import {
   AddStudentButton,
@@ -90,6 +91,7 @@ function ImportBody() {
   return (
     <div className="space-y-6">
       <header>
+        <SettingsBack />
         <p className="text-sm text-fg-muted">
           كل البيانات المضافة ظاهرة هنا: الفصول والطلاب والمعلمون — مع التعديل والحذف والاستيراد من إكسل
         </p>

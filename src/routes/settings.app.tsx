@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getReport, updateSchool } from "@/lib/school/api";
+import { updateSchool } from "@/lib/school/api";
 import { APP_NAME, DEFAULT_APP_PHRASE } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 
@@ -28,7 +28,6 @@ function AppIconSettings() {
   const [printSchoolLogo, setPrintSchoolLogo] = useState(Boolean(school.printSchoolLogo));
   const [tagline, setTagline] = useState(school.tagline ?? "");
   const [logoBusy, setLogoBusy] = useState(false);
-  const [backupBusy, setBackupBusy] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -48,7 +47,10 @@ function AppIconSettings() {
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
   });
 
-  async function onLogoFile(file: File | undefined, setter: (value: string) => void) {
+  async function onLogoFile(
+    file: File | undefined,
+    setter: (value: string) => void,
+  ) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("اختر صورة للشعار (PNG أو JPG)");
@@ -62,37 +64,6 @@ function AppIconSettings() {
       toast.error(err instanceof Error ? err.message : "تعذر قراءة الشعار");
     } finally {
       setLogoBusy(false);
-    }
-  }
-
-  async function downloadBackup() {
-    setBackupBusy(true);
-    try {
-      const report = await getReport({ data: {} });
-      const backup = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        exportedBy: staff.displayName,
-        school,
-        data: report,
-        printTemplates: JSON.parse(localStorage.getItem("reports.rosterTemplates") || "[]"),
-        printColumnWidths: JSON.parse(localStorage.getItem("reports.rosterColumnWidths") || "{}"),
-        activity: JSON.parse(localStorage.getItem("school.activityLog") || "[]"),
-      };
-      const blob = new Blob([JSON.stringify(backup, null, 2)], {
-        type: "application/json;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `نسخة-احتياطية-${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success("تم تنزيل النسخة الاحتياطية");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر إنشاء النسخة الاحتياطية");
-    } finally {
-      setBackupBusy(false);
     }
   }
 
@@ -111,8 +82,7 @@ function AppIconSettings() {
         <SettingsBack />
         <h1 className="text-3xl font-semibold tracking-tight">أيقونة التطبيق والشعارات</h1>
         <p className="text-sm text-fg-muted">
-          أيقونة البرنامج ثابتة. شعار المدرسة يظهر عند التشغيل وفي رأس الصفحة، وشعار الرؤية أو المئة
-          عام بجانب الوزارة في الخطابات.
+          أيقونة البرنامج ثابتة. شعار المدرسة يظهر عند التشغيل وفي رأس الصفحة، وشعار الرؤية أو المئة عام بجانب الوزارة في الخطابات.
         </p>
       </div>
       <Card>
@@ -126,12 +96,8 @@ function AppIconSettings() {
             </span>
             <span className="min-w-0">
               <span className="block font-semibold">{APP_NAME}</span>
-              <span className="block text-sm text-fg-muted">
-                {tagline.trim() || DEFAULT_APP_PHRASE}
-              </span>
-              <span className="block text-xs text-fg-subtle">
-                هذه أيقونة البرنامج الخارجية — لا تُخلط بشعار المدرسة
-              </span>
+              <span className="block text-sm text-fg-muted">{tagline.trim() || DEFAULT_APP_PHRASE}</span>
+              <span className="block text-xs text-fg-subtle">هذه أيقونة البرنامج الخارجية — لا تُخلط بشعار المدرسة</span>
             </span>
           </div>
         </CardContent>
@@ -193,9 +159,7 @@ function AppIconSettings() {
           <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
             <div className="flex h-16 items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] bg-white px-2">
               <img src="/moe-logo.jpg" alt="" className="h-12 w-auto object-contain" />
-              {extraLogoUrl ? (
-                <img src={extraLogoUrl} alt="" className="h-12 w-auto object-contain" />
-              ) : null}
+              {extraLogoUrl ? <img src={extraLogoUrl} alt="" className="h-12 w-auto object-contain" /> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-2">
               <Label htmlFor="extra-logo">رفع شعار الرؤية</Label>
@@ -206,12 +170,7 @@ function AppIconSettings() {
                 disabled={logoBusy}
                 onChange={(e) => void onLogoFile(e.target.files?.[0], setExtraLogoUrl)}
               />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => setExtraLogoUrl("")}
-              >
+              <Button type="button" size="sm" variant="secondary" onClick={() => setExtraLogoUrl("")}>
                 إزالة شعار الرؤية
               </Button>
             </div>
@@ -235,25 +194,6 @@ function AppIconSettings() {
           </div>
           <Button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
             حفظ الشعارات والعبارة
-          </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>النسخ الاحتياطي وسجل النشاط</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-fg-muted">
-            ينزّل ملفًا محليًا يضم بيانات التقارير، إعدادات المدرسة، قوالب الطباعة، ومقاسات الأعمدة
-            وسجل النشاط المحلي.
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={backupBusy}
-            onClick={() => void downloadBackup()}
-          >
-            {backupBusy ? "جارٍ تجهيز النسخة…" : "تنزيل نسخة احتياطية"}
           </Button>
         </CardContent>
       </Card>

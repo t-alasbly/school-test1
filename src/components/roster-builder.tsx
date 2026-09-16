@@ -1,0 +1,413 @@
+import { ArrowDown, ArrowUp, Download, Plus, Save } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+export const DEFAULT_COL_MM = {
+  seq: 10,
+  name: 42,
+  class: 22,
+  stage: 18,
+  phone: 28,
+} as const;
+
+export const EXTRA_DEFAULT_MM = 20;
+export const COL_MM_MIN = 8;
+export const COL_MM_MAX = 80;
+
+export type BuiltinCol = keyof typeof DEFAULT_COL_MM;
+export type ExtraCol = { id: string; title: string; width: number };
+export type RosterPayload = {
+  title: string;
+  showPhone: boolean;
+  showClass: boolean;
+  showStage: boolean;
+  extraCols: ExtraCol[];
+  widths: Record<BuiltinCol, number>;
+  order: string[];
+};
+
+export type RosterTemplate = {
+  id: number;
+  name: string;
+  payload: RosterPayload;
+  public?: boolean;
+};
+
+const BUILTIN_META: { id: BuiltinCol; title: string; optional?: boolean }[] = [
+  { id: "seq", title: "م" },
+  { id: "name", title: "اسم الطالب" },
+  { id: "stage", title: "الصف / المرحلة", optional: true },
+  { id: "class", title: "الفصل", optional: true },
+  { id: "phone", title: "جوال ولي الأمر", optional: true },
+];
+
+export function clampMm(value: number, fallback = EXTRA_DEFAULT_MM) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(COL_MM_MAX, Math.max(COL_MM_MIN, Math.round(value)));
+}
+
+export function defaultOrder(extraCols: ExtraCol[], show: { stage: boolean; class: boolean; phone: boolean }) {
+  const ids = ["seq", "name"];
+  if (show.stage) ids.push("stage");
+  if (show.class) ids.push("class");
+  if (show.phone) ids.push("phone");
+  for (const col of extraCols) ids.push(col.id);
+  return ids;
+}
+
+export function mergeOrder(order: string[] | undefined, extraCols: ExtraCol[], show: { stage: boolean; class: boolean; phone: boolean }) {
+  const extras = new Set(extraCols.map((c) => c.id));
+  const allowed = new Set<string>(["seq", "name"]);
+  if (show.stage) allowed.add("stage");
+  if (show.class) allowed.add("class");
+  if (show.phone) allowed.add("phone");
+  for (const id of extras) allowed.add(id);
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const id of order ?? []) {
+    if (!allowed.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    next.push(id);
+  }
+  for (const id of defaultOrder(extraCols, show)) {
+    if (seen.has(id)) continue;
+    next.push(id);
+  }
+  return next;
+}
+
+export type VisibleCol = { id: string; title: string; width: number; builtin?: BuiltinCol };
+
+export function visibleColumns(payload: Pick<RosterPayload, "extraCols" | "widths" | "order" | "showClass" | "showStage" | "showPhone">): VisibleCol[] {
+  const show = { stage: payload.showStage, class: payload.showClass, phone: payload.showPhone };
+  const order = mergeOrder(payload.order, payload.extraCols, show);
+  const extras = new Map(payload.extraCols.map((c) => [c.id, c]));
+  return order
+    .map((id) => {
+      const builtin = BUILTIN_META.find((c) => c.id === id);
+      if (builtin) {
+        return {
+          id,
+          title: builtin.title,
+          width: clampMm(payload.widths[builtin.id], DEFAULT_COL_MM[builtin.id]),
+          builtin: builtin.id,
+        };
+      }
+      const extra = extras.get(id);
+      if (!extra) return null;
+      return {
+        id,
+        title: extra.title.trim() || "عمود",
+        width: clampMm(extra.width, EXTRA_DEFAULT_MM),
+      };
+    })
+    .filter((c): c is VisibleCol => Boolean(c));
+}
+
+export function RosterBuilder({
+  title,
+  onTitle,
+  showPhone,
+  showClass,
+  showStage,
+  extraCols,
+  widths,
+  order,
+  onChange,
+  templateName,
+  onTemplateName,
+  templates,
+  activeId,
+  onApply,
+  onSave,
+  onSaveAs,
+  onDelete,
+  onPublish,
+  isAdmin,
+  saving,
+  onExcel,
+}: {
+  title: string;
+  onTitle: (v: string) => void;
+  showPhone: boolean;
+  showClass: boolean;
+  showStage: boolean;
+  extraCols: ExtraCol[];
+  widths: Record<BuiltinCol, number>;
+  order: string[];
+  onChange: (patch: Partial<RosterPayload>) => void;
+  templateName: string;
+  onTemplateName: (v: string) => void;
+  templates: RosterTemplate[];
+  activeId: number | null;
+  onApply: (tpl: RosterTemplate) => void;
+  onSave: () => void;
+  onSaveAs: () => void;
+  onDelete: (id: number) => void;
+  onPublish?: (id: number) => void;
+  isAdmin: boolean;
+  saving?: boolean;
+  onExcel: () => void;
+}) {
+  const show = { stage: showStage, class: showClass, phone: showPhone };
+  const cols = visibleColumns({ extraCols, widths, order, showClass, showStage, showPhone });
+  const merged = mergeOrder(order, extraCols, show);
+
+  function setWidth(id: string, raw: string) {
+    const n = clampMm(Number(raw), EXTRA_DEFAULT_MM);
+    if (id === "seq" || id === "name" || id === "class" || id === "stage" || id === "phone") {
+      onChange({ widths: { ...widths, [id]: n } });
+      return;
+    }
+    onChange({
+      extraCols: extraCols.map((c) => (c.id === id ? { ...c, width: n } : c)),
+    });
+  }
+
+  function move(id: string, dir: -1 | 1) {
+    const idx = merged.indexOf(id);
+    const nextIdx = idx + dir;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= merged.length) return;
+    const next = [...merged];
+    const [item] = next.splice(idx, 1);
+    next.splice(nextIdx, 0, item);
+    onChange({ order: next });
+  }
+
+  function addCol() {
+    if (extraCols.length >= 24) return;
+    const id = `c${Date.now()}`;
+    const nextExtras = [...extraCols, { id, title: "", width: EXTRA_DEFAULT_MM }];
+    onChange({ extraCols: nextExtras, order: [...merged, id] });
+  }
+
+  function removeCol(id: string) {
+    onChange({
+      extraCols: extraCols.filter((c) => c.id !== id),
+      order: merged.filter((x) => x !== id),
+    });
+  }
+
+  function resetWidths() {
+    onChange({
+      widths: { ...DEFAULT_COL_MM },
+      extraCols: extraCols.map((c) => ({ ...c, width: EXTRA_DEFAULT_MM })),
+    });
+    toast.message("أُعيدت المقاسات الافتراضية");
+  }
+
+  return (
+    <div className="no-print space-y-3">
+      <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <Label htmlFor="roster-title" className="text-sm">
+          بيانات الطلاب
+        </Label>
+        <Input
+          id="roster-title"
+          className="mt-2"
+          value={title}
+          onChange={(e) => onTitle(e.target.value)}
+          placeholder="بيانات الطلاب"
+          maxLength={80}
+        />
+      </div>
+
+      <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">أعمدة إضافية (اسم مختصر لكل عمود)</p>
+            {extraCols.length === 0 ? (
+              <p className="text-xs text-fg-muted">لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.</p>
+            ) : (
+              <p className="text-xs text-fg-muted">يمكنك إضافة حتى 24 عموداً وتحديد عرض كل منها بالملم.</p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="text-sm font-medium text-primary disabled:opacity-40"
+            disabled={extraCols.length >= 24}
+            onClick={addCol}
+          >
+            <span className="inline-flex items-center gap-1">
+              <Plus className="size-4" />
+              إضافة عمود
+            </span>
+          </button>
+        </div>
+        {extraCols.length > 0 ? (
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {extraCols.map((col, i) => (
+              <li key={col.id} className="flex items-center gap-1.5">
+                <Input
+                  value={col.title}
+                  placeholder={`عمود ${i + 1}`}
+                  maxLength={40}
+                  onChange={(e) =>
+                    onChange({
+                      extraCols: extraCols.map((c) => (c.id === col.id ? { ...c, title: e.target.value } : c)),
+                    })
+                  }
+                />
+                <button type="button" className="text-xs text-danger" onClick={() => removeCol(col.id)}>
+                  حذف
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showPhone}
+              onChange={(e) => onChange({ showPhone: e.target.checked })}
+            />
+            جوال ولي الأمر
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showClass}
+              onChange={(e) => onChange({ showClass: e.target.checked })}
+            />
+            الفصل
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showStage}
+              onChange={(e) => onChange({ showStage: e.target.checked })}
+            />
+            الصف / المرحلة
+          </label>
+        </div>
+      </div>
+
+      <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">عرض الأعمدة (مم)</p>
+            <p className="text-xs text-fg-muted">اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.</p>
+          </div>
+          <button type="button" className="text-sm font-medium text-primary" onClick={resetWidths}>
+            إعادة المقاسات الافتراضية
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {cols.map((col) => (
+            <label key={col.id} className="space-y-1 text-xs text-fg-muted">
+              <span className="block truncate">{col.title}</span>
+              <span className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={COL_MM_MIN}
+                  max={COL_MM_MAX}
+                  value={col.width}
+                  onChange={(e) => setWidth(col.id, e.target.value)}
+                />
+                <span>مم</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <p className="text-sm font-semibold">حفظ القالب باسم</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Input
+            value={templateName}
+            onChange={(e) => onTemplateName(e.target.value)}
+            placeholder={isAdmin ? "كشف الفصل الأول" : "اسم قالبك الشخصي"}
+            maxLength={60}
+            className="max-w-xs"
+          />
+          <Button type="button" size="sm" disabled={saving} onClick={onSave}>
+            <Save className="size-4" />
+            حفظ القالب
+          </Button>
+          <Button type="button" size="sm" variant="secondary" disabled={saving} onClick={onSaveAs}>
+            حفظ باسم جديد
+          </Button>
+          <Button type="button" size="sm" variant="secondary" onClick={onExcel}>
+            Excel
+            <Download className="size-4" />
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-fg-muted">
+          القوالب تظهر لجميع المعلمين. إذا صمّمها مدير التطبيق تظهر كقالب البرنامج، ويمكنك تعديلها وحفظها باسم جديد.
+        </p>
+        {templates.length > 0 ? (
+          <ul className="mt-3 space-y-1.5">
+            {templates.map((tpl) => (
+              <li
+                key={tpl.id}
+                className={cn(
+                  "flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-2 text-sm",
+                  activeId === tpl.id ? "border-primary" : "border-border",
+                )}
+              >
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-right font-medium hover:text-primary"
+                  onClick={() => onApply(tpl)}
+                >
+                  {tpl.name}
+                </button>
+                <span className="text-xs text-fg-muted">{tpl.public ? "عام" : "حسابي"}</span>
+                <button type="button" className="text-xs text-primary" onClick={() => onApply(tpl)}>
+                  تطبيق
+                </button>
+                {isAdmin && !tpl.public && onPublish ? (
+                  <button type="button" className="text-xs text-primary" onClick={() => onPublish(tpl.id)}>
+                    تعميم
+                  </button>
+                ) : null}
+                {isAdmin || !tpl.public ? (
+                  <button type="button" className="text-xs text-danger" onClick={() => onDelete(tpl.id)}>
+                    حذف
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
+        <p className="mb-2 text-sm font-semibold">ترتيب الأعمدة</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          {cols.map((col, i) => (
+            <div
+              key={col.id}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-elevated px-2 py-1 text-sm"
+            >
+              <button
+                type="button"
+                className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-muted disabled:opacity-30"
+                disabled={i === cols.length - 1}
+                onClick={() => move(col.id, 1)}
+                aria-label="تحريك لليسار"
+              >
+                <ArrowDown className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-muted disabled:opacity-30"
+                disabled={i === 0}
+                onClick={() => move(col.id, -1)}
+                aria-label="تحريك لليمين"
+              >
+                <ArrowUp className="size-3.5" />
+              </button>
+              <span className="max-w-28 truncate px-1">{col.title}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

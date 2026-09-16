@@ -4,7 +4,6 @@ import {
   Award,
   Gavel,
   HeartPulse,
-  KeyRound,
   Layers,
   MessageCircle,
   Palette,
@@ -13,6 +12,7 @@ import {
   ShieldAlert,
   Smartphone,
   Sprout,
+  Upload,
   UserRound,
   Users,
 } from "lucide-react";
@@ -35,7 +35,7 @@ function SettingsHub() {
     {
       to: "/settings/school" as const,
       title: "بيانات المدرسة",
-      body: "المنطقة وإدارة التعليم واسم المدرسة وأسماء القيادة كما تظهر في الخطابات.",
+      body: "ثلاثة أسطر تُكتب يدوياً لترويسة الخطاب، ثم اسم المدرسة في السطر الأسفل، وأسماء القيادة.",
       icon: School,
       show: admin,
     },
@@ -62,10 +62,17 @@ function SettingsHub() {
     },
     {
       to: "/staff" as const,
-      title: "المعلمون والمستخدمون",
-      body: "إضافة المعلمين وتعديل بياناتهم وتفعيل الصلاحيات أمام كل موظف.",
+      title: "شؤون الموظفين",
+      body: "المسميات والصلاحيات لكل موظف، وافتراضي المعلمين الجدد: الرسائل ومشاهدة المخالفات، وإظهار صفحات الفصول والطباعة والغياب.",
       icon: Users,
       show: staffCan(staff, "editStaff"),
+    },
+    {
+      to: "/import" as const,
+      title: "الاستيراد والبيانات",
+      body: "رفع ملف الطلاب والمعلمين من إكسل، واستعراض الأسماء مع التعديل والحذف.",
+      icon: Upload,
+      show: admin,
     },
     {
       to: "/archive" as const,
@@ -86,13 +93,6 @@ function SettingsHub() {
       title: "الأمراض والحالات الصحية",
       body: "قائمة الأمراض المتكررة التي يختار منها المرشد، ويُضاف إليها تلقائياً ما ليس موجوداً.",
       icon: HeartPulse,
-      show: admin,
-    },
-    {
-      to: "/settings/permissions" as const,
-      title: "صلاحيات المعلمين",
-      body: "الافتراضي للمعلمين الجدد: مراسلة ولي الأمر، ومشاهدة مخالفات الزملاء.",
-      icon: KeyRound,
       show: admin,
     },
     {

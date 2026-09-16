@@ -34,14 +34,23 @@ export const NOTE_META: Record<NoteType, { label: string; tone: NoteTone; short:
 	}
 };
 export const NOTE_TYPES = Object.keys(NOTE_META) as NoteType[];
-export const DEFAULT_INVITE_REASONS = [
-	"مناقشة مشكلة سلوكية وتعديل السلوك",
-	"مناقشة الغياب والتأخر والمواظبة",
-	"متابعة المستوى الدراسي",
-	"التوقيع على تعهد سلوكي",
-	"حضور لجنة التوجيه الطلابي",
-	"استكمال إجراءات مخالفة متكررة",
+export const NOTE_DEST = [
+  { id: "vp" as const, label: "وكيل شؤون الطلاب" },
+  { id: "counselor" as const, label: "المرشد الطلابي" },
+  { id: "health" as const, label: "المرشد الصحي" },
 ];
+export const MAIL_DEST = [
+  { id: "vp" as const, label: "وكيل شؤون الطلاب" },
+  { id: "counselor" as const, label: "المرشد الطلابي" },
+  { id: "health" as const, label: "المرشد الصحي" },
+  { id: "teacher" as const, label: "معلم آخر" },
+];
+export const NOTE_DEST_LABEL: Record<"vp" | "counselor" | "health" | "teacher", string> = {
+  vp: "وكيل شؤون الطلاب",
+  counselor: "المرشد الطلابي",
+  health: "المرشد الصحي",
+  teacher: "المعلم",
+};
 export const ROLE_LABEL: Record<StaffRole, string> = {
 	admin: "مدير التطبيق",
 	principal: "مدير مدرسة",
@@ -480,11 +489,11 @@ export const DEFAULT_ADMIN_PASSWORD = "1234";
 export const DEFAULT_ADMIN_NAME = "مدير التطبيق";
 export const WHATSAPP_TEMPLATES: Record<MessageKind, { title: string; body: string }> = {
 	absence: {
-		title: "الغياب اليومي",
+		title: "إشعار غياب",
 		body: "السلام عليكم ولي أمر الطالب {name}،\nنود إعلامكم بتغيّب ابنكم{session} يوم {weekday} بتاريخ {date} في صف {class}.\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n{school}"
 	},
 	late: {
-		title: "التأخر اليومي",
+		title: "إشعار تأخر",
 		body: "السلام عليكم ولي أمر الطالب {name}،\nنود إعلامكم بتأخر ابنكم{session} يوم {weekday} بتاريخ {date} في صف {class}.\nنرجو الحرص على الحضور في الوقت المحدد.\n\n{school}"
 	},
 	homework: {

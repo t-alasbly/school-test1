@@ -1,23 +1,22 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
-import { ImproveDialog } from "@/components/improve-dialog";
-import { NoteActions } from "@/components/note-actions";
-import { NoteSession } from "@/components/note-session";
+import { ClassSwitcher } from "@/components/class-switcher";
+import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { AddStudentButton } from "@/components/student-editor";
+import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
-import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getClassPage } from "@/lib/school/api";
 import { NOTE_META, formatTime, noteTone } from "@/lib/school/constants";
-import { staffCan } from "@/lib/school/permissions";
 import type { DailyKind, StudentRow } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
+import { NoteSession } from "@/components/note-session";
 
 export const Route = createFileRoute("/class/$classId")({
   validateSearch: (search: Record<string, unknown>): { student?: number } => ({
@@ -44,10 +43,11 @@ function ClassBody() {
   const { classId } = Route.useParams();
   const { student: studentParam } = Route.useSearch();
   const id = Number(classId);
-  const { school, staff } = useWorkspace();
+  const { school, staff, stages, classes } = useWorkspace();
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
-  const canMessage = staffCan(staff, "sendMessages");
+  const [sort, setSort] = useState<ClassSort>("order");
   const query = useQuery({
     queryKey: ["class", id],
     queryFn: () => getClassPage({ data: { classId: id } }),
@@ -62,16 +62,37 @@ function ClassBody() {
     const list = query.data?.students ?? [];
     const term = q.trim();
     const filtered = term ? list.filter((s: StudentRow) => s.name.includes(term)) : list;
+    if (sort === "alpha") {
+      return [...filtered].sort((a: StudentRow, b: StudentRow) => a.name.localeCompare(b.name, "ar"));
+    }
     return [...filtered].sort((a: StudentRow, b: StudentRow) => {
       const r = dailyRank(a.dailyKind) - dailyRank(b.dailyKind);
       if (r !== 0) return r;
       return a.name.localeCompare(b.name, "ar");
     });
-  }, [query.data, q]);
+  }, [query.data, q, sort]);
 
   if (query.isPending) {
+    const current = classes.find((c) => c.id === id);
     return (
       <div className="space-y-3">
+        {current ? (
+          <StageClassBar
+            stages={stages}
+            classes={classes}
+            selectedStageId={current.stageId}
+            selectedClassId={id}
+            sort={sort}
+            onSort={setSort}
+            onChange={(nextStage, nextClass) => {
+              if (nextClass) {
+                void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+                return;
+              }
+              void navigate({ to: "/classes", search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined } });
+            }}
+          />
+        ) : null}
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-20 rounded-[var(--radius-md)]" />
         ))}
@@ -86,18 +107,30 @@ function ClassBody() {
 
   return (
     <div className="space-y-5">
+      <StageClassBar
+        stages={stages}
+        classes={classes}
+        selectedStageId={classInfo.stageId}
+        selectedClassId={id}
+        sort={sort}
+        onSort={setSort}
+        onChange={(nextStage, nextClass) => {
+          if (nextClass) {
+            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+            return;
+          }
+          void navigate({ to: "/classes", search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined } });
+        }}
+      />
       <div className="flex flex-wrap items-center gap-3">
-        <Link
-          to="/stage/$stageId"
-          params={{ stageId: String(classInfo.stageId) }}
-          className="grid size-11 place-items-center rounded-[var(--radius-sm)] hover:bg-muted"
-          aria-label="رجوع للمرحلة"
-        >
-          <ArrowRight className="size-5" />
-        </Link>
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-fg-muted">{classInfo.stageName}</p>
-          <h1 className="text-3xl font-semibold tracking-tight">{classInfo.label}</h1>
+          <ClassSwitcher
+            classId={id}
+            stageId={classInfo.stageId}
+            stageName={classInfo.stageName}
+            shortName={classInfo.shortName}
+            label={classInfo.label}
+          />
         </div>
         <AddStudentButton classId={id} />
       </div>
@@ -189,32 +222,14 @@ function ClassBody() {
                     )}
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center">
-                  {canMessage ? (
-                    <WhatsAppDialog
-                      studentId={student.id}
-                      studentName={student.name}
-                      parentPhone={student.parentPhone}
-                      className={classInfo.name}
-                      shortName={classInfo.shortName}
-                      defaultType={latest?.type ?? "general"}
-                      details={latest?.behaviorTypeName ?? latest?.details ?? ""}
-                      subject={latest?.teacherSubject}
-                      createdAt={latest?.createdAt}
-                      periodKey={latest?.periodKey}
-                    />
-                  ) : null}
-                  <ImproveDialog
-                    studentId={student.id}
-                    studentName={student.name}
-                    classId={id}
-                  />
-                  <NoteActions
-                    studentId={student.id}
-                    studentName={student.name}
-                    classId={id}
-                  />
-                </div>
+                <StudentQuickActions
+                  studentId={student.id}
+                  studentName={student.name}
+                  classId={id}
+                  parentPhone={student.parentPhone}
+                  className={classInfo.name}
+                  shortName={classInfo.shortName}
+                />
               </div>
             </li>
           );

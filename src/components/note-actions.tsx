@@ -16,18 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createNote } from "@/lib/school/api";
-import {
-  NOTE_META,
-  NOTE_TYPES,
-  currentPeriod,
-  degreeLabel,
-  formatDay,
-  formatTime,
-  fromDatetimeLocalValue,
-  isOtherChoice,
-  scheduleFor,
-  toDatetimeLocalValue,
-} from "@/lib/school/constants";
+import { NOTE_META, NOTE_TYPES, currentPeriod, degreeLabel, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, scheduleFor, toDatetimeLocalValue } from "@/lib/school/constants";
 import type { NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -85,7 +74,8 @@ export function NoteActions({
       void queryClient.invalidateQueries({ queryKey: ["class", classId] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
+      void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
     },
     onError: (err) => {

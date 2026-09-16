@@ -60,7 +60,15 @@ export function NotificationBell() {
     classId?: number | null;
   }) {
     if (item.kind === "referral" && canCounsel) {
-      void navigate({ to: "/counseling" });
+      void navigate({ to: "/counseling/referrals" });
+      return;
+    }
+    if (item.kind === "digest-absence") {
+      void navigate({ to: "/admin/absence", search: { range: "today" } });
+      return;
+    }
+    if (item.kind === "digest-late") {
+      void navigate({ to: "/admin/late", search: { range: "today" } });
       return;
     }
     if (item.classId && item.studentId) {
@@ -72,7 +80,7 @@ export function NotificationBell() {
       return;
     }
     if (item.studentId && canAdmin) {
-      void navigate({ to: "/admin", search: { student: item.studentId } });
+      void navigate({ to: "/admin/behavior", search: { student: item.studentId } });
       return;
     }
     if (canAdmin) {

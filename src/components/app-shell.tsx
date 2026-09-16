@@ -2,21 +2,19 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BookOpen,
   ClipboardCheck,
-  ClipboardList,
   HeartHandshake,
   LayoutDashboard,
   LogOut,
-  MessageCircle,
   Printer,
   Settings,
-  Upload,
-  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { ROLE_LABEL, todayLabel, schoolLogoSrc } from "@/lib/school/constants";
-import { pagePermissionForPath, staffCan } from "@/lib/school/permissions";
+import { ROLE_LABEL, schoolLogoSrc } from "@/lib/school/constants";
+import { formatToday } from "@/lib/school/calendar";
+import { canFollowup, staffCan } from "@/lib/school/permissions";
+import { useCalendar } from "@/lib/school/use-calendar";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -28,7 +26,7 @@ const NAV: {
   counselorLabel?: string;
   icon: typeof BookOpen;
 }[] = [
-  { to: "/", label: "الفصول", icon: BookOpen },
+  { to: "/classes", label: "الفصول", icon: BookOpen },
   {
     to: "/admin",
     label: "الإدارة",
@@ -37,43 +35,41 @@ const NAV: {
   },
   { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck },
   { to: "/counseling", label: "الإرشاد", icon: HeartHandshake },
-  { to: "/reports", label: "التقارير", icon: ClipboardList },
-  { to: "/messages", label: "الرسائل الجماعية", icon: MessageCircle },
-  { to: "/forms", label: "طباعة نماذج", icon: Printer },
-  { to: "/import", label: "الاستيراد", icon: Upload },
-  { to: "/staff", label: "الموظفون", icon: Users },
+  { to: "/print", label: "الطباعة", icon: Printer },
   { to: "/settings", label: "الإعدادات", icon: Settings },
 ];
 
+function navActive(pathname: string, to: string) {
+  if (to === "/") return pathname === "/";
+  if (to === "/classes") return pathname.startsWith("/classes") || pathname.startsWith("/stage") || pathname.startsWith("/class");
+  if (to === "/settings") return pathname.startsWith("/settings") || pathname === "/staff" || pathname === "/import" || pathname === "/archive";
+  if (to === "/admin") return pathname === "/admin" || pathname.startsWith("/admin/");
+  if (to === "/counseling") return pathname === "/counseling" || pathname.startsWith("/counseling/");
+  if (to === "/print") return pathname.startsWith("/print") || pathname === "/reports" || pathname === "/forms";
+  return pathname === to;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { school, staff } = useWorkspace();
+  const calendar = useCalendar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
   const schoolLogo = schoolLogoSrc(school.logoUrl);
   const items = NAV.filter((item) => {
     if (staff.role === "pending") return false;
-    const pageKey = pagePermissionForPath(item.to);
-    if (pageKey && !staffCan(staff, pageKey)) return false;
-    if (item.to === "/staff") return staffCan(staff, "editStaff");
-    if (item.to === "/admin") {
-      return (
-        staffCan(staff, "takeActions") ||
-        staffCan(staff, "acceptImprovements") ||
-        staffCan(staff, "sendMessages")
-      );
-    }
+    if (item.to === "/classes") return staffCan(staff, "viewClasses");
+    if (item.to === "/admin") return canFollowup(staff);
     if (item.to === "/attendance") return staffCan(staff, "dailyAttendance");
-    if (item.to === "/messages") return staffCan(staff, "sendMessages");
     if (item.to === "/counseling") return staffCan(staff, "counseling");
-    if (item.to === "/import") return staff.role === "admin";
+    if (item.to === "/print") return staffCan(staff, "viewPrint");
     return true;
   });
 
   return (
     <div className="min-h-dvh bg-bg text-fg">
-      <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/90 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+      <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
+        <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-3 px-4 py-2">
           <Link to="/" className="flex min-w-0 items-center gap-3">
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
@@ -84,12 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="mx-auto hidden items-center gap-1 md:flex">
             {items.map((item) => {
-              const active =
-                item.to === "/"
-                  ? pathname === "/" || pathname.startsWith("/stage") || pathname.startsWith("/class")
-                  : item.to === "/settings"
-                    ? pathname.startsWith("/settings")
-                    : pathname === item.to;
+              const active = navActive(pathname, item.to);
               const Icon = item.icon;
               const label =
                 staff.role === "counselor" && item.counselorLabel
@@ -113,7 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="ms-auto flex items-center gap-1">
-            <p className="hidden text-xs text-fg-muted lg:block">{todayLabel()}</p>
+            <p className="hidden text-xs text-fg-muted lg:block">{formatToday(calendar)}</p>
             <NotificationBell />
             <div className="hidden min-w-0 items-center gap-2 pe-1 sm:flex">
               <span className="max-w-28 truncate text-sm font-medium">
@@ -145,10 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg-elevated/95 backdrop-blur-sm md:hidden">
         <div className="flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
           {items.map((item) => {
-            const active =
-              item.to === "/"
-                ? pathname === "/" || pathname.startsWith("/stage") || pathname.startsWith("/class")
-                : pathname === item.to;
+            const active = navActive(pathname, item.to);
             const Icon = item.icon;
             const label =
               staff.role === "counselor" && item.counselorLabel

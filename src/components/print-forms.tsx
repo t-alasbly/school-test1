@@ -1,7 +1,6 @@
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Printer } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,13 +8,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { getStudentNotes, updateInviteReasons } from "@/lib/school/api";
+import { getStudentNotes } from "@/lib/school/api";
 import {
   counselorTitle,
-  DEFAULT_INVITE_REASONS,
   degreeLabel,
   formatDay,
   formatStamp,
@@ -25,195 +22,47 @@ import {
   periodShort,
   principalTitle,
   procedureLadder,
-  schoolLogoSrc,
   procedureStageLabel,
   proceduresFor,
+  schoolLogoSrc,
   stageIndexFor,
   studentNoun,
   weekdayName,
 } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
-import type { NoteType, School, SchoolSchedules, Season } from "@/lib/school/types";
+import type { School } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
+export type FormKind = (typeof FORM_ORDER)[number];
+export type FormOverrides = Partial<{
+  name: string;
+  classLine: string;
+  violation: string;
+  degree: string;
+  day: string;
+  weekday: string;
+  period: string;
+  subject: string;
+  extra: string;
+  actionText: string;
+}>;
 export type PrintableNote = {
-  type: NoteType;
+  type: string;
   details: string;
-  behaviorTypeName: string | null;
-  behaviorDegree: number | null;
-  periodKey: string;
-  actionTaken: string;
+  behaviorTypeName?: string | null;
+  behaviorDegree?: number | null;
+  periodKey?: string;
+  actionTaken?: string | null;
   createdAt: string;
   occurredAt?: string;
-  teacherName: string;
-  teacherSubject: string;
+  teacherName?: string;
+  teacherSubject?: string;
   occurrence?: number;
   suggestedAction?: string;
   compensation?: string;
 };
 
-export type FormOverrides = {
-  name?: string;
-  classLine?: string;
-  violation?: string;
-  degree?: string;
-  day?: string;
-  weekday?: string;
-  period?: string;
-  subject?: string;
-  actionText?: string;
-  extra?: string;
-  appointment?: string;
-  inviteReason?: string;
-};
-
-function todayISODate() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-export function inviteReasonList(custom: string[] | undefined) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of [...(custom ?? []), ...DEFAULT_INVITE_REASONS]) {
-    const text = item.trim();
-    if (text.length < 4 || seen.has(text)) continue;
-    seen.add(text);
-    out.push(text);
-  }
-  return out;
-}
-
-export function InviteOptionsPanel({
-  overrides,
-  onChange,
-  showViolation,
-  onShowViolation,
-}: {
-  overrides: FormOverrides;
-  onChange: (next: FormOverrides) => void;
-  showViolation: boolean;
-  onShowViolation: (value: boolean) => void;
-}) {
-  const { school } = useWorkspace();
-  const queryClient = useQueryClient();
-  const reasons = inviteReasonList(school.inviteReasons);
-  const appointment = overrides.appointment || todayISODate();
-  const reason = overrides.inviteReason || reasons[0] || "";
-  const stamp = `${appointment}T12:00:00`;
-
-  const saveReason = useMutation({
-    mutationFn: (next: string[]) => updateInviteReasons({ data: { reasons: next } }),
-    onSuccess: () => {
-      toast.success("أُضيفت العبارة إلى الخيارات الثابتة");
-      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
-  });
-
-  return (
-    <div className="no-print mb-4 space-y-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
-      <p className="text-sm font-semibold">موعد استدعاء ولي الأمر</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="invite-date">التاريخ</Label>
-          <Input
-            id="invite-date"
-            type="date"
-            value={appointment}
-            onChange={(e) =>
-              onChange({
-                ...overrides,
-                appointment: e.target.value,
-                day: formatDay(`${e.target.value}T12:00:00`),
-                weekday: weekdayName(`${e.target.value}T12:00:00`),
-              })
-            }
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>اليوم</Label>
-          <p className="flex h-11 items-center rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm">
-            {weekdayName(stamp) || "—"}
-          </p>
-        </div>
-      </div>
-      <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="size-4 accent-primary"
-          checked={showViolation}
-          onChange={(e) => onShowViolation(e.target.checked)}
-        />
-        إظهار نوع المخالفة في الخطاب
-      </label>
-      <div className="space-y-1.5">
-        <Label htmlFor="invite-reason-pick">سبب الاستدعاء / الدعوة</Label>
-        <Select
-          id="invite-reason-pick"
-          value={reasons.includes(reason) ? reason : ""}
-          onChange={(e) => onChange({ ...overrides, inviteReason: e.target.value })}
-        >
-          <option value="">عبارة مخصصة…</option>
-          {reasons.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="invite-reason">تعديل العبارة</Label>
-        <textarea
-          id="invite-reason"
-          className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm leading-7"
-          value={reason}
-          onChange={(e) => onChange({ ...overrides, inviteReason: e.target.value })}
-        />
-      </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        disabled={reason.trim().length < 4 || reasons.includes(reason.trim()) || saveReason.isPending}
-        onClick={() => saveReason.mutate([...reasons, reason.trim()])}
-      >
-        حفظ العبارة كخيار ثابت
-      </Button>
-    </div>
-  );
-}
-
-export type PrintableStudent = {
-  name: string;
-  classLabel: string;
-  className?: string;
-  stageName?: string;
-  parentPhone?: string;
-};
-
-export type FormKind =
-  | "commitment"
-  | "excellence"
-  | "plan"
-  | "teacher-log"
-  | "record"
-  | "compensation"
-  | "referral"
-  | "pledge"
-  | "notice"
-  | "invite"
-  | "incident"
-  | "committee"
-  | "violence"
-  | "risk"
-  | "absence-excused"
-  | "absence-unexcused"
-  | "attendance"
-  | "receipt";
-
-export const FORM_ORDER: FormKind[] = [
+export const FORM_ORDER = [
   "pledge",
   "notice",
   "invite",
@@ -232,43 +81,70 @@ export const FORM_ORDER: FormKind[] = [
   "absence-unexcused",
   "violence",
   "risk",
-];
-
-export const FORM_META: Record<FormKind, { title: string; confidential?: boolean }> = {
-  commitment: { title: "نموذج الالتزام المدرسي" },
-  excellence: { title: "نموذج رصد درجات السلوك المتميز" },
-  plan: { title: "نموذج خطة تعديل السلوك" },
-  "teacher-log": { title: "نموذج رصد المعلم لمشكلة سلوكية" },
-  record: { title: "نموذج رصد المشكلات السلوكية" },
-  compensation: { title: "نموذج فرص تعويض درجات السلوك الإيجابي" },
-  referral: { title: "إحالة طالب / طالبة", confidential: true },
-  pledge: { title: "تعهد سلوكي" },
-  notice: { title: "إشعار ولي الأمر بمشكلة سلوكية", confidential: true },
-  invite: { title: "خطاب دعوة ولي الأمر" },
-  incident: { title: "محضر ضبط واقعة", confidential: true },
-  committee: { title: "محضر اجتماع لجنة التوجيه الطلابي", confidential: true },
-  violence: { title: "إبلاغ عن حالة إيذاء", confidential: true },
-  risk: { title: "إبلاغ عن حالة عالية الخطورة", confidential: true },
-  "absence-excused": { title: "نموذج إجراءات الغياب بعذر" },
-  "absence-unexcused": { title: "نموذج إجراءات الغياب بدون عذر" },
-  attendance: { title: "تعهد الالتزام بالحضور" },
-  receipt: { title: "إفادة استلام قواعد السلوك" },
+] as const;
+export const FORM_META: Record<string, { title: string; confidential?: boolean }> = {
+  commitment: {
+    title: "نموذج الالتزام المدرسي",
+  },
+  excellence: {
+    title: "نموذج رصد درجات السلوك المتميز",
+  },
+  plan: {
+    title: "نموذج خطة تعديل السلوك",
+  },
+  "teacher-log": {
+    title: "نموذج رصد المعلم لمشكلة سلوكية",
+  },
+  record: {
+    title: "نموذج رصد المشكلات السلوكية",
+  },
+  compensation: {
+    title: "نموذج فرص تعويض درجات السلوك الإيجابي",
+  },
+  referral: {
+    title: "إحالة طالب / طالبة",
+    confidential: true,
+  },
+  pledge: {
+    title: "تعهد سلوكي",
+  },
+  notice: {
+    title: "إشعار ولي الأمر بمشكلة سلوكية",
+    confidential: true,
+  },
+  invite: {
+    title: "خطاب دعوة ولي الأمر",
+  },
+  incident: {
+    title: "محضر ضبط واقعة",
+    confidential: true,
+  },
+  committee: {
+    title: "محضر اجتماع لجنة التوجيه الطلابي",
+    confidential: true,
+  },
+  violence: {
+    title: "إبلاغ عن حالة إيذاء",
+    confidential: true,
+  },
+  risk: {
+    title: "إبلاغ عن حالة عالية الخطورة",
+    confidential: true,
+  },
+  "absence-excused": {
+    title: "نموذج إجراءات الغياب بعذر",
+  },
+  "absence-unexcused": {
+    title: "نموذج إجراءات الغياب بدون عذر",
+  },
+  attendance: {
+    title: "تعهد الالتزام بالحضور",
+  },
+  receipt: {
+    title: "إفادة استلام قواعد السلوك",
+  },
 };
-
-export function notesToPrintable(
-  notes: Array<{
-    type: NoteType;
-    details: string;
-    behaviorTypeName: string | null;
-    behaviorDegree?: number | null;
-    periodKey: string;
-    actionTaken?: string;
-    createdAt?: string;
-    teacherName?: string;
-    teacherSubject?: string;
-    occurrence?: number;
-  }>,
-): PrintableNote[] {
+export function notesToPrintable(notes) {
   const now = new Date().toISOString();
   return notes.map((n) => ({
     type: n.type,
@@ -278,15 +154,14 @@ export function notesToPrintable(
     periodKey: n.periodKey,
     actionTaken: n.actionTaken ?? "",
     createdAt: n.createdAt ?? now,
-    occurredAt: (n as { occurredAt?: string }).occurredAt ?? n.createdAt ?? now,
+    occurredAt: n.occurredAt ?? n.createdAt ?? now,
     teacherName: n.teacherName ?? "",
     teacherSubject: n.teacherSubject ?? "",
     occurrence: n.occurrence,
-    suggestedAction: (n as { suggestedAction?: string }).suggestedAction,
-    compensation: (n as { compensation?: string }).compensation,
+    suggestedAction: n.suggestedAction,
+    compensation: n.compensation,
   }));
 }
-
 export function PrintFormsButton({
   student,
   notes,
@@ -294,17 +169,10 @@ export function PrintFormsButton({
   label = "طباعة نموذج",
   size = "sm",
   studentId,
-}: {
-  student: PrintableStudent;
-  notes: PrintableNote[];
-  defaultKind?: FormKind;
-  label?: string;
-  size?: "sm" | "default" | "icon-sm";
-  studentId?: number;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
+    <Fragment>
       <Button
         type="button"
         size={size}
@@ -323,59 +191,54 @@ export function PrintFormsButton({
         defaultKind={defaultKind}
         studentId={studentId}
       />
-    </>
+    </Fragment>
   );
 }
-
-export function PrintFormsDialog({
+function PrintFormsDialog({
   open,
   onOpenChange,
   student,
   notes,
   defaultKind,
   studentId,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  student: PrintableStudent;
-  notes: PrintableNote[];
-  defaultKind?: FormKind;
-  studentId?: number;
 }) {
   const { school } = useWorkspace();
-  const [kind, setKind] = useState<FormKind>(defaultKind ?? "pledge");
+  const [kind, setKind] = useState(defaultKind ?? "pledge");
   const [noteIdx, setNoteIdx] = useState(0);
   const [manual, setManual] = useState(false);
-  const [overrides, setOverrides] = useState<FormOverrides>({});
+  const [overrides, setOverrides] = useState({});
   const [showCompensation, setShowCompensation] = useState(true);
-  const [showViolation, setShowViolation] = useState(true);
-  const sheetRef = useRef<HTMLElement>(null);
-
-  const history = useQuery({
+  const sheetRef = useRef(null);
+  const historyNotes = useQuery({
     queryKey: ["student", studentId, "print-forms"],
-    queryFn: () => getStudentNotes({ data: { studentId: studentId! } }),
+    queryFn: () =>
+      getStudentNotes({
+        data: {
+          studentId,
+        },
+      }),
     enabled: open && studentId != null,
-  });
-
-  const historyNotes = history.data?.notes;
-  const allNotes = historyNotes?.length ? notesToPrintable(historyNotes) : notes;
+  }).data?.notes;
+  const allNotes = historyNotes?.length
+    ? notesToPrintable(historyNotes)
+    : notes;
   const seedAt = notes[0]?.createdAt;
   const seedType = notes[0]?.type;
-
   useEffect(() => {
     if (!open) return;
-    setKind(defaultKind && FORM_ORDER.includes(defaultKind) ? defaultKind : "pledge");
+    setKind(
+      defaultKind && FORM_ORDER.includes(defaultKind) ? defaultKind : "pledge",
+    );
     if (!seedAt) {
       setNoteIdx(0);
       return;
     }
-    const list = historyNotes?.length ? notesToPrintable(historyNotes) : notes;
-    const idx = list.findIndex((n) => n.createdAt === seedAt && n.type === seedType);
+    const idx = (
+      historyNotes?.length ? notesToPrintable(historyNotes) : notes
+    ).findIndex((n) => n.createdAt === seedAt && n.type === seedType);
     setNoteIdx(idx >= 0 ? idx : 0);
   }, [open, defaultKind, historyNotes, seedAt, seedType, notes]);
-
   const selected = allNotes[noteIdx] ?? null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
@@ -388,12 +251,10 @@ export function PrintFormsDialog({
             <Select
               id="form-kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value as FormKind)}
+              onChange={(e) => setKind(e.target.value)}
             >
               {FORM_ORDER.map((k) => (
-                <option key={k} value={k}>
-                  {FORM_META[k].title}
-                </option>
+                <option value={k}>{FORM_META[k].title}</option>
               ))}
             </Select>
           </div>
@@ -406,7 +267,7 @@ export function PrintFormsDialog({
                 onChange={(e) => setNoteIdx(Number(e.target.value))}
               >
                 {allNotes.map((n, i) => (
-                  <option key={`${n.createdAt}-${i}`} value={i}>
+                  <option value={i}>
                     {(n.behaviorTypeName || n.details || "ملاحظة") +
                       (n.createdAt ? ` — ${formatDay(n.createdAt)}` : "")}
                   </option>
@@ -414,7 +275,9 @@ export function PrintFormsDialog({
               </Select>
             </div>
           ) : null}
-          <Button onClick={() => sheetRef.current && printElement(sheetRef.current)}>
+          <Button
+            onClick={() => sheetRef.current && printElement(sheetRef.current)}
+          >
             <Printer className="size-4" />
             طباعة
           </Button>
@@ -436,35 +299,50 @@ export function PrintFormsDialog({
             إظهار فرص التعويض في التعهد والخطاب
           </label>
         </div>
-        {kind === "invite" ? (
-          <InviteOptionsPanel
-            overrides={overrides}
-            onChange={setOverrides}
-            showViolation={showViolation}
-            onShowViolation={setShowViolation}
-          />
-        ) : null}
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
-            {(
+            {[
+              ["name", "اسم الطالب", student.name],
+              ["classLine", "الصف / الفصل", student.classLabel],
               [
-                ["name", "اسم الطالب", student.name],
-                ["classLine", "الصف / الفصل", student.classLabel],
-                ["violation", "المخالفة / الموضوع", selected?.behaviorTypeName || selected?.details || ""],
-                ["degree", "الدرجة", selected?.behaviorDegree ? String(selected.behaviorDegree) : ""],
-                ["day", "التاريخ", selected ? formatDay(selected.occurredAt || selected.createdAt) : ""],
-                ["weekday", "اليوم", selected ? weekdayName(selected.occurredAt || selected.createdAt) : ""],
-                ["period", "الحصة", ""],
-                ["subject", "المادة", selected?.teacherSubject || ""],
-              ] as const
-            ).map(([key, label, fallback]) => (
-              <div key={key} className="space-y-1.5">
+                "violation",
+                "المخالفة / الموضوع",
+                selected?.behaviorTypeName || selected?.details || "",
+              ],
+              [
+                "degree",
+                "الدرجة",
+                selected?.behaviorDegree ? String(selected.behaviorDegree) : "",
+              ],
+              [
+                "day",
+                "التاريخ",
+                selected
+                  ? formatDay(selected.occurredAt || selected.createdAt)
+                  : "",
+              ],
+              [
+                "weekday",
+                "اليوم",
+                selected
+                  ? weekdayName(selected.occurredAt || selected.createdAt)
+                  : "",
+              ],
+              ["period", "الحصة", ""],
+              ["subject", "المادة", selected?.teacherSubject || ""],
+            ].map(([key, label, fallback]) => (
+              <div className="space-y-1.5">
                 <Label htmlFor={`ov-${key}`}>{label}</Label>
                 <input
                   id={`ov-${key}`}
                   className="h-11 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
                   value={overrides[key] ?? fallback}
-                  onChange={(e) => setOverrides((prev) => ({ ...prev, [key]: e.target.value }))}
+                  onChange={(e) =>
+                    setOverrides((prev) => ({
+                      ...prev,
+                      [key]: e.target.value,
+                    }))
+                  }
                 />
               </div>
             ))}
@@ -474,7 +352,12 @@ export function PrintFormsDialog({
                 id="ov-action"
                 className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
                 value={overrides.actionText ?? ""}
-                onChange={(e) => setOverrides((prev) => ({ ...prev, actionText: e.target.value }))}
+                onChange={(e) =>
+                  setOverrides((prev) => ({
+                    ...prev,
+                    actionText: e.target.value,
+                  }))
+                }
                 placeholder="اتركه فارغاً لاستخدام الإجراء الرسمي تلقائياً"
               />
             </div>
@@ -484,7 +367,12 @@ export function PrintFormsDialog({
                 id="ov-extra"
                 className="min-h-16 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
                 value={overrides.extra ?? ""}
-                onChange={(e) => setOverrides((prev) => ({ ...prev, extra: e.target.value }))}
+                onChange={(e) =>
+                  setOverrides((prev) => ({
+                    ...prev,
+                    extra: e.target.value,
+                  }))
+                }
                 placeholder="يظهر في النموذج أسفل بيانات المخالفة"
               />
             </div>
@@ -497,15 +385,13 @@ export function PrintFormsDialog({
           notes={allNotes}
           selectedNote={selected}
           school={school}
-          overrides={kind === "invite" || manual ? overrides : undefined}
+          overrides={manual ? overrides : void 0}
           showCompensation={showCompensation && Boolean(selected?.compensation)}
-          showViolation={kind === "invite" ? showViolation : true}
         />
       </DialogContent>
     </Dialog>
   );
 }
-
 export function OfficialForm({
   kind,
   student,
@@ -514,35 +400,29 @@ export function OfficialForm({
   school,
   overrides,
   showCompensation = false,
-  showViolation = true,
   ref,
-}: {
-  kind: FormKind;
-  student: PrintableStudent;
-  notes: PrintableNote[];
-  selectedNote: PrintableNote | null;
-  school: School;
-  overrides?: FormOverrides;
-  showCompensation?: boolean;
-  showViolation?: boolean;
-  ref?: Ref<HTMLElement>;
 }) {
   const { behaviorTypes } = useWorkspace();
   const behaviorNotes = notes.filter((n) => n.type === "behavior");
   const absenceNotes = notes.filter((n) => n.type === "absence");
   const focus =
     selectedNote ??
-    (kind === "attendance" || kind.startsWith("absence") ? absenceNotes[0] : behaviorNotes[0]) ??
+    (kind === "attendance" || kind.startsWith("absence")
+      ? absenceNotes[0]
+      : behaviorNotes[0]) ??
     notes[0] ??
     null;
   const stamp = focus?.occurredAt || focus?.createdAt;
-  const inviteStamp = `${overrides?.appointment || todayISODate()}T12:00:00`;
-  const dateStamp = kind === "invite" ? inviteStamp : stamp;
-  const violation = overrides?.violation || focus?.behaviorTypeName || focus?.details || "……………………";
-  const degree = overrides?.degree || degreeLabel(focus?.behaviorDegree) || "…………";
-  const weekday = overrides?.weekday || (dateStamp ? weekdayName(dateStamp) : "…………");
-  const day = overrides?.day || (dateStamp ? formatDay(dateStamp) : "…………");
-  const hijri = dateStamp ? hijriDate(dateStamp) : "…………";
+  const violation =
+    overrides?.violation ||
+    focus?.behaviorTypeName ||
+    focus?.details ||
+    "……………………";
+  const degree =
+    overrides?.degree || degreeLabel(focus?.behaviorDegree) || "…………";
+  const weekday = overrides?.weekday || (stamp ? weekdayName(stamp) : "…………");
+  const day = overrides?.day || (stamp ? formatDay(stamp) : "…………");
+  const hijri = stamp ? hijriDate(stamp) : "…………";
   const studentWord = studentNoun(school.studentGender);
   const principal = principalTitle(school.leadershipGender);
   const counselor = counselorTitle(school.leadershipGender);
@@ -554,12 +434,18 @@ export function OfficialForm({
   const bt = behaviorTypes.find((b) => b.name === focus?.behaviorTypeName);
   const ladder = procedureLadder(focus?.behaviorDegree, bt?.procedures);
   const stageIdx = stageIndexFor(occurrence, ladder.length);
-  const official = proceduresFor(focus?.behaviorDegree, occurrence, bt?.procedures);
+  const official = proceduresFor(
+    focus?.behaviorDegree,
+    occurrence,
+    bt?.procedures,
+  );
   const overrideSteps = overrides?.actionText
     ?.split(/\n/)
     .map((s) => s.trim())
     .filter(Boolean);
-  const parsedAction = parseActionTaken(focus?.actionTaken || focus?.suggestedAction);
+  const parsedAction = parseActionTaken(
+    focus?.actionTaken || focus?.suggestedAction,
+  );
   const actionSteps = overrideSteps?.length
     ? overrideSteps
     : parsedAction.steps.length
@@ -567,9 +453,13 @@ export function OfficialForm({
       : official.length
         ? official
         : [];
-  const period = overrides?.period || (focus?.periodKey ? periodShort(focus.periodKey, school.season, school.schedules) : "");
+  const period =
+    overrides?.period ||
+    (focus?.periodKey
+      ? periodShort(focus.periodKey, school.season, school.schedules)
+      : "");
   const subject = overrides?.subject || focus?.teacherSubject?.trim() || "";
-  const ctx: FormCtx = {
+  const ctx = {
     name: overrides?.name || student.name,
     studentWord,
     classLine: overrides?.classLine || student.classLabel,
@@ -600,17 +490,24 @@ export function OfficialForm({
     stageLabel: procedureStageLabel(stageIdx + 1),
     compensation: focus?.compensation || "",
     showCompensation: Boolean(showCompensation && focus?.compensation),
-    inviteReason:
-      overrides?.inviteReason?.trim() || inviteReasonList(school.inviteReasons)[0] || "",
-    showViolation,
   };
-
   return (
-    <article ref={ref} className="print-form official-sheet bg-white text-black font-naskh">
+    <article
+      ref={ref}
+      className="print-form official-sheet bg-white text-black font-naskh"
+    >
       <FormHeader school={school} confidential={FORM_META[kind].confidential} />
-      <h2 className="mb-2 text-center text-[20px] font-semibold tracking-wide">{FORM_META[kind].title}</h2>
-      <StudentIdentity name={ctx.name} classLine={ctx.classLine} studentWord={ctx.studentWord} />
-      {kind === "receipt" || kind === "commitment" || kind === "excellence" || (kind === "invite" && !showViolation) ? null : (
+      <h2 className="mb-2 text-center text-[20px] font-semibold tracking-wide">
+        {FORM_META[kind].title}
+      </h2>
+      <StudentIdentity
+        name={ctx.name}
+        classLine={ctx.classLine}
+        studentWord={ctx.studentWord}
+      />
+      {kind === "receipt" ||
+      kind === "commitment" ||
+      kind === "excellence" ? null : (
         <ViolationStrip
           violation={ctx.violation}
           degree={ctx.degree}
@@ -647,45 +544,13 @@ export function OfficialForm({
     </article>
   );
 }
-
-type FormCtx = {
-  name: string;
-  studentWord: string;
-  classLine: string;
-  stageLine: string;
-  parentPhone: string;
-  weekday: string;
-  day: string;
-  hijri: string;
-  degree: string;
-  violation: string;
-  actionSteps: string[];
-  actionNote: string;
-  previous: PrintableNote[];
-  occurrence: number;
-  principal: string;
-  counselor: string;
-  principalName: string;
-  counselorName: string;
-  did: string;
-  schoolName: string;
-  season: Season;
-  schedules?: SchoolSchedules;
-  focus: PrintableNote | null;
-  behaviorNotes: PrintableNote[];
-  absenceNotes: PrintableNote[];
-  period: string;
-  subject: string;
-  stageLabel: string;
-  compensation: string;
-  showCompensation: boolean;
-  inviteReason: string;
-  showViolation: boolean;
-};
-
-function parseActionTaken(action: string | undefined): { steps: string[]; note: string } {
+function parseActionTaken(action) {
   const raw = action?.trim() ?? "";
-  if (!raw) return { steps: [], note: "" };
+  if (!raw)
+    return {
+      steps: [],
+      note: "",
+    };
   const marker = raw.search(/[—\-]\s*ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]/);
   let body = raw;
   let note = "";
@@ -697,25 +562,27 @@ function parseActionTaken(action: string | undefined): { steps: string[]; note: 
       .replace(/^ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]\s*/, "")
       .trim();
   } else {
-    const onlyNote = raw.match(/^ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]\s*([\s\S]+)$/);
+    const onlyNote = raw.match(
+      /^ملاحظة(?:\s*على\s*الإجراء)?\s*[:：]\s*([\s\S]+)$/,
+    );
     if (onlyNote) {
       body = "";
       note = onlyNote[1].trim();
     }
   }
-  const steps = body
-    .split(/\n|;|؛|—/)
-    .map((s) => s.replace(/^ملاحظة للمعلم:.*/, "").trim())
-    .filter((s) => s.length > 0 && !/^ملاحظة\s*[:：]/.test(s));
-  return { steps, note };
+  return {
+    steps: body
+      .split(/\n|;|؛|—/)
+      .map((s) => s.replace(/^ملاحظة للمعلم:.*/, "").trim())
+      .filter((s) => s.length > 0 && !/^ملاحظة\s*[:：]/.test(s)),
+    note,
+  };
 }
-
-function actionDisplay(action: string | undefined) {
+function actionDisplay(action) {
   const parsed = parseActionTaken(action);
   return parsed.steps.join(" — ") || parsed.note || "";
 }
-
-function ActionNoteBox({ note }: { note: string }) {
+function ActionNoteBox({ note }) {
   if (!note.trim()) return null;
   return (
     <div className="my-2 rounded-sm border border-black px-3 py-2 text-[13.5px] leading-7">
@@ -724,8 +591,7 @@ function ActionNoteBox({ note }: { note: string }) {
     </div>
   );
 }
-
-function previousSame(notes: PrintableNote[], focus: PrintableNote | null) {
+function previousSame(notes, focus) {
   if (!focus || focus.type !== "behavior") return [];
   return notes
     .filter(
@@ -738,11 +604,9 @@ function previousSame(notes: PrintableNote[], focus: PrintableNote | null) {
     )
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
-
-function FormHeader({ school, confidential }: { school: School; confidential?: boolean }) {
+function FormHeader({ school, confidential }) {
   return <OfficialLetterhead school={school} confidential={confidential} />;
 }
-
 export function OfficialLetterhead({
   school,
   confidential,
@@ -750,16 +614,9 @@ export function OfficialLetterhead({
   school: School;
   confidential?: boolean;
 }) {
-  const gov = school.governorate.replace(/^محافظة\s*/, "").trim();
-  const region = school.region.trim();
-  const regionCore = region.replace(/^المنطقة\s*/, "").trim();
-  const rawName = school.name.trim();
-  const schoolLine = !rawName
-    ? "………………"
-    : /^(مدرسة|متوسطة|متوسطه|ابتدائية|ابتدائيه|ثانوية|ثانويه|روضة|مجمع)(\s|$)/.test(rawName)
-      ? rawName
-      : `مدرسة ${rawName}`;
-  const eduLine = regionCore ? `إدارة التعليم ب${regionCore}` : "";
+  const line1 = school.region.trim();
+  const line2 = school.governorate.trim();
+  const line3 = school.name.trim();
   return (
     <header className="mb-3">
       <div className="official-accent h-1.5 bg-[#00857c]" />
@@ -773,7 +630,9 @@ export function OfficialLetterhead({
           <p className="ksa-ministry mt-0.5 text-[13px] font-semibold tracking-wide text-[#14532d]">
             وزارة التعليم
           </p>
-          {confidential ? <p className="mt-1 text-[12px] font-semibold text-[#00857c]">سري</p> : null}
+          {confidential ? (
+            <p className="mt-1 text-[12px] font-semibold text-[#00857c]">سري</p>
+          ) : null}
         </div>
         <div className="flex items-center justify-center gap-2">
           <img
@@ -798,9 +657,9 @@ export function OfficialLetterhead({
             />
           ) : null}
           <div className="text-center text-[12px] leading-5">
-            <p>{eduLine || "إدارة التعليم: ………………"}</p>
-            {gov ? <p>{gov.startsWith("محافظة") ? gov : `محافظة ${gov}`}</p> : null}
-            <p className="font-semibold">{schoolLine}</p>
+            <p>{line1 || "………………"}</p>
+            <p>{line2 || "………………"}</p>
+            <p className="font-semibold">{line3 || "………………"}</p>
           </div>
         </div>
       </div>
@@ -808,16 +667,7 @@ export function OfficialLetterhead({
     </header>
   );
 }
-
-function StudentIdentity({
-  name,
-  classLine,
-  studentWord,
-}: {
-  name: string;
-  classLine: string;
-  studentWord: string;
-}) {
+function StudentIdentity({ name, classLine, studentWord }) {
   return (
     <table className="official-table mb-3">
       <thead>
@@ -828,14 +678,17 @@ function StudentIdentity({
       </thead>
       <tbody>
         <tr>
-          <td className="py-2.5 text-[18px] font-semibold leading-7">{name || "………………"}</td>
-          <td className="py-2.5 text-[16px] font-semibold leading-7">{classLine || "………………"}</td>
+          <td className="py-2.5 text-[18px] font-semibold leading-7">
+            {name || "………………"}
+          </td>
+          <td className="py-2.5 text-[16px] font-semibold leading-7">
+            {classLine || "………………"}
+          </td>
         </tr>
       </tbody>
     </table>
   );
 }
-
 function ViolationStrip({
   violation,
   degree,
@@ -844,25 +697,23 @@ function ViolationStrip({
   period,
   subject,
   time,
-}: {
-  violation: string;
-  degree: string;
-  day: string;
-  weekday: string;
-  period: string;
-  subject: string;
-  time: string;
 }) {
   const cells = [
     ["المخالفة / الموضوع", violation || "………………"],
     ["الدرجة", degree || "…………"],
-    ["اليوم والتاريخ", [weekday || "…………", day || "………………", time].filter(Boolean).join(" — ")],
-    ["الحصة / المادة", [period, subject].filter(Boolean).join(" · ") || "………………"],
+    [
+      "اليوم والتاريخ",
+      [weekday || "…………", day || "………………", time].filter(Boolean).join(" — "),
+    ],
+    [
+      "الحصة / المادة",
+      [period, subject].filter(Boolean).join(" · ") || "………………",
+    ],
   ];
   return (
     <div className="official-meta mb-3 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center sm:grid-cols-4">
       {cells.map(([label, value]) => (
-        <div key={label} className="border-l border-black px-1.5 py-1.5 last:border-l-0">
+        <div className="border-l border-black px-1.5 py-1.5 last:border-l-0">
           <p className="text-[11px] font-semibold text-[#00857c]">{label}</p>
           <p className="text-[13px] font-medium leading-6">{value}</p>
         </div>
@@ -870,24 +721,20 @@ function ViolationStrip({
     </div>
   );
 }
-
-function Dotted({ value }: { value: string }) {
-  return <strong className="underline decoration-dotted underline-offset-4">{value}</strong>;
-}
-
-function SignRow({
-  items,
-  note,
-}: {
-  items: { title: string; name?: string }[];
-  note?: string;
-}) {
+function Dotted({ value }) {
   return (
-    <>
+    <strong className="underline decoration-dotted underline-offset-4">
+      {value}
+    </strong>
+  );
+}
+function SignRow({ items, note }) {
+  return (
+    <Fragment>
       {note ? <ActionNoteBox note={note} /> : null}
       <div className="mt-5 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
         {items.map((item) => (
-          <div key={item.title}>
+          <div>
             <p className="font-semibold">{item.title}</p>
             <p>الاسم: {item.name || "………………"}</p>
             <p>التوقيع: ………………</p>
@@ -895,20 +742,18 @@ function SignRow({
           </div>
         ))}
       </div>
-    </>
+    </Fragment>
   );
 }
-
-function NamesTail({ note, children }: { note?: string; children: ReactNode }) {
+function NamesTail({ note, children }) {
   return (
-    <>
+    <Fragment>
       {note ? <ActionNoteBox note={note} /> : null}
       {children}
-    </>
+    </Fragment>
   );
 }
-
-function RepeatBox({ ctx }: { ctx: FormCtx }) {
+function RepeatBox({ ctx }) {
   if (ctx.occurrence <= 1 && ctx.previous.length === 0) return null;
   return (
     <div className="official-tint my-2 rounded-sm border border-[#00857c] px-3 py-2 text-[12px] leading-6">
@@ -920,17 +765,27 @@ function RepeatBox({ ctx }: { ctx: FormCtx }) {
         <table className="official-table mt-1">
           <thead>
             <tr>
-              {["المرة", "اليوم والتاريخ", "الحصة", "المادة", "الإجراء السابق"].map((h) => (
-                <th key={h}>{h}</th>
+              {[
+                "المرة",
+                "اليوم والتاريخ",
+                "الحصة",
+                "المادة",
+                "الإجراء السابق",
+              ].map((h) => (
+                <th>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {ctx.previous.slice(0, 4).map((n, i) => (
-              <tr key={`${n.createdAt}-${i}`}>
+              <tr>
                 <td>{occurrenceLabel(n.occurrence || i + 1)}</td>
                 <td>{formatStamp(n.createdAt)}</td>
-                <td>{n.periodKey ? periodShort(n.periodKey, ctx.season, ctx.schedules) : "—"}</td>
+                <td>
+                  {n.periodKey
+                    ? periodShort(n.periodKey, ctx.season, ctx.schedules)
+                    : "—"}
+                </td>
                 <td>{n.teacherSubject || "—"}</td>
                 <td>{actionDisplay(n.actionTaken) || "—"}</td>
               </tr>
@@ -941,9 +796,10 @@ function RepeatBox({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function ProcedureList({ ctx }: { ctx: FormCtx }) {
-  const list = ctx.actionSteps.filter((s) => s.trim() && s.replace(/[.…\s]/g, "").length > 0);
+function ProcedureList({ ctx }) {
+  const list = ctx.actionSteps.filter(
+    (s) => s.trim() && s.replace(/[.…\s]/g, "").length > 0,
+  );
   if (!list.length) return null;
   return (
     <div className="my-2 rounded-sm border border-black px-3 py-2">
@@ -953,14 +809,13 @@ function ProcedureList({ ctx }: { ctx: FormCtx }) {
       </p>
       <ol className="list-decimal pr-5 leading-7">
         {list.slice(0, 6).map((s, i) => (
-          <li key={i}>{s}</li>
+          <li>{s}</li>
         ))}
       </ol>
     </div>
   );
 }
-
-function CompensationLine({ ctx }: { ctx: FormCtx }) {
+function CompensationLine({ ctx }) {
   if (!ctx.showCompensation || !ctx.compensation) return null;
   return (
     <p className="rounded-sm border border-black px-3 py-2 text-[13.5px] leading-7">
@@ -968,31 +823,32 @@ function CompensationLine({ ctx }: { ctx: FormCtx }) {
     </p>
   );
 }
-
-function PledgeBody({ ctx }: { ctx: FormCtx }) {
+function PledgeBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
       <p>
-        أنا {ctx.studentWord} <Dotted value={ctx.name} /> بالصف <Dotted value={ctx.classLine} />
+        أنا {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
+        <Dotted value={ctx.classLine} />
       </p>
       <p>
-        أنني قمت في يوم <Dotted value={ctx.weekday} /> الموافق <Dotted value={ctx.day} /> هجريًا{" "}
-        <Dotted value={ctx.hijri} />
+        أنني قمت في يوم <Dotted value={ctx.weekday} /> الموافق{" "}
+        <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} />
         {ctx.period ? (
-          <>
+          <Fragment>
             {" "}
             في <Dotted value={ctx.period} />
-          </>
+          </Fragment>
         ) : null}
         {ctx.subject ? (
-          <>
+          <Fragment>
             {" "}
             مادة <Dotted value={ctx.subject} />
-          </>
+          </Fragment>
         ) : null}
       </p>
       <p>
-        بمشكلة سلوكية من الدرجة <Dotted value={ctx.degree} /> وهي <Dotted value={ctx.violation} />
+        بمشكلة سلوكية من الدرجة <Dotted value={ctx.degree} /> وهي{" "}
+        <Dotted value={ctx.violation} />
       </p>
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
@@ -1001,38 +857,50 @@ function PledgeBody({ ctx }: { ctx: FormCtx }) {
       <SignRow
         note={ctx.actionNote}
         items={[
-          { title: ctx.studentWord, name: ctx.name },
-          { title: "ولي الأمر" },
-          { title: ctx.principal, name: ctx.principalName },
+          {
+            title: ctx.studentWord,
+            name: ctx.name,
+          },
+          {
+            title: "ولي الأمر",
+          },
+          {
+            title: ctx.principal,
+            name: ctx.principalName,
+          },
         ]}
       />
     </div>
   );
 }
-
-function ReceiptBody({ ctx }: { ctx: FormCtx }) {
+function ReceiptBody({ ctx }) {
   return (
     <div className="space-y-3 text-[13.5px] leading-8">
       <p>
         أفيد أنا ولي أمر {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
-        <Dotted value={ctx.classLine} /> بأنني استلمت نسخة من قواعد السلوك والمواظبة لطلبة التعليم
-        العام (الإصدار الخامس 1447هـ) الخاصة بـ <Dotted value={ctx.schoolName} />، واطلعت على ما ورد
-        فيها، وأتعهد بالتعاون مع إدارة المدرسة لتطبيقها.
+        <Dotted value={ctx.classLine} /> بأنني استلمت نسخة من قواعد السلوك
+        والمواظبة لطلبة التعليم العام (الإصدار الخامس 1447هـ) الخاصة بـ{" "}
+        <Dotted value={ctx.schoolName} />، واطلعت على ما ورد فيها، وأتعهد
+        بالتعاون مع إدارة المدرسة لتطبيقها.
       </p>
       <p>اسم ولي الأمر: …………………………………… رقم الهوية: ……………………</p>
       <p>الجوال: {ctx.parentPhone || "……………………"}</p>
       <SignRow
         note={ctx.actionNote}
         items={[
-          { title: "ولي الأمر" },
-          { title: ctx.principal, name: ctx.principalName },
+          {
+            title: "ولي الأمر",
+          },
+          {
+            title: ctx.principal,
+            name: ctx.principalName,
+          },
         ]}
       />
     </div>
   );
 }
-
-function CommitmentBody({ ctx }: { ctx: FormCtx }) {
+function CommitmentBody({ ctx }) {
   return (
     <div className="space-y-3 text-[13px] leading-7">
       <p>
@@ -1045,17 +913,18 @@ function CommitmentBody({ ctx }: { ctx: FormCtx }) {
       <div className="rounded border border-black p-3">
         <p className="mb-1 text-[11px] font-semibold">خاص ب{ctx.studentWord}</p>
         <p>
-          نعم أنا {ctx.studentWord} الموضح اسمه وبياناته أعلاه، قد اطلعت على محتوى قواعد السلوك
-          والمواظبة، وبناء عليه أتعهد أن ألتزم بالأنظمة والتعليمات الخاصة بها.
+          نعم أنا {ctx.studentWord} الموضح اسمه وبياناته أعلاه، قد اطلعت على
+          محتوى قواعد السلوك والمواظبة، وبناء عليه أتعهد أن ألتزم بالأنظمة
+          والتعليمات الخاصة بها.
         </p>
         <p className="mt-2">التوقيع: ……………… التاريخ: / / 14هـ</p>
       </div>
       <div className="rounded border border-black p-3">
         <p className="mb-1 text-[11px] font-semibold">خاص بولي الأمر</p>
         <p>
-          نعم أنا ولي أمر {ctx.studentWord} الموضح اسمه أعلاه، قد اطلعت على محتوى قواعد السلوك
-          والمواظبة، وأتعهد أن أتعاون مع إدارة المدرسة في سبيل مصلحة ابني / ابنتي، وأتحمل مسؤولية
-          صحة أرقام التواصل التالية:
+          نعم أنا ولي أمر {ctx.studentWord} الموضح اسمه أعلاه، قد اطلعت على
+          محتوى قواعد السلوك والمواظبة، وأتعهد أن أتعاون مع إدارة المدرسة في
+          سبيل مصلحة ابني / ابنتي، وأتحمل مسؤولية صحة أرقام التواصل التالية:
         </p>
         <p className="mt-1">الاسم: ……………… العمل: ………………</p>
         <p>هاتف العمل: ……………… هاتف المنزل: ………………</p>
@@ -1063,14 +932,13 @@ function CommitmentBody({ ctx }: { ctx: FormCtx }) {
         <p className="mt-1">التوقيع: ……………… التاريخ: / / 14هـ</p>
       </div>
       <p className="text-[11px] leading-5">
-        ملحوظة: يؤخذ توقيع {ctx.studentWord} وولي الأمر في بداية العام الدراسي، وتحفظ النماذج لدى{" "}
-        {ctx.counselor}.
+        ملحوظة: يؤخذ توقيع {ctx.studentWord} وولي الأمر في بداية العام الدراسي،
+        وتحفظ النماذج لدى {ctx.counselor}.
       </p>
     </div>
   );
 }
-
-function NoticeBody({ ctx }: { ctx: FormCtx }) {
+function NoticeBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
       <p>
@@ -1079,41 +947,42 @@ function NoticeBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <p>السلام عليكم ورحمة الله وبركاته</p>
       <p>
-        نشعركم بأن {ctx.studentWord} {ctx.did} بمشكلة سلوكية من الدرجة <Dotted value={ctx.degree} /> وهي{" "}
-        <Dotted value={ctx.violation} />
+        نشعركم بأن {ctx.studentWord} {ctx.did} بمشكلة سلوكية من الدرجة{" "}
+        <Dotted value={ctx.degree} /> وهي <Dotted value={ctx.violation} />
         {ctx.period ? (
-          <>
+          <Fragment>
             {" "}
             في <Dotted value={ctx.period} />
-          </>
+          </Fragment>
         ) : null}
         {ctx.subject ? (
-          <>
+          <Fragment>
             {" "}
             مادة <Dotted value={ctx.subject} />
-          </>
+          </Fragment>
         ) : null}
       </p>
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
       <CompensationLine ctx={ctx} />
-      <p>لذا يرجى منكم المتابعة والتعاون مع المدرسة بما يسهم في انضباط سلوك ابنكم / ابنتكم.</p>
+      <p>
+        لذا يرجى منكم المتابعة والتعاون مع المدرسة بما يسهم في انضباط سلوك ابنكم
+        / ابنتكم.
+      </p>
       <NamesTail note={ctx.actionNote}>
-      <div className="mt-6 flex justify-between">
-        <p className="text-[12px]">الختم</p>
-        <div className="text-center text-[12px] leading-6">
-          <p className="font-semibold">{ctx.principal}</p>
-          <p>الاسم: {ctx.principalName || "………………"}</p>
-          <p>التوقيع: ………………</p>
+        <div className="mt-6 flex justify-between">
+          <p className="text-[12px]">الختم</p>
+          <div className="text-center text-[12px] leading-6">
+            <p className="font-semibold">{ctx.principal}</p>
+            <p>الاسم: {ctx.principalName || "………………"}</p>
+            <p>التوقيع: ………………</p>
+          </div>
         </div>
-      </div>
       </NamesTail>
     </div>
   );
 }
-
-function InviteBody({ ctx }: { ctx: FormCtx }) {
-  const reason = ctx.inviteReason || "مناقشة وضع الطالب مع إدارة المدرسة";
+function InviteBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
       <p>
@@ -1122,93 +991,108 @@ function InviteBody({ ctx }: { ctx: FormCtx }) {
       </p>
       <p>السلام عليكم ورحمة الله وبركاته</p>
       <p>
-        نأمل منكم الحضور إلى المدرسة في يوم <Dotted value={ctx.weekday} /> الموافق{" "}
-        <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} /> لمقابلة {ctx.principal}، وذلك
-        بهدف <Dotted value={reason} />.
+        نأمل منكم الحضور إلى المدرسة في يوم <Dotted value={ctx.weekday} />{" "}
+        الموافق <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} />{" "}
+        لمقابلة {ctx.principal}، وذلك بهدف مناقشة مشكلة سلوكية ({ctx.violation}
+        ).
       </p>
-      {ctx.showViolation ? (
-        <p>
-          نوع المخالفة: <Dotted value={ctx.violation} />
-          {ctx.degree && ctx.degree !== "…………" ? <> — درجتها <Dotted value={ctx.degree} /></> : null}
-        </p>
-      ) : null}
       <p>شاكرين لكم تعاونكم معنا لتحقيق مصلحة {ctx.studentWord}.</p>
       <NamesTail note={ctx.actionNote}>
-      <div className="mt-4 flex justify-between">
-        <p className="text-[12px]">الختم</p>
-        <div className="text-center text-[12px] leading-6">
-          <p className="font-semibold">{ctx.principal}</p>
-          <p>الاسم: {ctx.principalName || "………………"}</p>
-          <p>التوقيع: ………………</p>
+        <div className="mt-4 flex justify-between">
+          <p className="text-[12px]">الختم</p>
+          <div className="text-center text-[12px] leading-6">
+            <p className="font-semibold">{ctx.principal}</p>
+            <p>الاسم: {ctx.principalName || "………………"}</p>
+            <p>التوقيع: ………………</p>
+          </div>
         </div>
-      </div>
       </NamesTail>
       <div className="mt-4 border-t border-black pt-2 text-[13px] leading-7">
         <p className="font-semibold">رد ولي الأمر:</p>
         <p>☐ أقر بالعلم، وسأحضر في الموعد المحدد.</p>
-        <p>☐ أقر بالعلم، وأرغب بتغيير الموعد (خلال نفس الأسبوع)، وذلك في يوم ……………… الموافق / / 14هـ</p>
+        <p>
+          ☐ أقر بالعلم، وأرغب بتغيير الموعد (خلال نفس الأسبوع)، وذلك في يوم
+          ……………… الموافق / / 14هـ
+        </p>
         <p>الاسم: ……………… التوقيع: ……………… التاريخ: ………………</p>
       </div>
     </div>
   );
 }
-
-function ReferralBody({ ctx }: { ctx: FormCtx }) {
+function ReferralBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
       <p>المكرم الموجه الطلابي / الموجهة الطلابية</p>
       <p>السلام عليكم ورحمة الله وبركاته</p>
       <p>
         نحيل إليكم {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
-        <Dotted value={ctx.classLine} /> ذي المشكلة السلوكية من الدرجة <Dotted value={ctx.degree} /> وهي{" "}
-        <Dotted value={ctx.violation} />
+        <Dotted value={ctx.classLine} /> ذي المشكلة السلوكية من الدرجة{" "}
+        <Dotted value={ctx.degree} /> وهي <Dotted value={ctx.violation} />
       </p>
       <RepeatBox ctx={ctx} />
-      <p>يرجى متابعة الحالة ودراسة وضعها ووضع الحلول التربوية والعلاجية المناسبة.</p>
+      <p>
+        يرجى متابعة الحالة ودراسة وضعها ووضع الحلول التربوية والعلاجية المناسبة.
+      </p>
       <NamesTail note={ctx.actionNote}>
-      <div className="mt-8 flex justify-between">
-        <p className="text-[12px]">الختم</p>
-        <div className="text-center text-[12px] leading-6">
-          <p className="font-semibold">{ctx.counselor}</p>
-          <p>الاسم: {ctx.counselorName || "………………"}</p>
-          <p>التوقيع: ………………</p>
+        <div className="mt-8 flex justify-between">
+          <p className="text-[12px]">الختم</p>
+          <div className="text-center text-[12px] leading-6">
+            <p className="font-semibold">{ctx.counselor}</p>
+            <p>الاسم: {ctx.counselorName || "………………"}</p>
+            <p>التوقيع: ………………</p>
+          </div>
         </div>
-      </div>
       </NamesTail>
     </div>
   );
 }
-
-function AttendanceBody({ ctx }: { ctx: FormCtx }) {
-  const days = ctx.absenceNotes.length ? String(ctx.absenceNotes.length) : "…………";
-  const dates = ctx.absenceNotes.map((n) => formatDay(n.createdAt)).join("، ") || "………………";
+function AttendanceBody({ ctx }) {
+  const days = ctx.absenceNotes.length
+    ? String(ctx.absenceNotes.length)
+    : "…………";
+  const dates =
+    ctx.absenceNotes.map((n) => formatDay(n.createdAt)).join("، ") || "………………";
   return (
     <div className="space-y-3 text-[13.5px] leading-8">
       <p>
-        أنا {ctx.studentWord} <Dotted value={ctx.name} /> بالصف <Dotted value={ctx.classLine} />
+        أنا {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
+        <Dotted value={ctx.classLine} />
       </p>
       <p>
-        أنني تغيبت عن الحضور للمدرسة بدون عذر لمدة <Dotted value={days} /> أيام، بتاريخ{" "}
-        <Dotted value={dates} />
+        أنني تغيبت عن الحضور للمدرسة بدون عذر لمدة <Dotted value={days} /> أيام،
+        بتاريخ <Dotted value={dates} />
       </p>
-      <p>وأتعهد بالالتزام بالخطة التربوية والعلاجية المقدمة لتحسين الحضور، وعلى ذلك جرى التوقيع.</p>
+      <p>
+        وأتعهد بالالتزام بالخطة التربوية والعلاجية المقدمة لتحسين الحضور، وعلى
+        ذلك جرى التوقيع.
+      </p>
       <SignRow
         note={ctx.actionNote}
         items={[
-          { title: ctx.studentWord, name: ctx.name },
-          { title: "ولي الأمر" },
-          { title: ctx.principal, name: ctx.principalName },
+          {
+            title: ctx.studentWord,
+            name: ctx.name,
+          },
+          {
+            title: "ولي الأمر",
+          },
+          {
+            title: ctx.principal,
+            name: ctx.principalName,
+          },
         ]}
       />
     </div>
   );
 }
-
-function RecordBody({ ctx }: { ctx: FormCtx }) {
+function RecordBody({ ctx }) {
   const rows = ctx.behaviorNotes.slice(0, 6);
-  if (!rows.length) {
-    return <p className="py-4 text-center text-[13px]">لا توجد مخالفات مسجّلة في السجل.</p>;
-  }
+  if (!rows.length)
+    return (
+      <p className="py-4 text-center text-[13px]">
+        لا توجد مخالفات مسجّلة في السجل.
+      </p>
+    );
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1224,15 +1108,17 @@ function RecordBody({ ctx }: { ctx: FormCtx }) {
               "توقيع الطالب",
               "توقيع ولي الأمر",
             ].map((h) => (
-              <th key={h}>{h}</th>
+              <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((n, i) => (
-            <tr key={n?.createdAt ?? i}>
+            <tr>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
-              <td>{n ? `الدرجة ${degreeLabel(n.behaviorDegree) || "—"}` : ""}</td>
+              <td>
+                {n ? `الدرجة ${degreeLabel(n.behaviorDegree) || "—"}` : ""}
+              </td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
               <td />
               <td>{actionDisplay(n?.actionTaken)}</td>
@@ -1246,20 +1132,24 @@ function RecordBody({ ctx }: { ctx: FormCtx }) {
       {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
-        <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — التاريخ: ………………</p>
+        <p>
+          الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — التاريخ:
+          ………………
+        </p>
       </div>
     </div>
   );
 }
-
-function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
+function TeacherLogBody({ ctx }) {
   const rows = ctx.behaviorNotes.slice(0, 7);
-  const teacher = ctx.behaviorNotes.find((n) => n.teacherName)?.teacherName || "";
-  if (!rows.length) {
+  const teacher =
+    ctx.behaviorNotes.find((n) => n.teacherName)?.teacherName || "";
+  if (!rows.length)
     return (
-      <p className="py-4 text-center text-[13px]">لا توجد مخالفات مسجّلة لعرضها في السجل.</p>
+      <p className="py-4 text-center text-[13px]">
+        لا توجد مخالفات مسجّلة لعرضها في السجل.
+      </p>
     );
-  }
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1274,20 +1164,22 @@ function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
               "التاريخ",
               "الحصة",
             ].map((h) => (
-              <th key={h}>{h}</th>
+              <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((n, i) => (
-            <tr key={n?.createdAt ?? i}>
+            <tr>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
               <td>{n ? degreeLabel(n.behaviorDegree) : ""}</td>
               <td>{actionDisplay(n?.actionTaken)}</td>
               <td />
               <td>{n?.occurrence ? occurrenceLabel(n.occurrence) : ""}</td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
-              <td>{n ? periodShort(n.periodKey, ctx.season, ctx.schedules) : ""}</td>
+              <td>
+                {n ? periodShort(n.periodKey, ctx.season, ctx.schedules) : ""}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -1300,13 +1192,13 @@ function TeacherLogBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function PlanBody({ ctx }: { ctx: FormCtx }) {
+function PlanBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-7">
       <p className="font-semibold">أولاً: تحديد المشكلة السلوكية</p>
       <p>
-        المشكلة: <Dotted value={ctx.violation} /> درجتها: <Dotted value={ctx.degree} />
+        المشكلة: <Dotted value={ctx.violation} /> درجتها:{" "}
+        <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
       <p>وصف المشكلة / المظاهر: {ctx.focus?.details || "—"}</p>
@@ -1317,7 +1209,7 @@ function PlanBody({ ctx }: { ctx: FormCtx }) {
             .filter((s) => s.trim())
             .slice(0, 6)
             .map((s, i) => (
-              <li key={i}>{s}</li>
+              <li>{s}</li>
             ))}
         </ol>
       ) : null}
@@ -1328,35 +1220,50 @@ function PlanBody({ ctx }: { ctx: FormCtx }) {
       <SignRow
         note={ctx.actionNote}
         items={[
-          { title: "القائم بتعديل السلوك" },
-          { title: ctx.counselor, name: ctx.counselorName },
-          { title: ctx.principal, name: ctx.principalName },
+          {
+            title: "القائم بتعديل السلوك",
+          },
+          {
+            title: ctx.counselor,
+            name: ctx.counselorName,
+          },
+          {
+            title: ctx.principal,
+            name: ctx.principalName,
+          },
         ]}
       />
     </div>
   );
 }
-
-function CompensationBody({ ctx }: { ctx: FormCtx }) {
+function CompensationBody({ ctx }) {
   const rows = ctx.behaviorNotes.slice(0, 5);
-  if (!rows.length) {
-    return <p className="py-4 text-center text-[13px]">لا توجد مخالفات لعرض فرص التعويض.</p>;
-  }
+  if (!rows.length)
+    return (
+      <p className="py-4 text-center text-[13px]">
+        لا توجد مخالفات لعرض فرص التعويض.
+      </p>
+    );
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
         <thead>
           <tr>
-            {["المشكلة السلوكية", "نوعها ودرجتها", "درجات السلوك المحسومة", "فرص التعويض", "الدرجات المكتسبة", "توقيع الطالب"].map(
-              (h) => (
-                <th key={h}>{h}</th>
-              ),
-            )}
+            {[
+              "المشكلة السلوكية",
+              "نوعها ودرجتها",
+              "درجات السلوك المحسومة",
+              "فرص التعويض",
+              "الدرجات المكتسبة",
+              "توقيع الطالب",
+            ].map((h) => (
+              <th>{h}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((n, i) => (
-            <tr key={n?.createdAt ?? i}>
+            <tr>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
               <td>{n ? degreeLabel(n.behaviorDegree) : ""}</td>
               <td />
@@ -1375,8 +1282,7 @@ function CompensationBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function ExcellenceBody({ ctx }: { ctx: FormCtx }) {
+function ExcellenceBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1391,15 +1297,19 @@ function ExcellenceBody({ ctx }: { ctx: FormCtx }) {
               "اسم راصد السلوك",
               "التوقيع",
             ].map((h) => (
-              <th key={h}>{h}</th>
+              <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <tr key={i}>
-              {Array.from({ length: 7 }).map((__, j) => (
-                <td key={j} className="h-7" />
+          {Array.from({
+            length: 8,
+          }).map((_, i) => (
+            <tr>
+              {Array.from({
+                length: 7,
+              }).map((__, j) => (
+                <td className="h-7" />
               ))}
             </tr>
           ))}
@@ -1413,12 +1323,12 @@ function ExcellenceBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function IncidentBody({ ctx }: { ctx: FormCtx }) {
+function IncidentBody({ ctx }) {
   return (
     <div className="space-y-2 text-[14px] leading-7">
       <p>
-        المشكلة السلوكية: <Dotted value={ctx.violation} /> درجتها: <Dotted value={ctx.degree} />
+        المشكلة السلوكية: <Dotted value={ctx.violation} /> درجتها:{" "}
+        <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
       <p>نوع المشاهدة المضبوطة: ☐ صور ☐ مقاطع فيديو ☐ محادثات ☐ أخرى ………………</p>
@@ -1426,14 +1336,18 @@ function IncidentBody({ ctx }: { ctx: FormCtx }) {
       <table className="official-table">
         <thead>
           <tr>
-            {["م", "الاسم", "الوظيفة", "العمل المسند إليه", "التوقيع"].map((h) => (
-              <th key={h}>{h}</th>
-            ))}
+            {["م", "الاسم", "الوظيفة", "العمل المسند إليه", "التوقيع"].map(
+              (h) => (
+                <th>{h}</th>
+              ),
+            )}
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <tr key={i}>
+          {Array.from({
+            length: 5,
+          }).map((_, i) => (
+            <tr>
               <td>{i + 1}</td>
               <td />
               <td />
@@ -1446,16 +1360,23 @@ function IncidentBody({ ctx }: { ctx: FormCtx }) {
       <SignRow
         note={ctx.actionNote}
         items={[
-          { title: ctx.studentWord, name: ctx.name },
-          { title: "ولي الأمر" },
-          { title: ctx.principal, name: ctx.principalName },
+          {
+            title: ctx.studentWord,
+            name: ctx.name,
+          },
+          {
+            title: "ولي الأمر",
+          },
+          {
+            title: ctx.principal,
+            name: ctx.principalName,
+          },
         ]}
       />
     </div>
   );
 }
-
-function CommitteeBody({ ctx }: { ctx: FormCtx }) {
+function CommitteeBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px] leading-7">
       <p>
@@ -1472,16 +1393,18 @@ function CommitteeBody({ ctx }: { ctx: FormCtx }) {
             .filter((s) => s.trim())
             .slice(0, 4)
             .map((s, i) => (
-              <li key={i}>{s}</li>
+              <li>{s}</li>
             ))}
         </ol>
       ) : null}
       <table className="official-table">
         <thead>
           <tr>
-            {["م", "اسم العضو", "الوظيفة", "العمل المسند إليه", "التوقيع"].map((h) => (
-              <th key={h}>{h}</th>
-            ))}
+            {["م", "اسم العضو", "الوظيفة", "العمل المسند إليه", "التوقيع"].map(
+              (h) => (
+                <th>{h}</th>
+              ),
+            )}
           </tr>
         </thead>
         <tbody>
@@ -1493,9 +1416,9 @@ function CommitteeBody({ ctx }: { ctx: FormCtx }) {
             ["5", "", "معلم متميز", "عضو"],
             ["6", "", "معلم متميز", "عضو"],
           ].map((row) => (
-            <tr key={row[0]}>
+            <tr>
               {row.map((c, i) => (
-                <td key={i}>{c}</td>
+                <td>{c}</td>
               ))}
               <td />
             </tr>
@@ -1510,12 +1433,13 @@ function CommitteeBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function ViolenceBody({ ctx }: { ctx: FormCtx }) {
+function ViolenceBody({ ctx }) {
   return (
     <div className="space-y-2 text-[12.5px] leading-7">
       <p className="text-center text-[11px] font-semibold">(سري للغاية)</p>
-      <p>اليوم: {ctx.weekday} — التاريخ: {ctx.day} — الساعة: ………………</p>
+      <p>
+        اليوم: {ctx.weekday} — التاريخ: {ctx.day} — الساعة: ………………
+      </p>
       <table className="official-table">
         <tbody>
           <tr>
@@ -1531,19 +1455,22 @@ function ViolenceBody({ ctx }: { ctx: FormCtx }) {
       {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
         <p className="font-semibold">{ctx.principal}</p>
-        <p>الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — الختم المدرسي</p>
+        <p>
+          الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — الختم
+          المدرسي
+        </p>
       </div>
     </div>
   );
 }
-
-function RiskBody({ ctx }: { ctx: FormCtx }) {
+function RiskBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px] leading-7">
       <p className="text-center text-[11px] font-semibold">(سري للغاية)</p>
       <p>وصف الحالة: {ctx.violation}</p>
       <p>
-        اسم راصد الحالة: {ctx.focus?.teacherName || "………………"} تاريخ الرصد: {ctx.day} وقت الرصد: ………………
+        اسم راصد الحالة: {ctx.focus?.teacherName || "………………"} تاريخ الرصد:{" "}
+        {ctx.day} وقت الرصد: ………………
       </p>
       <p className="font-semibold">الإجراءات المتخذة مع الحالة:</p>
       {[
@@ -1555,7 +1482,7 @@ function RiskBody({ ctx }: { ctx: FormCtx }) {
         "عقد اجتماع طارئ للجنة التوجيه الطلابي",
         "رفع بلاغ عن الحالة في الأنظمة التقنية الخاصة بالبلاغات",
       ].map((item) => (
-        <p key={item}>☐ {item}</p>
+        <p>☐ {item}</p>
       ))}
       {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-2 text-center text-[12px] leading-6">
@@ -1565,23 +1492,26 @@ function RiskBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function AbsenceExcusedBody({ ctx }: { ctx: FormCtx }) {
+function AbsenceExcusedBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
         <thead>
           <tr>
-            {["عدد أيام الغياب", "الإجراء المتخذ", "تاريخ الإجراء", "توقيع الطالب", "توقيع ولي الأمر"].map(
-              (h) => (
-                <th key={h}>{h}</th>
-              ),
-            )}
+            {[
+              "عدد أيام الغياب",
+              "الإجراء المتخذ",
+              "تاريخ الإجراء",
+              "توقيع الطالب",
+              "توقيع ولي الأمر",
+            ].map((h) => (
+              <th>{h}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {["3 أيام", "5 أيام", "10 أيام"].map((d) => (
-            <tr key={d}>
+            <tr>
               <td>{d}</td>
               <td />
               <td />
@@ -1599,8 +1529,7 @@ function AbsenceExcusedBody({ ctx }: { ctx: FormCtx }) {
     </div>
   );
 }
-
-function AbsenceUnexcusedBody({ ctx }: { ctx: FormCtx }) {
+function AbsenceUnexcusedBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px]">
       <table className="official-table">
@@ -1614,13 +1543,13 @@ function AbsenceUnexcusedBody({ ctx }: { ctx: FormCtx }) {
               "توقيع ولي الأمر",
               "عدد درجات المواظبة المحسومة",
             ].map((h) => (
-              <th key={h}>{h}</th>
+              <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {["3 أيام", "3 أيام متصلة", "5 أيام", "10 أيام"].map((d) => (
-            <tr key={d}>
+            <tr>
               <td>{d}</td>
               <td />
               <td />

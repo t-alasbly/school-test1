@@ -13,15 +13,34 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ArchiveRouteImport } from './routes/archive'
 import { Route as AttendanceRouteImport } from './routes/attendance'
+import { Route as ClassesRouteImport } from './routes/classes'
 import { Route as CounselingRouteImport } from './routes/counseling'
+import { Route as DeskRouteImport } from './routes/desk'
 import { Route as FormsRouteImport } from './routes/forms'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrintRouteImport } from './routes/print'
 import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as MessagesRouteImport } from './routes/messages'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StaffRouteImport } from './routes/staff'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAbsenceRouteImport } from './routes/admin.absence'
+import { Route as AdminBehaviorRouteImport } from './routes/admin.behavior'
+import { Route as AdminLateRouteImport } from './routes/admin.late'
 import { Route as ClassClassIdRouteImport } from './routes/class.$classId'
+import { Route as CounselingIndexRouteImport } from './routes/counseling.index'
+import { Route as CounselingHealthRouteImport } from './routes/counseling.health'
+import { Route as CounselingImproveRouteImport } from './routes/counseling.improve'
+import { Route as CounselingMailRouteImport } from './routes/counseling.mail'
+import { Route as CounselingMessagesRouteImport } from './routes/counseling.messages'
+import { Route as CounselingReferralsRouteImport } from './routes/counseling.referrals'
+import { Route as DeskIndexRouteImport } from './routes/desk.index'
+import { Route as DeskClosedRouteImport } from './routes/desk.closed'
+import { Route as DeskCounselorRouteImport } from './routes/desk.counselor'
+import { Route as DeskMailRouteImport } from './routes/desk.mail'
+import { Route as DeskWaitingRouteImport } from './routes/desk.waiting'
+import { Route as PrintIndexRouteImport } from './routes/print.index'
+import { Route as PrintFormsRouteImport } from './routes/print.forms'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActionsRouteImport } from './routes/settings.actions'
 import { Route as SettingsAppRouteImport } from './routes/settings.app'
@@ -59,9 +78,19 @@ const AttendanceRoute = AttendanceRouteImport.update({
   path: '/attendance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClassesRoute = ClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CounselingRoute = CounselingRouteImport.update({
   id: '/counseling',
   path: '/counseling',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeskRoute = DeskRouteImport.update({
+  id: '/desk',
+  path: '/desk',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FormsRoute = FormsRouteImport.update({
@@ -79,14 +108,14 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrintRoute = PrintRouteImport.update({
+  id: '/print',
+  path: '/print',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MessagesRoute = MessagesRouteImport.update({
-  id: '/messages',
-  path: '/messages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -99,10 +128,95 @@ const StaffRoute = StaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAbsenceRoute = AdminAbsenceRouteImport.update({
+  id: '/absence',
+  path: '/absence',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBehaviorRoute = AdminBehaviorRouteImport.update({
+  id: '/behavior',
+  path: '/behavior',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLateRoute = AdminLateRouteImport.update({
+  id: '/late',
+  path: '/late',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ClassClassIdRoute = ClassClassIdRouteImport.update({
   id: '/class/$classId',
   path: '/class/$classId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const CounselingIndexRoute = CounselingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const CounselingHealthRoute = CounselingHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const CounselingImproveRoute = CounselingImproveRouteImport.update({
+  id: '/improve',
+  path: '/improve',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const CounselingMailRoute = CounselingMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const CounselingMessagesRoute = CounselingMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const CounselingReferralsRoute = CounselingReferralsRouteImport.update({
+  id: '/referrals',
+  path: '/referrals',
+  getParentRoute: () => CounselingRoute,
+} as any)
+const DeskIndexRoute = DeskIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskClosedRoute = DeskClosedRouteImport.update({
+  id: '/closed',
+  path: '/closed',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskCounselorRoute = DeskCounselorRouteImport.update({
+  id: '/counselor',
+  path: '/counselor',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskMailRoute = DeskMailRouteImport.update({
+  id: '/mail',
+  path: '/mail',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskWaitingRoute = DeskWaitingRouteImport.update({
+  id: '/waiting',
+  path: '/waiting',
+  getParentRoute: () => DeskRoute,
+} as any)
+const PrintIndexRoute = PrintIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PrintRoute,
+} as any)
+const PrintFormsRoute = PrintFormsRouteImport.update({
+  id: '/forms',
+  path: '/forms',
+  getParentRoute: () => PrintRoute,
 } as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
@@ -187,18 +301,33 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
-  '/counseling': typeof CounselingRoute
+  '/classes': typeof ClassesRoute
+  '/counseling': typeof CounselingRouteWithChildren
+  '/desk': typeof DeskRouteWithChildren
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
+  '/print': typeof PrintRouteWithChildren
   '/reports': typeof ReportsRoute
-  '/messages': typeof MessagesRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
+  '/admin/absence': typeof AdminAbsenceRoute
+  '/admin/behavior': typeof AdminBehaviorRoute
+  '/admin/late': typeof AdminLateRoute
   '/class/$classId': typeof ClassClassIdRoute
+  '/counseling/health': typeof CounselingHealthRoute
+  '/counseling/improve': typeof CounselingImproveRoute
+  '/counseling/mail': typeof CounselingMailRoute
+  '/counseling/messages': typeof CounselingMessagesRoute
+  '/counseling/referrals': typeof CounselingReferralsRoute
+  '/desk/closed': typeof DeskClosedRoute
+  '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/mail': typeof DeskMailRoute
+  '/desk/waiting': typeof DeskWaitingRoute
+  '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -213,22 +342,37 @@ export interface FileRoutesByFullPath {
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/counseling/': typeof CounselingIndexRoute
+  '/desk/': typeof DeskIndexRoute
+  '/print/': typeof PrintIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
-  '/counseling': typeof CounselingRoute
+  '/classes': typeof ClassesRoute
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
-  '/messages': typeof MessagesRoute
   '/staff': typeof StaffRoute
+  '/admin/absence': typeof AdminAbsenceRoute
+  '/admin/behavior': typeof AdminBehaviorRoute
+  '/admin/late': typeof AdminLateRoute
   '/class/$classId': typeof ClassClassIdRoute
+  '/counseling/health': typeof CounselingHealthRoute
+  '/counseling/improve': typeof CounselingImproveRoute
+  '/counseling/mail': typeof CounselingMailRoute
+  '/counseling/messages': typeof CounselingMessagesRoute
+  '/counseling/referrals': typeof CounselingReferralsRoute
+  '/desk/closed': typeof DeskClosedRoute
+  '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/mail': typeof DeskMailRoute
+  '/desk/waiting': typeof DeskWaitingRoute
+  '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -243,24 +387,43 @@ export interface FileRoutesByTo {
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
+  '/admin': typeof AdminIndexRoute
+  '/counseling': typeof CounselingIndexRoute
+  '/desk': typeof DeskIndexRoute
+  '/print': typeof PrintIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/archive': typeof ArchiveRoute
   '/attendance': typeof AttendanceRoute
-  '/counseling': typeof CounselingRoute
+  '/classes': typeof ClassesRoute
+  '/counseling': typeof CounselingRouteWithChildren
+  '/desk': typeof DeskRouteWithChildren
   '/forms': typeof FormsRoute
   '/import': typeof ImportRoute
   '/login': typeof LoginRoute
+  '/print': typeof PrintRouteWithChildren
   '/reports': typeof ReportsRoute
-  '/messages': typeof MessagesRoute
   '/settings': typeof SettingsRouteWithChildren
   '/staff': typeof StaffRoute
+  '/admin/absence': typeof AdminAbsenceRoute
+  '/admin/behavior': typeof AdminBehaviorRoute
+  '/admin/late': typeof AdminLateRoute
   '/class/$classId': typeof ClassClassIdRoute
+  '/counseling/health': typeof CounselingHealthRoute
+  '/counseling/improve': typeof CounselingImproveRoute
+  '/counseling/mail': typeof CounselingMailRoute
+  '/counseling/messages': typeof CounselingMessagesRoute
+  '/counseling/referrals': typeof CounselingReferralsRoute
+  '/desk/closed': typeof DeskClosedRoute
+  '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/mail': typeof DeskMailRoute
+  '/desk/waiting': typeof DeskWaitingRoute
+  '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -275,6 +438,10 @@ export interface FileRoutesById {
   '/settings/school': typeof SettingsSchoolRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/counseling/': typeof CounselingIndexRoute
+  '/desk/': typeof DeskIndexRoute
+  '/print/': typeof PrintIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -285,15 +452,30 @@ export interface FileRouteTypes {
     | '/admin'
     | '/archive'
     | '/attendance'
+    | '/classes'
     | '/counseling'
+    | '/desk'
     | '/forms'
     | '/import'
     | '/login'
+    | '/print'
     | '/reports'
-    | '/messages'
     | '/settings'
     | '/staff'
+    | '/admin/absence'
+    | '/admin/behavior'
+    | '/admin/late'
     | '/class/$classId'
+    | '/counseling/health'
+    | '/counseling/improve'
+    | '/counseling/mail'
+    | '/counseling/messages'
+    | '/counseling/referrals'
+    | '/desk/closed'
+    | '/desk/counselor'
+    | '/desk/mail'
+    | '/desk/waiting'
+    | '/print/forms'
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
@@ -308,22 +490,37 @@ export interface FileRouteTypes {
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
+    | '/admin/'
+    | '/counseling/'
+    | '/desk/'
+    | '/print/'
     | '/settings/'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/archive'
     | '/attendance'
-    | '/counseling'
+    | '/classes'
     | '/forms'
     | '/import'
     | '/login'
     | '/reports'
-    | '/messages'
     | '/staff'
+    | '/admin/absence'
+    | '/admin/behavior'
+    | '/admin/late'
     | '/class/$classId'
+    | '/counseling/health'
+    | '/counseling/improve'
+    | '/counseling/mail'
+    | '/counseling/messages'
+    | '/counseling/referrals'
+    | '/desk/closed'
+    | '/desk/counselor'
+    | '/desk/mail'
+    | '/desk/waiting'
+    | '/print/forms'
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
@@ -338,6 +535,10 @@ export interface FileRouteTypes {
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
+    | '/admin'
+    | '/counseling'
+    | '/desk'
+    | '/print'
     | '/settings'
     | '/api/auth/$'
   id:
@@ -346,15 +547,30 @@ export interface FileRouteTypes {
     | '/admin'
     | '/archive'
     | '/attendance'
+    | '/classes'
     | '/counseling'
+    | '/desk'
     | '/forms'
     | '/import'
     | '/login'
+    | '/print'
     | '/reports'
-    | '/messages'
     | '/settings'
     | '/staff'
+    | '/admin/absence'
+    | '/admin/behavior'
+    | '/admin/late'
     | '/class/$classId'
+    | '/counseling/health'
+    | '/counseling/improve'
+    | '/counseling/mail'
+    | '/counseling/messages'
+    | '/counseling/referrals'
+    | '/desk/closed'
+    | '/desk/counselor'
+    | '/desk/mail'
+    | '/desk/waiting'
+    | '/print/forms'
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
@@ -369,21 +585,27 @@ export interface FileRouteTypes {
     | '/settings/school'
     | '/settings/violations'
     | '/stage/$stageId'
+    | '/admin/'
+    | '/counseling/'
+    | '/desk/'
+    | '/print/'
     | '/settings/'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ArchiveRoute: typeof ArchiveRoute
   AttendanceRoute: typeof AttendanceRoute
-  CounselingRoute: typeof CounselingRoute
+  ClassesRoute: typeof ClassesRoute
+  CounselingRoute: typeof CounselingRouteWithChildren
+  DeskRoute: typeof DeskRouteWithChildren
   FormsRoute: typeof FormsRoute
   ImportRoute: typeof ImportRoute
   LoginRoute: typeof LoginRoute
+  PrintRoute: typeof PrintRouteWithChildren
   ReportsRoute: typeof ReportsRoute
-  MessagesRoute: typeof MessagesRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   StaffRoute: typeof StaffRoute
   ClassClassIdRoute: typeof ClassClassIdRoute
@@ -421,11 +643,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AttendanceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/classes': {
+      id: '/classes'
+      path: '/classes'
+      fullPath: '/classes'
+      preLoaderRoute: typeof ClassesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/counseling': {
       id: '/counseling'
       path: '/counseling'
       fullPath: '/counseling'
       preLoaderRoute: typeof CounselingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desk': {
+      id: '/desk'
+      path: '/desk'
+      fullPath: '/desk'
+      preLoaderRoute: typeof DeskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forms': {
@@ -449,6 +685,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/print': {
+      id: '/print'
+      path: '/print'
+      fullPath: '/print'
+      preLoaderRoute: typeof PrintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
@@ -470,12 +713,131 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StaffRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/absence': {
+      id: '/admin/absence'
+      path: '/absence'
+      fullPath: '/admin/absence'
+      preLoaderRoute: typeof AdminAbsenceRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/behavior': {
+      id: '/admin/behavior'
+      path: '/behavior'
+      fullPath: '/admin/behavior'
+      preLoaderRoute: typeof AdminBehaviorRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/late': {
+      id: '/admin/late'
+      path: '/late'
+      fullPath: '/admin/late'
+      preLoaderRoute: typeof AdminLateRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/class/$classId': {
       id: '/class/$classId'
       path: '/class/$classId'
       fullPath: '/class/$classId'
       preLoaderRoute: typeof ClassClassIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/counseling/': {
+      id: '/counseling/'
+      path: '/'
+      fullPath: '/counseling/'
+      preLoaderRoute: typeof CounselingIndexRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/counseling/health': {
+      id: '/counseling/health'
+      path: '/health'
+      fullPath: '/counseling/health'
+      preLoaderRoute: typeof CounselingHealthRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/counseling/improve': {
+      id: '/counseling/improve'
+      path: '/improve'
+      fullPath: '/counseling/improve'
+      preLoaderRoute: typeof CounselingImproveRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/counseling/mail': {
+      id: '/counseling/mail'
+      path: '/mail'
+      fullPath: '/counseling/mail'
+      preLoaderRoute: typeof CounselingMailRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/counseling/messages': {
+      id: '/counseling/messages'
+      path: '/messages'
+      fullPath: '/counseling/messages'
+      preLoaderRoute: typeof CounselingMessagesRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/counseling/referrals': {
+      id: '/counseling/referrals'
+      path: '/referrals'
+      fullPath: '/counseling/referrals'
+      preLoaderRoute: typeof CounselingReferralsRouteImport
+      parentRoute: typeof CounselingRoute
+    }
+    '/desk/': {
+      id: '/desk/'
+      path: '/'
+      fullPath: '/desk/'
+      preLoaderRoute: typeof DeskIndexRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/closed': {
+      id: '/desk/closed'
+      path: '/closed'
+      fullPath: '/desk/closed'
+      preLoaderRoute: typeof DeskClosedRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/counselor': {
+      id: '/desk/counselor'
+      path: '/counselor'
+      fullPath: '/desk/counselor'
+      preLoaderRoute: typeof DeskCounselorRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/mail': {
+      id: '/desk/mail'
+      path: '/mail'
+      fullPath: '/desk/mail'
+      preLoaderRoute: typeof DeskMailRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/waiting': {
+      id: '/desk/waiting'
+      path: '/waiting'
+      fullPath: '/desk/waiting'
+      preLoaderRoute: typeof DeskWaitingRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/print/': {
+      id: '/print/'
+      path: '/'
+      fullPath: '/print/'
+      preLoaderRoute: typeof PrintIndexRouteImport
+      parentRoute: typeof PrintRoute
+    }
+    '/print/forms': {
+      id: '/print/forms'
+      path: '/forms'
+      fullPath: '/print/forms'
+      preLoaderRoute: typeof PrintFormsRouteImport
+      parentRoute: typeof PrintRoute
     }
     '/settings/': {
       id: '/settings/'
@@ -592,6 +954,74 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminAbsenceRoute: typeof AdminAbsenceRoute
+  AdminBehaviorRoute: typeof AdminBehaviorRoute
+  AdminLateRoute: typeof AdminLateRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAbsenceRoute: AdminAbsenceRoute,
+  AdminBehaviorRoute: AdminBehaviorRoute,
+  AdminLateRoute: AdminLateRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface CounselingRouteChildren {
+  CounselingHealthRoute: typeof CounselingHealthRoute
+  CounselingImproveRoute: typeof CounselingImproveRoute
+  CounselingMailRoute: typeof CounselingMailRoute
+  CounselingMessagesRoute: typeof CounselingMessagesRoute
+  CounselingReferralsRoute: typeof CounselingReferralsRoute
+  CounselingIndexRoute: typeof CounselingIndexRoute
+}
+
+const CounselingRouteChildren: CounselingRouteChildren = {
+  CounselingHealthRoute: CounselingHealthRoute,
+  CounselingImproveRoute: CounselingImproveRoute,
+  CounselingMailRoute: CounselingMailRoute,
+  CounselingMessagesRoute: CounselingMessagesRoute,
+  CounselingReferralsRoute: CounselingReferralsRoute,
+  CounselingIndexRoute: CounselingIndexRoute,
+}
+
+const CounselingRouteWithChildren = CounselingRoute._addFileChildren(
+  CounselingRouteChildren,
+)
+
+interface DeskRouteChildren {
+  DeskClosedRoute: typeof DeskClosedRoute
+  DeskCounselorRoute: typeof DeskCounselorRoute
+  DeskMailRoute: typeof DeskMailRoute
+  DeskWaitingRoute: typeof DeskWaitingRoute
+  DeskIndexRoute: typeof DeskIndexRoute
+}
+
+const DeskRouteChildren: DeskRouteChildren = {
+  DeskClosedRoute: DeskClosedRoute,
+  DeskCounselorRoute: DeskCounselorRoute,
+  DeskMailRoute: DeskMailRoute,
+  DeskWaitingRoute: DeskWaitingRoute,
+  DeskIndexRoute: DeskIndexRoute,
+}
+
+const DeskRouteWithChildren = DeskRoute._addFileChildren(DeskRouteChildren)
+
+interface PrintRouteChildren {
+  PrintFormsRoute: typeof PrintFormsRoute
+  PrintIndexRoute: typeof PrintIndexRoute
+}
+
+const PrintRouteChildren: PrintRouteChildren = {
+  PrintFormsRoute: PrintFormsRoute,
+  PrintIndexRoute: PrintIndexRoute,
+}
+
+const PrintRouteWithChildren = PrintRoute._addFileChildren(PrintRouteChildren)
+
 interface SettingsRouteChildren {
   SettingsActionsRoute: typeof SettingsActionsRoute
   SettingsAppRoute: typeof SettingsAppRoute
@@ -632,15 +1062,17 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   ArchiveRoute: ArchiveRoute,
   AttendanceRoute: AttendanceRoute,
-  CounselingRoute: CounselingRoute,
+  ClassesRoute: ClassesRoute,
+  CounselingRoute: CounselingRouteWithChildren,
+  DeskRoute: DeskRouteWithChildren,
   FormsRoute: FormsRoute,
   ImportRoute: ImportRoute,
   LoginRoute: LoginRoute,
+  PrintRoute: PrintRouteWithChildren,
   ReportsRoute: ReportsRoute,
-  MessagesRoute: MessagesRoute,
   SettingsRoute: SettingsRouteWithChildren,
   StaffRoute: StaffRoute,
   ClassClassIdRoute: ClassClassIdRoute,

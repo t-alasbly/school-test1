@@ -33,9 +33,6 @@ import {
   phoneToLoginEmail,
   procedureLadder,
   withOccurrence,
-  fillTemplate,
-  formatDay,
-  weekdayName,
 } from "./constants";
 import { parsePermissions, defaultPermissions } from "./permissions";
 import { parseAppearance, parseOptionalAppearance } from "./theme";
@@ -70,23 +67,12 @@ function mapSchool(school) {
 		schedules: parseSchedules(school.schedules),
 		messageTemplates: parseMessageTemplates(school.message_templates),
 		customMessages: parseCustomMessages(school.custom_messages),
-		inviteReasons: parseInviteReasons(school.invite_reasons),
 		teachersCanMessage: school.teachers_can_message !== false,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
 		appearance: parseAppearance(school.appearance),
-		roleLabels: parseRoleLabels(school.role_labels)
+		statCounters: parseStatCounters(school.stat_counters ?? school.statCounters),
+		statHidden: parseStatHidden(school.stat_hidden ?? school.statHidden)
 	};
-}
-function parseRoleLabels(raw) {
-	let value = raw;
-	if (typeof raw === "string") try { value = JSON.parse(raw); } catch { return {}; }
-	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-	const out = {};
-	for (const [key, val] of Object.entries(value)) {
-		const text = String(val ?? "").trim().slice(0, 80);
-		if (text.length >= 2) out[key] = text;
-	}
-	return out;
 }
 function parseMessageTemplates(raw) {
 	let value = raw;
@@ -112,7 +98,7 @@ function parseCustomMessages(raw) {
 		body: String(item.body).trim().slice(0, 2e3)
 	})).filter((item) => item.id && item.title.length >= 2 && item.body.length >= 4);
 }
-function parseInviteReasons(raw) {
+function parseStatCounters(raw) {
 	let value = raw;
 	if (typeof raw === "string") try {
 		value = JSON.parse(raw);
@@ -120,16 +106,24 @@ function parseInviteReasons(raw) {
 		return [];
 	}
 	if (!Array.isArray(value)) return [];
-	const seen = new Set();
-	const out = [];
-	for (const item of value) {
-		const text = String(item ?? "").trim().slice(0, 160);
-		if (text.length < 4 || seen.has(text)) continue;
-		seen.add(text);
-		out.push(text);
-		if (out.length >= 24) break;
+	const sources = new Set(["daily-absence","daily-late","note-absence","note-late","homework","behavior"]);
+	const ranges = new Set(["today","week","month","total"]);
+	return value.filter((item) => item && typeof item.title === "string" && sources.has(item.source)).map((item) => ({
+		id: String(item.id || "").slice(0, 40),
+		title: String(item.title).trim().slice(0, 40),
+		source: item.source,
+		range: ranges.has(item.range) ? item.range : "today"
+	})).filter((item) => item.id && item.title.length >= 2).slice(0, 12);
+}
+function parseStatHidden(raw) {
+	let value = raw;
+	if (typeof raw === "string") try {
+		value = JSON.parse(raw);
+	} catch {
+		return [];
 	}
-	return out;
+	if (!Array.isArray(value)) return [];
+	return value.filter((item) => typeof item === "string" && item.trim()).map((item) => String(item).slice(0, 40)).slice(0, 40);
 }
 async function loadSchool(sql, schoolId) {
 	const row = (await sql`
@@ -145,8 +139,7 @@ async function loadSchool(sql, schoolId) {
            coalesce(message_templates::text, '{}') as message_templates,
            coalesce(teachers_can_message, true) as teachers_can_message,
            coalesce(teachers_can_view_all, false) as teachers_can_view_all,
-           coalesce(appearance::text, '{}') as appearance,
-           coalesce(role_labels::text, '{}') as role_labels
+           coalesce(appearance::text, '{}') as appearance
     from schools where id = ${schoolId}
   `)[0] ?? null;
 	if (!row) return null;
@@ -154,10 +147,8 @@ async function loadSchool(sql, schoolId) {
 	let print_margins = DEFAULT_PRINT_MARGINS;
 	let extra_logo_url = "";
 	let custom_messages = "[]";
-	let invite_reasons = "[]";
 	let print_school_logo = false;
 	let schedules = "{}";
-	let role_labels = "{}";
 	try {
 		await sql`alter table schools add column if not exists print_school_logo boolean not null default false`;
 	} catch {}
@@ -165,27 +156,20 @@ async function loadSchool(sql, schoolId) {
 		await sql`alter table schools add column if not exists schedules jsonb not null default '{}'::jsonb`;
 	} catch {}
 	try {
-		await sql`alter table schools add column if not exists invite_reasons jsonb not null default '[]'::jsonb`;
-	} catch {}
-	try {
 		const extra = (await sql`
       select coalesce(tagline, '') as tagline, coalesce(print_margins::text, '{}') as print_margins,
              coalesce(extra_logo_url, '') as extra_logo_url,
              coalesce(custom_messages::text, '[]') as custom_messages,
-             coalesce(invite_reasons::text, '[]') as invite_reasons,
              coalesce(print_school_logo, false) as print_school_logo,
-             coalesce(schedules::text, '{}') as schedules,
-             coalesce(role_labels::text, '{}') as role_labels
+             coalesce(schedules::text, '{}') as schedules
       from schools where id = ${schoolId}
     `)[0];
 		tagline = extra?.tagline ?? "";
 		print_margins = extra?.print_margins ?? DEFAULT_PRINT_MARGINS;
 		extra_logo_url = extra?.extra_logo_url ?? "";
 		custom_messages = extra?.custom_messages ?? "[]";
-		invite_reasons = extra?.invite_reasons ?? "[]";
 		print_school_logo = Boolean(extra?.print_school_logo);
 		schedules = extra?.schedules ?? "{}";
-		role_labels = extra?.role_labels ?? "{}";
 	} catch {
 		try {
 			const extra = (await sql`
@@ -204,16 +188,26 @@ async function loadSchool(sql, schoolId) {
 			}
 		}
 	}
+	let stat_counters = "[]";
+	let stat_hidden = "[]";
+	try {
+		await sql`alter table schools add column if not exists stat_counters jsonb not null default '[]'::jsonb`;
+		stat_counters = (await sql`select coalesce(stat_counters::text, '[]') as stat_counters from schools where id = ${schoolId}`)[0]?.stat_counters ?? "[]";
+	} catch {}
+	try {
+		await sql`alter table schools add column if not exists stat_hidden jsonb not null default '[]'::jsonb`;
+		stat_hidden = (await sql`select coalesce(stat_hidden::text, '[]') as stat_hidden from schools where id = ${schoolId}`)[0]?.stat_hidden ?? "[]";
+	} catch {}
 	return {
 		...row,
 		tagline,
 		print_margins,
 		extra_logo_url,
 		custom_messages,
-		invite_reasons,
 		print_school_logo,
 		schedules,
-		role_labels
+		stat_counters,
+		stat_hidden
 	};
 }
 async function getStaff(sql, userId) {
@@ -232,8 +226,7 @@ async function getStaff(sql, userId) {
     select user_id, school_id, display_name, role,
            coalesce(subject, '') as subject, coalesce(phone, '') as phone,
            coalesce(permissions::text, '{}') as permissions,
-           coalesce(appearance::text, '{}') as appearance,
-           coalesce(active, true) as active
+           coalesce(appearance::text, '{}') as appearance
     from staff
     where user_id = ${userId}
   `)[0] ?? null;
@@ -245,6 +238,64 @@ async function getStaff(sql, userId) {
 }
 function mappedPerms(staff, school) {
 	return parsePermissions(staff.permissions, staff.role, mapSchool(school));
+}
+function revealPhone(staff, school, phone) {
+	const perms = mappedPerms(staff, school);
+	return perms.sendMessages || perms.editStudents ? phone ?? "" : "";
+}
+async function ensureNoteThread(sql) {
+	try {
+		await sql.query(`alter table notes add column if not exists dest text not null default 'vp'`);
+	} catch {}
+	try {
+		await sql.query(`create table if not exists note_messages (
+      id serial primary key,
+      school_id integer not null,
+      note_id integer not null,
+      author_id text not null,
+      to_kind text not null default 'vp',
+      body text not null,
+      created_at timestamptz not null default now()
+    )`);
+	} catch {}
+	try {
+		await sql.query(`create index if not exists note_messages_note_idx on note_messages (note_id, created_at)`);
+	} catch {}
+}
+async function ensureStaffMail(sql) {
+	try {
+		await sql.query(`create table if not exists student_mail (
+      id serial primary key,
+      school_id integer not null,
+      student_id integer not null,
+      author_id text not null,
+      assignee_id text not null,
+      dest text not null default 'vp',
+      status text not null default 'open',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )`);
+	} catch {}
+	try {
+		await sql.query(`create table if not exists student_mail_msg (
+      id serial primary key,
+      school_id integer not null,
+      mail_id integer not null,
+      author_id text not null,
+      kind text not null default 'message',
+      body text not null,
+      created_at timestamptz not null default now()
+    )`);
+	} catch {}
+	try {
+		await sql.query(`create index if not exists student_mail_school_idx on student_mail (school_id, updated_at desc)`);
+	} catch {}
+	try {
+		await sql.query(`create index if not exists student_mail_student_idx on student_mail (student_id, updated_at desc)`);
+	} catch {}
+	try {
+		await sql.query(`create index if not exists student_mail_msg_mail_idx on student_mail_msg (mail_id, created_at)`);
+	} catch {}
 }
 function cannotViewAll(staff, school) {
 	return !mappedPerms(staff, school).viewAllViolations;
@@ -400,31 +451,6 @@ async function listClassOptions(sql, schoolId) {
 async function seedSchool(sql, schoolId) {
 	await ensureBehaviorTypes(sql, schoolId);
 	await ensureActionTypes(sql, schoolId);
-	const stageCount = (await sql`select count(*)::int as n from stages where school_id = ${schoolId}`)[0]?.n ?? 0;
-	if (stageCount > 0) return;
-	const demoNames = ["أحمد محمد العتيبي", "خالد سعد القحطاني", "عبدالله فهد الدوسري", "سلطان نايف الشمري", "فهد عبدالعزيز الحربي"];
-	for (const def of DEFAULT_STAGES) {
-		const stage = (await sql`
-      insert into stages (school_id, name, short_name, sort_order)
-      values (${schoolId}, ${def.name}, ${def.shortName}, ${def.sortOrder})
-      returning id
-    `)[0];
-		for (let i = 1; i <= 5; i += 1) {
-			const cls = (await sql`
-        insert into classes (school_id, stage_id, name, sort_order)
-        values (${schoolId}, ${stage.id}, ${String(i)}, ${i})
-        returning id
-      `)[0];
-			if (i > 2) continue;
-			for (let n = 0; n < demoNames.length; n += 1) {
-				const phone = `05057${String(def.sortOrder)}${String(i)}${String(n).padStart(3, "0")}`;
-				await sql`
-          insert into students (school_id, class_id, name, parent_phone)
-          values (${schoolId}, ${cls.id}, ${demoNames[n]}, ${phone})
-        `;
-			}
-		}
-	}
 }
 async function ensureSchoolAndAdmin(sql) {
 	const phone = normalizeSaudiPhone(DEFAULT_ADMIN_PHONE);
@@ -473,7 +499,6 @@ async function ensureSchoolAndAdmin(sql) {
       set role = 'admin', phone = ${phone}
       where user_id = ${user.id} and school_id = ${schoolId}
     `;
-	await seedSchool(sql, schoolId);
 }
 async function ensureStaffRoleConstraint(sql) {
 	if (ensureStaffRoleConstraint.done) return;
@@ -600,6 +625,7 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 		await ensureHealthConditions(sql, school.id);
 		await ensureCompensations(sql, school.id);
 		await ensureImproveOptions(sql, school.id);
+		await ensureStaffMail(sql);
 	}
 	const behaviorTypes = pending ? [] : await listBehaviorTypeRows(sql, school.id, true);
 	const actionTypes = pending ? [] : await listActionTypeRows(sql, school.id, true);
@@ -744,7 +770,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
 	const studentRows = students.map((s) => ({
 		id: s.id,
 		name: s.name,
-		parentPhone: s.parent_phone,
+		parentPhone: revealPhone(staff, school, s.parent_phone),
 		classId: row.id,
 		healthNote: s.health_note ?? "",
 		dailyKind: s.daily_kind ?? null,
@@ -777,10 +803,12 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	periodKey: z.string().max(40).optional(),
 	occurredAt: z.string().max(40).optional(),
 	referCounselor: z.boolean().optional(),
+	dest: z.enum(["vp", "counselor", "health"]).optional(),
 	suggestedAction: z.string().max(800).optional(),
 	compensation: z.string().max(400).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureNoteThread(sql);
 	const student = (await sql`
       select id, name, class_id from students
       where id = ${data.studentId} and school_id = ${staff.school_id}
@@ -803,10 +831,11 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	if (Number.isNaN(Date.parse(occurredAt))) throw new Error("وقت المخالفة غير صالح");
 	const suggested = data.suggestedAction?.trim() ?? "";
 	const compensation = data.compensation?.trim() ?? "";
-	const refer = (staff.role === "admin" || staff.role === "counselor" || mappedPerms(staff, school).takeActions) && Boolean(data.referCounselor);
+	const dest = "vp";
+	const refer = false;
 	const noteId = (await sql`
-      insert into notes (school_id, student_id, teacher_id, type, details, behavior_type_id, period_key, occurred_at, refer_counselor, suggested_action, compensation)
-      values (${staff.school_id}, ${student.id}, ${staff.user_id}, ${data.type}, ${data.details?.trim() ?? ""}, ${behaviorTypeId}, ${periodKey}, ${occurredAt}, ${refer}, ${suggested}, ${compensation})
+      insert into notes (school_id, student_id, teacher_id, type, details, behavior_type_id, period_key, occurred_at, refer_counselor, suggested_action, compensation, dest)
+      values (${staff.school_id}, ${student.id}, ${staff.user_id}, ${data.type}, ${data.details?.trim() ?? ""}, ${behaviorTypeId}, ${periodKey}, ${occurredAt}, ${refer}, ${suggested}, ${compensation}, ${dest})
       returning id
     `)[0]?.id ?? null;
 	const meta = NOTE_META[data.type];
@@ -823,18 +852,22 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	const actor = ROLE_LABEL[staff.role] || "الموظف";
 	const body = occurrence > 1 ? `تكررت مخالفة (${behaviorName}) على الطالب ${student.name} ${occurrenceLabel(occurrence)}. سجّلها ${actor} ${staff.display_name}. يُرجى إشعار وكيل الشؤون الفنية${school.technical_vp_name ? ` (${school.technical_vp_name})` : ""} واتخاذ إجراء المرحلة المناسبة.` : `تم تسجيل ${label} للطالب ${student.name} بواسطة ${actor} ${staff.display_name}`;
 	const tone = occurrence > 1 ? "danger" : meta.tone;
-	const recipients = await sql`
+	if (data.type === "absence" || data.type === "late") {
+		await upsertAttendanceDigest(sql, staff, school);
+	} else {
+		const recipients = await sql`
       select user_id, role, coalesce(permissions::text, '{}') as permissions from staff
       where school_id = ${staff.school_id}
         and user_id <> ${staff.user_id}
     `;
-	for (const rec of recipients) {
-		const perms = parsePermissions(rec.permissions, rec.role, mapSchool(school));
-		if (!(rec.role === "admin" || rec.role === "counselor" || perms.takeActions)) continue;
-		await sql`
+		for (const rec of recipients) {
+			const perms = parsePermissions(rec.permissions, rec.role, mapSchool(school));
+			if (!(rec.role === "admin" || rec.role === "counselor" || perms.takeActions)) continue;
+			await sql`
         insert into notifications (school_id, user_id, note_id, kind, title, body, tone)
         values (${staff.school_id}, ${rec.user_id}, ${noteId}, ${occurrence > 1 ? "repeat" : "note"}, ${title}, ${body}, ${tone})
       `;
+		}
 	}
 	if (refer) await notifyCounselingStaff(sql, school, staff, "إحالة إلى الإرشاد الطلابي", `أُحيل الطالب ${student.name} إلى الإرشاد الطلابي — ${label}.`, noteId);
 	return {
@@ -848,6 +881,7 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 });
 export const getStudentNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ studentId: z.number() })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureNoteThread(sql);
 	const student = (await sql`
       select s.id, s.name, s.parent_phone, s.class_id, c.name as class_name,
              st.short_name, st.name as stage_name,
@@ -863,6 +897,7 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
              n.created_at::text as created_at,
              coalesce(n.occurred_at, n.created_at)::text as occurred_at,
              coalesce(n.refer_counselor, false) as refer_counselor,
+             coalesce(n.dest, 'vp') as dest,
              coalesce(n.suggested_action, '') as suggested_action,
              coalesce(n.compensation, '') as compensation,
              coalesce(sf.display_name, 'معلم') as teacher_name,
@@ -883,7 +918,7 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
 		student: {
 			id: student.id,
 			name: student.name,
-			parentPhone: student.parent_phone,
+			parentPhone: revealPhone(staff, school, student.parent_phone),
 			classId: student.class_id,
 			className: student.class_name,
 			shortName: student.short_name,
@@ -907,6 +942,7 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
 			behaviorDegree: n.behavior_degree,
 			periodKey: n.period_key,
 			referCounselor: Boolean(n.refer_counselor),
+			dest: n.dest === "health" || n.dest === "counselor" ? n.dest : (n.refer_counselor ? "counselor" : "vp"),
 			suggestedAction: n.suggested_action ?? "",
 			compensation: n.compensation ?? ""
 		}))),
@@ -945,11 +981,12 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).middleware([a
 			studentsTotal: studentRows[0]?.count ?? 0,
 			improvementsOpen: improveRows[0]?.count ?? 0
 		},
-		feed: await fetchNotes(sql, staff.school_id, { limit: 60 }),
+		feed: await fetchNotes(sql, staff.school_id, { limit: 60, staff, school }),
 		improvements: await listImprovementRows(sql, staff.school_id, { openOnly: true })
 	};
 });
 async function fetchNotes(sql, schoolId, opts) {
+	await ensureNoteThread(sql);
 	const params = [schoolId];
 	let where = "n.school_id = $1";
 	if (opts.stageId) {
@@ -998,6 +1035,7 @@ async function fetchNotes(sql, schoolId, opts) {
             n.created_at::text as created_at, n.closed_at::text as closed_at,
             coalesce(n.occurred_at, n.created_at)::text as occurred_at,
             coalesce(n.refer_counselor, false) as refer_counselor,
+            coalesce(n.dest, 'vp') as dest,
             coalesce(n.suggested_action, '') as suggested_action,
             coalesce(n.compensation, '') as compensation,
             n.behavior_type_id, bt.name as behavior_type_name,
@@ -1027,7 +1065,7 @@ async function fetchNotes(sql, schoolId, opts) {
 		id: n.id,
 		studentId: n.student_id,
 		studentName: n.student_name,
-		parentPhone: n.parent_phone,
+		parentPhone: opts.staff && opts.school ? revealPhone(opts.staff, opts.school, n.parent_phone) : "",
 		className: n.class_name,
 		stageName: n.stage_name,
 		shortName: n.short_name,
@@ -1047,6 +1085,7 @@ async function fetchNotes(sql, schoolId, opts) {
 		closedAt: n.closed_at,
 		occurrence: n.occurrence || 1,
 		referCounselor: Boolean(n.refer_counselor),
+		dest: n.dest === "health" || n.dest === "counselor" ? n.dest : (n.refer_counselor ? "counselor" : "vp"),
 		suggestedAction: n.suggested_action ?? "",
 		compensation: n.compensation ?? ""
 	}));
@@ -1071,7 +1110,9 @@ export const getReport = createServerFn({ method: "POST" }).middleware([authMidd
 	const teacherOnly = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
 	const notes = await fetchNotes(sql, staff.school_id, {
 		...data,
-		teacherId: teacherOnly ? staff.user_id : void 0
+		teacherId: teacherOnly ? staff.user_id : void 0,
+		staff,
+		school
 	});
 	const stages = await listStageSummaries(sql, staff.school_id);
 	const classes = await sql`
@@ -1766,11 +1807,11 @@ export const importTeachers = createServerFn({ method: "POST" }).middleware([aut
 	};
 });
 export const updateSchool = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	name: z.string().min(3).max(80),
+	name: z.string().min(3).max(120),
 	principalName: z.string().max(80).optional(),
 	season: z.enum(["winter", "summer"]).optional(),
-	region: z.string().max(80).optional(),
-	governorate: z.string().max(80).optional(),
+	region: z.string().max(120).optional(),
+	governorate: z.string().max(120).optional(),
 	leadershipGender: z.enum(["male", "female"]).optional(),
 	studentGender: z.enum(["male", "female"]).optional(),
 	counselorName: z.string().max(80).optional(),
@@ -1785,7 +1826,6 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 		left: z.number().min(0).max(40)
 	}).optional(),
 	printSchoolLogo: z.boolean().optional(),
-	roleLabels: z.record(z.string(), z.string().min(2).max(80)).optional(),
 	schedules: z.object({
 		winter: z.array(z.object({
 			key: z.string().min(1).max(40),
@@ -1823,7 +1863,6 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 	const printMargins = data.printMargins ? parsePrintMargins(data.printMargins) : parsePrintMargins(current.print_margins);
 	const printSchoolLogo = data.printSchoolLogo !== void 0 ? data.printSchoolLogo : Boolean(current.print_school_logo);
 	const schedules = data.schedules !== void 0 ? parseSchedules(data.schedules) : parseSchedules(current.schedules);
-	const roleLabels = data.roleLabels !== void 0 ? parseRoleLabels(data.roleLabels) : parseRoleLabels(current.role_labels);
 	await sql`
       update schools
       set name = ${name},
@@ -1852,9 +1891,6 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 	try {
 		await sql.query(`update schools set schedules = $1::jsonb where id = $2`, [JSON.stringify(schedules), staff.school_id]);
 	} catch {}
-	try {
-		await sql.query(`update schools set role_labels = $1::jsonb where id = $2`, [JSON.stringify(roleLabels), staff.school_id]);
-	} catch {}
 	return {
 		name,
 		principalName,
@@ -1870,8 +1906,7 @@ export const updateSchool = createServerFn({ method: "POST" }).middleware([authM
 		tagline,
 		printMargins,
 		printSchoolLogo,
-		schedules,
-		roleLabels
+		schedules
 	};
 });
 export const updateMessageTemplates = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -1894,7 +1929,7 @@ export const updateMessageTemplates = createServerFn({ method: "POST" }).middlew
 	}
 	return { ok: true };
 });
-export const updateSchoolName = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ name: z.string().min(3).max(80) })).handler(async ({ context, data }) => {
+export const updateSchoolName = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ name: z.string().min(3).max(120) })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	await sql`
       update schools set name = ${data.name.trim()}
@@ -2252,7 +2287,7 @@ export const listParentMessages = createServerFn({ method: "POST" }).middleware(
 		staffName: r.staff_name,
 		kind: r.kind,
 		body: r.body,
-		parentPhone: r.parent_phone,
+		parentPhone: revealPhone(staff, school, r.parent_phone),
 		createdAt: r.created_at
 	})) };
 });
@@ -2407,14 +2442,18 @@ export const followImprovement = createServerFn({ method: "POST" }).middleware([
 	return { ok: true };
 });
 var permissionShape = z.object({
-	editStudents: z.boolean(),
-	sendMessages: z.boolean(),
-	viewAllViolations: z.boolean(),
-	editStaff: z.boolean(),
-	takeActions: z.boolean(),
-	acceptImprovements: z.boolean(),
-	dailyAttendance: z.boolean(),
-	counseling: z.boolean()
+	editStudents: z.boolean().optional(),
+	sendMessages: z.boolean().optional(),
+	viewAllViolations: z.boolean().optional(),
+	editStaff: z.boolean().optional(),
+	takeActions: z.boolean().optional(),
+	acceptImprovements: z.boolean().optional(),
+	dailyAttendance: z.boolean().optional(),
+	counseling: z.boolean().optional(),
+	editRecords: z.boolean().optional(),
+	editClasses: z.boolean().optional(),
+	viewClasses: z.boolean().optional(),
+	viewPrint: z.boolean().optional()
 });
 export const updateStaffPermissions = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	userId: z.string(),
@@ -2422,19 +2461,24 @@ export const updateStaffPermissions = createServerFn({ method: "POST" }).middlew
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	const target = await sql`
-      select user_id, role from staff
+      select user_id, role, coalesce(permissions::text, '{}') as permissions from staff
       where user_id = ${data.userId} and school_id = ${staff.school_id}
     `;
 	if (!target[0]) throw new Error("الموظف غير موجود");
 	if (target[0].role === "admin") throw new Error("مدير التطبيق يملك كل الصلاحيات ولا تُقيَّد");
+	const mapped = mapSchool(school);
+	const next = parsePermissions({
+		...parsePermissions(target[0].permissions, target[0].role, mapped),
+		...data.permissions
+	}, target[0].role, mapped);
 	await sql.query(`update staff set permissions = $1::jsonb where user_id = $2 and school_id = $3`, [
-		JSON.stringify(data.permissions),
+		JSON.stringify(next),
 		data.userId,
 		staff.school_id
 	]);
 	return {
 		userId: data.userId,
-		permissions: parsePermissions(data.permissions, target[0].role, mapSchool(school))
+		permissions: next
 	};
 });
 var appearanceShape = z.object({
@@ -2459,6 +2503,7 @@ var appearanceShape = z.object({
 		"naskh"
 	]),
 	fontScale: z.number().min(.8).max(1.5).optional(),
+	calendar: z.enum(["hijri", "gregorian"]).optional(),
 	custom: z.object({
 		primary: z.string().max(20).optional(),
 		bg: z.string().max(20).optional(),
@@ -2548,30 +2593,6 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 		}))
 	};
 });
-export const getDailyAttendanceReport = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	from: z.string().min(8).max(12),
-	to: z.string().min(8).max(12),
-	stageId: z.number().optional(),
-	classId: z.number().optional(),
-	studentId: z.number().optional()
-})).handler(async ({ context, data }) => {
-	const { sql, staff } = await requirePerm(context.userId, "dailyAttendance");
-	if (data.from > data.to) throw new Error("تاريخ البداية يجب أن يسبق تاريخ النهاية");
-	const params = [staff.school_id, data.from, data.to];
-	let where = `a.school_id = $1 and a.day between $2::date and $3::date`;
-	if (data.stageId) { params.push(data.stageId); where += ` and c.stage_id = $${params.length}`; }
-	if (data.classId) { params.push(data.classId); where += ` and s.class_id = $${params.length}`; }
-	if (data.studentId) { params.push(data.studentId); where += ` and s.id = $${params.length}`; }
-	const rows = await sql.query(`select a.day::text as day, s.id as student_id, s.name as student_name, c.name as class_name, st.short_name, a.kind, coalesce(a.excused,false) as excused, a.arrived_at::text as arrived_at
-		from daily_attendance a
-		join students s on s.id = a.student_id
-		join classes c on c.id = s.class_id
-		join stages st on st.id = c.stage_id
-		where ${where}
-		order by a.day, st.sort_order, c.sort_order, s.name`, params);
-	const mapped = rows.map(r => ({ day: r.day, studentId: r.student_id, studentName: r.student_name, classLabel: classLabel(r.short_name, r.class_name), kind: r.kind, excused: Boolean(r.excused), arrivedAt: r.arrived_at || null }));
-	return { from: data.from, to: data.to, rows: mapped, summary: { absence: mapped.filter(r => r.kind === "absence").length, late: mapped.filter(r => r.kind === "late").length, students: new Set(mapped.map(r => r.studentId)).size, days: new Set(mapped.map(r => r.day)).size } };
-});
 export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	day: z.string().min(8).max(12),
 	entries: z.array(z.object({
@@ -2614,6 +2635,8 @@ export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware
 			arrived
 		]);
 	}
+	const school = await loadSchool(sql, staff.school_id);
+	await upsertAttendanceDigest(sql, staff, school);
 	return {
 		ok: true,
 		day
@@ -3385,180 +3408,811 @@ export const deleteClassRow = createServerFn({ method: "POST" }).middleware([aut
 	return { stages: await classStructurePayload(sql, staff.school_id) };
 });
 
-const rosterPayloadSchema = z.object({
-	title: z.string().max(80),
-	showPhone: z.boolean(),
-	showClass: z.boolean(),
-	showStage: z.boolean(),
-	extraCols: z.array(z.object({ id: z.string().min(1).max(40), title: z.string().max(40) })).max(12),
-	order: z.array(z.string().max(40)).max(20),
-	widths: z.record(z.string(), z.number().min(8).max(80)),
+function canAccessFollowup(staff, school) {
+	const p = mappedPerms(staff, school);
+	return staff.role === "admin" || staff.role === "counselor" || p.takeActions || p.acceptImprovements || p.dailyAttendance || p.counseling;
+}
+async function countKindBucket(sql, schoolId, table, kind) {
+	if (table === "daily") {
+		const row = (await sql`
+      select
+        count(*) filter (where day = current_date)::int as today,
+        count(*) filter (where day >= current_date - 6)::int as week,
+        count(*) filter (where day >= date_trunc('month', current_date))::int as month,
+        count(*)::int as total
+      from daily_attendance
+      where school_id = ${schoolId} and kind = ${kind}
+    `)[0];
+		return { today: row?.today ?? 0, week: row?.week ?? 0, month: row?.month ?? 0, total: row?.total ?? 0 };
+	}
+	const row = (await sql`
+    select
+      count(*) filter (where created_at >= current_date)::int as today,
+      count(*) filter (where created_at >= current_date - interval '6 days')::int as week,
+      count(*) filter (where created_at >= date_trunc('month', current_date))::int as month,
+      count(*)::int as total
+    from notes
+    where school_id = ${schoolId} and type = ${kind}
+  `)[0];
+	return { today: row?.today ?? 0, week: row?.week ?? 0, month: row?.month ?? 0, total: row?.total ?? 0 };
+}
+function pickBucket(bucket, range) {
+	if (range === "week") return bucket.week;
+	if (range === "month") return bucket.month;
+	if (range === "total") return bucket.total;
+	return bucket.today;
+}
+function counterHref(source, range) {
+	const r = range === "total" ? "all" : (range || "today");
+	if (source === "daily-absence") return `/admin/absence?range=${r}`;
+	if (source === "daily-late") return `/admin/late?range=${r}`;
+	const type = source === "note-absence" ? "absence" : source === "note-late" ? "late" : source === "homework" ? "homework" : "behavior";
+	return `/admin/behavior?type=${type}&range=${r}`;
+}
+async function upsertAttendanceDigest(sql, staff, school) {
+	if (!school) return;
+	const schoolId = staff.school_id;
+	const absDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = current_date and kind = 'absence'`)[0]?.n ?? 0;
+	const lateDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = current_date and kind = 'late'`)[0]?.n ?? 0;
+	const absNotes = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'absence'`)[0]?.n ?? 0;
+	const lateNotes = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'late'`)[0]?.n ?? 0;
+	const homework = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'homework'`)[0]?.n ?? 0;
+	const behavior = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'behavior'`)[0]?.n ?? 0;
+	const abs = absDaily + absNotes;
+	const late = lateDaily + lateNotes;
+	function extrasFor(kind) {
+		const parts = [];
+		if (kind === "absence" && late) parts.push(`${late} تأخر`);
+		if (kind === "late" && abs) parts.push(`${abs} غياب`);
+		if (behavior) parts.push(`${behavior} مخالفات`);
+		if (homework) parts.push(`${homework} واجب`);
+		return parts.length ? ` كذلك اليوم: ${parts.join("، ")}.` : "";
+	}
+	const absTitle = `غياب اليوم: ${abs}`;
+	const lateTitle = `تأخر اليوم: ${late}`;
+	const absBody = abs
+		? `سُجّل اليوم غياب ${abs} طالب${absDaily && absNotes ? ` (يومي ${absDaily} · حصة ${absNotes})` : absDaily ? " — غياب يومي" : " — غياب حصة"}.${extrasFor("absence")}`
+		: `لا يوجد غياب اليوم.${extrasFor("absence")}`;
+	const lateBody = late
+		? `سُجّل اليوم تأخر ${late} طالب${lateDaily && lateNotes ? ` (صباحي ${lateDaily} · حصة ${lateNotes})` : lateDaily ? " — تأخر صباحي" : " — تأخر حصة"}.${extrasFor("late")}`
+		: `لا يوجد تأخر اليوم.${extrasFor("late")}`;
+	if (abs === 0 && late === 0 && homework === 0 && behavior === 0) return;
+	const recipients = await sql`
+    select user_id, role, coalesce(permissions::text, '{}') as permissions from staff
+    where school_id = ${schoolId} and user_id <> ${staff.user_id}
+  `;
+	const mapped = mapSchool(school);
+	const targets = [];
+	for (const rec of recipients) {
+		const perms = parsePermissions(rec.permissions, rec.role, mapped);
+		if (rec.role === "admin" || rec.role === "counselor" || perms.dailyAttendance || perms.takeActions) targets.push(rec.user_id);
+	}
+	async function upsertOne(userId, kind, title, body, tone) {
+		const existing = (await sql`
+      select id from notifications
+      where school_id = ${schoolId} and user_id = ${userId} and kind = ${kind} and created_at >= current_date
+      order by created_at desc limit 1
+    `)[0];
+		if (existing) {
+			await sql`
+        update notifications
+        set title = ${title}, body = ${body}, tone = ${tone}, read = false, created_at = now()
+        where id = ${existing.id}
+      `;
+			return;
+		}
+		await sql`
+      insert into notifications (school_id, user_id, note_id, kind, title, body, tone)
+      values (${schoolId}, ${userId}, ${null}, ${kind}, ${title}, ${body}, ${tone})
+    `;
+	}
+	for (const userId of targets) {
+		await upsertOne(userId, "digest-absence", absTitle, absBody, abs ? "danger" : "warn");
+		await upsertOne(userId, "digest-late", lateTitle, lateBody, late ? "warn" : "ok");
+	}
+}
+export const listAttendanceRoster = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	kind: z.enum(["absence", "late"]),
+	from: z.string().min(8).max(12),
+	to: z.string().min(8).max(12)
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	if (!canAccessFollowup(staff, school)) throw new Error("ليست لديك صلاحية متابعة الغياب");
+	const daily = await sql.query(`select a.day::text as day, s.id as student_id, s.name as student_name,
+            c.name as class_name, st.short_name,
+            coalesce(a.excused, false) as excused,
+            coalesce(a.details, '') as details,
+            a.arrived_at::text as arrived_at
+     from daily_attendance a
+     join students s on s.id = a.student_id
+     join classes c on c.id = s.class_id
+     join stages st on st.id = c.stage_id
+     where a.school_id = $1 and a.kind = $2
+       and a.day >= $3::date and a.day <= $4::date
+     order by a.day desc, st.sort_order, c.sort_order, s.name`, [staff.school_id, data.kind, data.from, data.to]);
+	const notes = await sql.query(`select n.created_at::date::text as day, s.id as student_id, s.name as student_name,
+            c.name as class_name, st.short_name,
+            false as excused,
+            coalesce(n.details, '') as details,
+            null as arrived_at
+     from notes n
+     join students s on s.id = n.student_id
+     join classes c on c.id = s.class_id
+     join stages st on st.id = c.stage_id
+     where n.school_id = $1 and n.type = $2
+       and n.created_at >= $3::date and n.created_at < ($4::date + interval '1 day')
+     order by n.created_at desc`, [staff.school_id, data.kind, data.from, data.to]);
+	const rows = [
+		...daily.map((r) => ({
+			day: r.day,
+			studentId: r.student_id,
+			studentName: r.student_name,
+			classLabel: classLabel(r.short_name, r.class_name),
+			excused: Boolean(r.excused),
+			arrivedAt: r.arrived_at || null,
+			details: r.details || (data.kind === "absence" ? "غياب يومي" : "تأخر صباحي")
+		})),
+		...notes.map((r) => ({
+			day: r.day,
+			studentId: r.student_id,
+			studentName: r.student_name,
+			classLabel: classLabel(r.short_name, r.class_name),
+			excused: false,
+			arrivedAt: null,
+			details: r.details ? `${data.kind === "absence" ? "غياب حصة" : "تأخر حصة"} — ${r.details}` : (data.kind === "absence" ? "غياب حصة" : "تأخر حصة")
+		}))
+	].sort((a, b) => b.day.localeCompare(a.day) || a.studentName.localeCompare(b.studentName, "ar"));
+	return { rows };
+});
+export const listFollowupNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	type: z.enum(["absence", "late", "homework", "behavior"]),
+	from: z.string().min(8).max(12).optional(),
+	to: z.string().min(8).max(12).optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	if (!canAccessFollowup(staff, school)) throw new Error("ليست لديك صلاحية الإحصاء");
+	return fetchNotes(sql, staff.school_id, {
+		type: data.type,
+		from: data.from,
+		to: data.to,
+		limit: 400,
+		staff,
+		school
+	});
+});
+export const getFollowupStats = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	if (!canAccessFollowup(staff, school)) throw new Error("ليست لديك صلاحية الإحصاء");
+	const stats = {
+		dailyAbsence: await countKindBucket(sql, staff.school_id, "daily", "absence"),
+		dailyLate: await countKindBucket(sql, staff.school_id, "daily", "late"),
+		noteAbsence: await countKindBucket(sql, staff.school_id, "notes", "absence"),
+		noteLate: await countKindBucket(sql, staff.school_id, "notes", "late"),
+		homework: await countKindBucket(sql, staff.school_id, "notes", "homework"),
+		behavior: await countKindBucket(sql, staff.school_id, "notes", "behavior")
+	};
+	const counters = parseStatCounters(school.stat_counters);
+	const sourceKey = {
+		"daily-absence": "dailyAbsence",
+		"daily-late": "dailyLate",
+		"note-absence": "noteAbsence",
+		"note-late": "noteLate",
+		homework: "homework",
+		behavior: "behavior"
+	};
+	const extra = counters.map((c) => ({
+		id: c.id,
+		title: c.title,
+		href: counterHref(c.source, c.range),
+		value: pickBucket(stats[sourceKey[c.source]], c.range),
+		tone: c.source.includes("late") || c.source === "homework" ? "warn" : "danger"
+	}));
+	return { stats, extra, counters, hidden: parseStatHidden(school.stat_hidden) };
+});
+export const saveStatCounters = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	counters: z.array(z.object({
+		id: z.string().min(1).max(40),
+		title: z.string().min(2).max(40),
+		source: z.enum(["daily-absence", "daily-late", "note-absence", "note-late", "homework", "behavior"]),
+		range: z.enum(["today", "week", "month", "total"]).optional()
+	})).max(12).optional(),
+	hidden: z.array(z.string().max(40)).max(40).optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	const perms = mappedPerms(staff, school);
+	if (staff.role !== "admin" && !perms.counseling && !perms.takeActions) throw new Error("ليست لديك صلاحية إضافة عداد");
+	const counters = data.counters
+		? parseStatCounters(data.counters.map((c, i) => ({
+			id: c.id || `c-${i + 1}`,
+			title: c.title,
+			source: c.source,
+			range: c.range || "today"
+		})))
+		: parseStatCounters(school.stat_counters);
+	const hidden = data.hidden ? parseStatHidden(data.hidden) : parseStatHidden(school.stat_hidden);
+	try {
+		await sql`alter table schools add column if not exists stat_counters jsonb not null default '[]'::jsonb`;
+		await sql.query(`update schools set stat_counters = $1::jsonb where id = $2`, [JSON.stringify(counters), staff.school_id]);
+	} catch {
+		throw new Error("تعذر حفظ العدادات");
+	}
+	try {
+		await sql`alter table schools add column if not exists stat_hidden jsonb not null default '[]'::jsonb`;
+		await sql.query(`update schools set stat_hidden = $1::jsonb where id = $2`, [JSON.stringify(hidden), staff.school_id]);
+	} catch {
+		throw new Error("تعذر حفظ إظهار العدادات");
+	}
+	return { counters, hidden };
 });
 
+async function ensureRosterTemplates(sql) {
+	try {
+		await sql`create table if not exists roster_templates (
+      id serial primary key,
+      school_id integer not null,
+      owner_id text not null default '',
+      name text not null,
+      payload jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )`;
+	} catch {}
+}
+function clampWidth(value, fallback) {
+	const n = typeof value === "number" ? value : Number(value);
+	if (!Number.isFinite(n)) return fallback;
+	return Math.min(80, Math.max(8, Math.round(n)));
+}
 function parseRosterPayload(raw) {
 	let value = raw;
 	if (typeof raw === "string") try {
 		value = JSON.parse(raw);
 	} catch {
-		return null;
+		value = {};
 	}
-	const parsed = rosterPayloadSchema.safeParse(value);
-	return parsed.success ? parsed.data : null;
+	if (!value || typeof value !== "object" || Array.isArray(value)) value = {};
+	const extras = Array.isArray(value.extraCols) ? value.extraCols : [];
+	const widths = value.widths && typeof value.widths === "object" ? value.widths : {};
+	return {
+		title: String(value.title ?? "بيانات الطلاب").trim().slice(0, 80) || "بيانات الطلاب",
+		showPhone: Boolean(value.showPhone),
+		showClass: Boolean(value.showClass),
+		showStage: Boolean(value.showStage),
+		extraCols: extras.filter((c) => c && typeof c === "object").map((c, i) => ({
+			id: String(c.id || `c${i + 1}`).slice(0, 40),
+			title: String(c.title ?? "").trim().slice(0, 40),
+			width: clampWidth(c.width, 20)
+		})).slice(0, 24),
+		widths: {
+			seq: clampWidth(widths.seq, 10),
+			name: clampWidth(widths.name, 42),
+			class: clampWidth(widths.class, 22),
+			stage: clampWidth(widths.stage, 18),
+			phone: clampWidth(widths.phone, 28)
+		},
+		order: Array.isArray(value.order) ? value.order.map((id) => String(id).slice(0, 40)).filter(Boolean).slice(0, 40) : []
+	};
 }
-
-export const updateInviteReasons = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	reasons: z.array(z.string().min(4).max(160)).max(24),
-})).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireApproved(context.userId);
-	const reasons = parseInviteReasons(data.reasons);
-	try {
-		await sql.query(`update schools set invite_reasons = $1::jsonb where id = $2`, [JSON.stringify(reasons), staff.school_id]);
-	} catch {
-		throw new Error("تعذر حفظ عبارات الاستدعاء — أعد تشغيل التطبيق بعد التحديث");
-	}
-	return { reasons };
-});
-
-export const logBulkParentMessages = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	studentIds: z.array(z.number().int().positive()).min(1).max(300),
-	kind: z.enum(["absence", "late", "homework", "behavior", "general"]),
-	body: z.string().min(2).max(2000),
-})).handler(async ({ context, data }) => {
+function mapRosterTemplate(row) {
+	return {
+		id: row.id,
+		ownerId: row.owner_id ?? "",
+		name: row.name,
+		payload: parseRosterPayload(row.payload),
+		public: !row.owner_id,
+		createdAt: row.created_at
+	};
+}
+export const getHomeDesk = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
-	if (!mappedPerms(staff, school).sendMessages) throw new Error("إرسال رسائل أولياء الأمور غير مفعّل لحسابك");
-	const ids = [...new Set(data.studentIds)];
-	const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
-	const students = await sql.query(`
-    select s.id, s.name, coalesce(s.parent_phone, '') as parent_phone,
-           c.name as class_name, st.short_name
-    from students s
-    join classes c on c.id = s.class_id
-    join stages st on st.id = c.stage_id
-    where s.school_id = $1 and s.id in (${placeholders})
-    order by st.sort_order, c.sort_order, s.name
-  `, [staff.school_id, ...ids]);
-	const now = new Date().toISOString();
-	const sent = [];
-	const skipped = [];
-	for (const s of students) {
-		const label = classLabel(s.short_name, s.class_name);
-		const body = fillTemplate(data.body, {
-			name: s.name,
-			class: label,
-			school: school.name,
-			date: formatDay(now),
-			weekday: weekdayName(now),
-			details: "",
-			session: "",
-		});
-		if (!String(s.parent_phone || "").trim()) {
-			skipped.push({ id: s.id, name: s.name });
-			continue;
-		}
-		await sql`
-      insert into parent_messages (school_id, student_id, staff_id, kind, body, parent_phone)
-      values (${staff.school_id}, ${s.id}, ${staff.user_id}, ${data.kind}, ${body}, ${s.parent_phone})
-    `;
-		sent.push({
-			id: s.id,
-			name: s.name,
-			parentPhone: s.parent_phone,
-			body,
-		});
-	}
-	return { sent, skipped };
+	const perms = mappedPerms(staff, school);
+	const myNotes = (await sql`select count(*)::int as count from notes where school_id = ${staff.school_id} and teacher_id = ${staff.user_id}`)[0]?.count ?? 0;
+	const myClosed = (await sql`select count(*)::int as count from notes where school_id = ${staff.school_id} and teacher_id = ${staff.user_id} and status = 'closed'`)[0]?.count ?? 0;
+	const waiting = (await sql`select count(*)::int as count from notes where school_id = ${staff.school_id} and teacher_id = ${staff.user_id} and status = 'open'`)[0]?.count ?? 0;
+	const referrals = perms.counseling || perms.takeActions
+		? (await sql`select count(*)::int as count from notes where school_id = ${staff.school_id} and refer_counselor = true`)[0]?.count ?? 0
+		: (await sql`select count(distinct student_id)::int as count from notes where school_id = ${staff.school_id} and teacher_id = ${staff.user_id}`)[0]?.count ?? 0;
+	return {
+		myNotes,
+		myClosed,
+		waiting,
+		referrals
+	};
 });
-
 export const listRosterTemplates = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff } = await requireApproved(context.userId);
-	try {
-		await sql.query(`
-      create table if not exists roster_templates (
-        id serial primary key,
-        school_id integer not null references schools (id) on delete cascade,
-        name text not null,
-        created_by text not null,
-        created_by_name text not null,
-        is_program boolean not null default false,
-        payload jsonb not null,
-        created_at timestamptz not null default now()
-      )
-    `);
-		const rows = await sql`
-      select id, name, created_by, created_by_name, is_program, payload::text as payload, created_at
+	await ensureRosterTemplates(sql);
+	const rows = await sql`
+      select id, owner_id, name, payload::text as payload, created_at::text as created_at
       from roster_templates
       where school_id = ${staff.school_id}
-      order by is_program desc, created_at desc
+        and (owner_id = '' or owner_id = ${staff.user_id})
+      order by (owner_id = '') desc, created_at desc
     `;
-		return {
-			templates: rows.map((row) => ({
-				id: row.id,
-				name: row.name,
-				createdBy: row.created_by,
-				createdByName: row.created_by_name,
-				isProgram: Boolean(row.is_program),
-				payload: parseRosterPayload(row.payload) ?? {
-					title: "بيانات الطلاب",
-					showPhone: false,
-					showClass: false,
-					showStage: false,
-					extraCols: [],
-					order: [],
-					widths: {},
-				},
-				createdAt: row.created_at,
-			})),
-		};
-	} catch {
-		return { templates: [] };
-	}
+	return { templates: rows.map(mapRosterTemplate) };
 });
-
 export const saveRosterTemplate = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	id: z.number().optional(),
-	name: z.string().min(2).max(80),
-	payload: rosterPayloadSchema,
+	name: z.string().min(2).max(60),
+	payload: z.any()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireApproved(context.userId);
+	await ensureRosterTemplates(sql);
+	const payload = JSON.stringify(parseRosterPayload(data.payload));
 	const name = data.name.trim();
-	const isProgram = staff.role === "admin";
-	const payload = JSON.stringify(data.payload);
 	if (data.id) {
-		const existing = (await sql`
-      select id, created_by, is_program from roster_templates
-      where id = ${data.id} and school_id = ${staff.school_id}
-    `)[0];
-		if (!existing) throw new Error("القالب غير موجود");
-		if (existing.created_by !== staff.user_id && staff.role !== "admin") {
-			throw new Error("يمكن تعديل قالبك فقط، أو احفظه باسم جديد");
-		}
-		await sql.query(
-			`update roster_templates set name = $1, payload = $2::jsonb, is_program = $3
-       where id = $4 and school_id = $5`,
-			[name, payload, Boolean(existing.is_program) || isProgram, data.id, staff.school_id],
-		);
-		return { id: data.id, name };
+		const row = (await sql`select id, owner_id from roster_templates where id = ${data.id} and school_id = ${staff.school_id}`)[0];
+		if (!row) throw new Error("القالب غير موجود");
+		if (row.owner_id && row.owner_id !== staff.user_id && staff.role !== "admin") throw new Error("لا يمكنك تعديل هذا القالب");
+		if (!row.owner_id && staff.role !== "admin") throw new Error("قوالب الإدارة ثابتة — احفظ نسخة باسمك");
+		await sql.query(`update roster_templates set name = $1, payload = $2::jsonb where id = $3 and school_id = $4`, [name, payload, data.id, staff.school_id]);
+		return { id: data.id, ok: true };
 	}
-	const row = (await sql.query(
-		`insert into roster_templates (school_id, name, created_by, created_by_name, is_program, payload)
-     values ($1, $2, $3, $4, $5, $6::jsonb) returning id`,
-		[staff.school_id, name, staff.user_id, staff.display_name, isProgram, payload],
-	))[0];
-	return { id: row.id, name };
+	const inserted = await sql.query(`insert into roster_templates (school_id, owner_id, name, payload) values ($1, $2, $3, $4::jsonb) returning id`, [
+		staff.school_id,
+		staff.role === "admin" ? "" : staff.user_id,
+		name,
+		payload
+	]);
+	return { id: inserted[0]?.id, ok: true };
 });
-
 export const deleteRosterTemplate = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	id: z.number(),
+	id: z.number()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireApproved(context.userId);
-	const existing = (await sql`
-    select id, created_by, is_program from roster_templates
-    where id = ${data.id} and school_id = ${staff.school_id}
-  `)[0];
-	if (!existing) throw new Error("القالب غير موجود");
-	if (staff.role !== "admin" && (existing.created_by !== staff.user_id || existing.is_program)) {
-		throw new Error("لا يمكن حذف قوالب البرنامج إلا من مدير التطبيق");
-	}
+	await ensureRosterTemplates(sql);
+	const row = (await sql`select id, owner_id from roster_templates where id = ${data.id} and school_id = ${staff.school_id}`)[0];
+	if (!row) throw new Error("القالب غير موجود");
+	if (row.owner_id && row.owner_id !== staff.user_id && staff.role !== "admin") throw new Error("لا يمكنك حذف هذا القالب");
+	if (!row.owner_id && staff.role !== "admin") throw new Error("قوالب الإدارة يحذفها المدير فقط");
 	await sql`delete from roster_templates where id = ${data.id} and school_id = ${staff.school_id}`;
 	return { ok: true };
+});
+export const publishRosterTemplate = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	id: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireAdmin(context.userId);
+	await ensureRosterTemplates(sql);
+	const row = (await sql`select id from roster_templates where id = ${data.id} and school_id = ${staff.school_id}`)[0];
+	if (!row) throw new Error("القالب غير موجود");
+	await sql`update roster_templates set owner_id = '' where id = ${data.id} and school_id = ${staff.school_id}`;
+	return { ok: true };
+});
+
+export const listStudents = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	stageId: z.number().optional(),
+	classId: z.number().optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	const params = [staff.school_id];
+	let where = "s.school_id = $1";
+	if (data.classId) {
+		params.push(data.classId);
+		where += ` and s.class_id = $${params.length}`;
+	} else if (data.stageId) {
+		params.push(data.stageId);
+		where += ` and c.stage_id = $${params.length}`;
+	}
+	const rows = await sql.query(`select s.id, s.name, s.class_id, coalesce(s.parent_phone, '') as parent_phone, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
+     from students s
+     join classes c on c.id = s.class_id
+     join stages st on st.id = c.stage_id
+     where ${where}
+     order by st.sort_order, c.sort_order, s.name`, params);
+	return {
+		students: rows.map((s) => ({
+			id: s.id,
+			name: s.name,
+			classId: s.class_id,
+			stageId: s.stage_id,
+			className: s.class_name,
+			stageName: s.stage_name,
+			shortName: s.short_name,
+			parentPhone: revealPhone(staff, school, s.parent_phone),
+			label: classLabel(s.short_name, s.class_name)
+		}))
+	};
+});
+export const getDeskNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	status: z.enum(["open", "closed", "all"]).optional(),
+	referred: z.boolean().optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	const notes = await fetchNotes(sql, staff.school_id, {
+		status: data.status && data.status !== "all" ? data.status : void 0,
+		teacherId: staff.user_id,
+		limit: 400,
+		staff,
+		school
+	});
+	return { notes: data.referred ? notes.filter((n) => n.referCounselor) : notes };
+});
+
+export const listNoteMessages = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	noteId: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureNoteThread(sql);
+	const note = (await sql`
+      select n.id, n.teacher_id, n.dest, n.refer_counselor, s.name as student_name
+      from notes n
+      join students s on s.id = n.student_id
+      where n.id = ${data.noteId} and n.school_id = ${staff.school_id}
+    `)[0];
+	if (!note) throw new Error("الملاحظة غير موجودة");
+	if (!canAccessNoteThread(staff, school, note)) throw new Error("ليست لديك صلاحية هذه المراسلة");
+	const rows = await sql`
+      select m.id, m.note_id, m.author_id, m.to_kind, m.body, m.created_at::text as created_at,
+             coalesce(sf.display_name, 'موظف') as author_name,
+             coalesce(sf.role, 'teacher') as author_role
+      from note_messages m
+      left join staff sf on sf.user_id = m.author_id
+      where m.note_id = ${note.id} and m.school_id = ${staff.school_id}
+      order by m.created_at asc, m.id asc
+    `;
+	return {
+		noteId: note.id,
+		studentName: note.student_name,
+		dest: note.dest === "health" || note.dest === "counselor" ? note.dest : (note.refer_counselor ? "counselor" : "vp"),
+		messages: rows.map((m) => ({
+			id: m.id,
+			noteId: m.note_id,
+			authorId: m.author_id,
+			authorName: m.author_name,
+			authorRole: m.author_role,
+			toKind: m.to_kind,
+			body: m.body,
+			createdAt: m.created_at,
+			mine: m.author_id === staff.user_id
+		}))
+	};
+});
+export const postNoteMessage = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	noteId: z.number(),
+	body: z.string().min(1).max(1200),
+	toKind: z.enum(["vp", "counselor", "health", "teacher"]).optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureNoteThread(sql);
+	const note = (await sql`
+      select n.id, n.teacher_id, n.dest, n.refer_counselor, s.name as student_name
+      from notes n
+      join students s on s.id = n.student_id
+      where n.id = ${data.noteId} and n.school_id = ${staff.school_id}
+    `)[0];
+	if (!note) throw new Error("الملاحظة غير موجودة");
+	if (!canAccessNoteThread(staff, school, note)) throw new Error("ليست لديك صلاحية هذه المراسلة");
+	const isTeacher = note.teacher_id === staff.user_id && !mappedPerms(staff, school).takeActions && !mappedPerms(staff, school).counseling && staff.role !== "admin";
+	const toKind = data.toKind || (isTeacher ? (note.dest === "health" || note.dest === "counselor" ? note.dest : "vp") : "teacher");
+	const body = data.body.trim();
+	if (!body) throw new Error("اكتب نص المراسلة");
+	const row = (await sql`
+      insert into note_messages (school_id, note_id, author_id, to_kind, body)
+      values (${staff.school_id}, ${note.id}, ${staff.user_id}, ${toKind}, ${body})
+      returning id, created_at::text as created_at
+    `)[0];
+	await notifyNoteThread(sql, staff, school, note, toKind, body);
+	return {
+		id: row.id,
+		noteId: note.id,
+		authorId: staff.user_id,
+		authorName: staff.display_name,
+		authorRole: staff.role,
+		toKind,
+		body,
+		createdAt: row.created_at,
+		mine: true
+	};
+});
+function canAccessNoteThread(staff, school, note) {
+	if (staff.role === "admin") return true;
+	if (note.teacher_id === staff.user_id) return true;
+	const p = mappedPerms(staff, school);
+	if (p.takeActions || p.counseling) return true;
+	return false;
+}
+async function notifyNoteThread(sql, staff, school, note, toKind, body) {
+	const title = `مراسلة على ملاحظة ${note.student_name}`;
+	const snippet = body.length > 80 ? body.slice(0, 80) + "…" : body;
+	const text = `${staff.display_name}: ${snippet}`;
+	const recipients = await sql`
+    select user_id, role, coalesce(permissions::text, '{}') as permissions from staff
+    where school_id = ${staff.school_id} and user_id <> ${staff.user_id}
+  `;
+	const mapped = mapSchool(school);
+	const ids = new Set();
+	if (toKind === "teacher" && note.teacher_id && note.teacher_id !== staff.user_id) ids.add(note.teacher_id);
+	for (const rec of recipients) {
+		const perms = parsePermissions(rec.permissions, rec.role, mapped);
+		if (toKind === "vp" && (rec.role === "admin" || rec.role === "counselor" || perms.takeActions)) ids.add(rec.user_id);
+		if (toKind === "counselor" && (rec.role === "admin" || perms.counseling) && rec.role !== "health_counselor") ids.add(rec.user_id);
+		if (toKind === "health" && (rec.role === "admin" || rec.role === "health_counselor" || (perms.counseling && rec.role === "health_counselor"))) ids.add(rec.user_id);
+		if (toKind === "teacher") continue;
+	}
+	if (toKind === "health") {
+		for (const rec of recipients) {
+			if (rec.role === "health_counselor" || rec.role === "admin") ids.add(rec.user_id);
+		}
+	}
+	if (toKind === "counselor") {
+		for (const rec of recipients) {
+			const perms = parsePermissions(rec.permissions, rec.role, mapped);
+			if (rec.role === "student_counselor" || perms.counseling) ids.add(rec.user_id);
+		}
+	}
+	for (const userId of ids) {
+		if (userId === staff.user_id) continue;
+		await sql`
+      insert into notifications (school_id, user_id, note_id, kind, title, body, tone)
+      values (${staff.school_id}, ${userId}, ${note.id}, ${"thread"}, ${title}, ${text}, ${"warn"})
+    `;
+	}
+}
+
+async function resolveMailAssignee(sql, school, dest, assigneeId) {
+	if (dest === "teacher") {
+		if (!assigneeId) throw new Error("اختر المعلم");
+		const row = (await sql`
+      select user_id, display_name, role from staff
+      where school_id = ${school.id} and user_id = ${assigneeId} and coalesce(active, true) = true and role <> 'pending'
+    `)[0];
+		if (!row) throw new Error("الموظف غير موجود");
+		return row;
+	}
+	const rows = await sql`
+    select user_id, display_name, role, coalesce(permissions::text, '{}') as permissions
+    from staff
+    where school_id = ${school.id} and coalesce(active, true) = true and role <> 'pending'
+  `;
+	const mapped = mapSchool(school);
+	if (dest === "vp") {
+		return rows.find((r) => r.role === "counselor") || rows.find((r) => parsePermissions(r.permissions, r.role, mapped).takeActions) || rows.find((r) => r.role === "admin") || null;
+	}
+	if (dest === "counselor") {
+		return rows.find((r) => r.role === "student_counselor") || rows.find((r) => r.role !== "health_counselor" && parsePermissions(r.permissions, r.role, mapped).counseling) || rows.find((r) => r.role === "admin") || null;
+	}
+	if (dest === "health") {
+		return rows.find((r) => r.role === "health_counselor") || rows.find((r) => parsePermissions(r.permissions, r.role, mapped).counseling) || rows.find((r) => r.role === "admin") || null;
+	}
+	return null;
+}
+function canAccessMail(staff, school, mail) {
+	if (staff.role === "admin") return true;
+	if (mail.author_id === staff.user_id || mail.assignee_id === staff.user_id) return true;
+	const p = mappedPerms(staff, school);
+	if (p.takeActions || p.counseling) return true;
+	return false;
+}
+function mapMailRow(row, staff) {
+	return {
+		id: row.id,
+		studentId: row.student_id,
+		studentName: row.student_name,
+		classLabel: classLabel(row.short_name, row.class_name),
+		authorId: row.author_id,
+		authorName: row.author_name,
+		authorRole: row.author_role,
+		assigneeId: row.assignee_id,
+		assigneeName: row.assignee_name,
+		assigneeRole: row.assignee_role,
+		dest: row.dest === "counselor" || row.dest === "health" || row.dest === "teacher" ? row.dest : "vp",
+		status: row.status === "closed" ? "closed" : "open",
+		lastBody: row.last_body ?? "",
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		mine: row.author_id === staff.user_id,
+		assignedToMe: row.assignee_id === staff.user_id
+	};
+}
+const MAIL_SQL = `select m.id, m.student_id, m.author_id, m.assignee_id, m.dest, m.status,
+             m.created_at::text as created_at, m.updated_at::text as updated_at,
+             s.name as student_name, c.name as class_name, st.short_name,
+             coalesce(au.display_name, 'موظف') as author_name,
+             coalesce(au.role, 'teacher') as author_role,
+             coalesce(asg.display_name, 'موظف') as assignee_name,
+             coalesce(asg.role, 'teacher') as assignee_role,
+             coalesce((
+               select msg.body from student_mail_msg msg
+               where msg.mail_id = m.id
+               order by msg.created_at desc, msg.id desc
+               limit 1
+             ), '') as last_body
+      from student_mail m
+      join students s on s.id = m.student_id
+      join classes c on c.id = s.class_id
+      join stages st on st.id = c.stage_id
+      left join staff au on au.user_id = m.author_id
+      left join staff asg on asg.user_id = m.assignee_id`;
+async function notifyMailStaff(sql, staff, school, mail, title, body) {
+	const snippet = body.length > 80 ? body.slice(0, 80) + "…" : body;
+	const text = `${staff.display_name}: ${snippet}`;
+	const ids = new Set();
+	if (mail.assignee_id && mail.assignee_id !== staff.user_id) ids.add(mail.assignee_id);
+	if (mail.author_id && mail.author_id !== staff.user_id) ids.add(mail.author_id);
+	for (const userId of ids) {
+		await sql`
+      insert into notifications (school_id, user_id, note_id, kind, title, body, tone)
+      values (${staff.school_id}, ${userId}, ${null}, ${"mail"}, ${title}, ${text}, ${"warn"})
+    `;
+	}
+}
+export const listStaffDirectory = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const rows = await sql`
+    select user_id, display_name, role, coalesce(subject, '') as subject
+    from staff
+    where school_id = ${staff.school_id}
+      and coalesce(active, true) = true
+      and role <> 'pending'
+    order by display_name
+  `;
+	return {
+		staff: rows.map((r) => ({
+			userId: r.user_id,
+			displayName: r.display_name,
+			role: r.role,
+			subject: r.subject
+		}))
+	};
+});
+export const createStudentMail = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	studentId: z.number(),
+	dest: z.enum(["vp", "counselor", "health", "teacher"]),
+	assigneeId: z.string().optional(),
+	body: z.string().min(2).max(2000)
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const student = (await sql`
+      select s.id, s.name from students s
+      where s.id = ${data.studentId} and s.school_id = ${staff.school_id}
+    `)[0];
+	if (!student) throw new Error("الطالب غير موجود");
+	const assignee = await resolveMailAssignee(sql, school, data.dest, data.assigneeId);
+	if (!assignee) throw new Error("لا يوجد مستلم لهذه الجهة في المدرسة");
+	if (assignee.user_id === staff.user_id && data.dest === "teacher") throw new Error("اختر معلماً آخر");
+	const body = data.body.trim();
+	const row = (await sql`
+      insert into student_mail (school_id, student_id, author_id, assignee_id, dest)
+      values (${staff.school_id}, ${student.id}, ${staff.user_id}, ${assignee.user_id}, ${data.dest})
+      returning id
+    `)[0];
+	await sql`
+      insert into student_mail_msg (school_id, mail_id, author_id, kind, body)
+      values (${staff.school_id}, ${row.id}, ${staff.user_id}, ${"message"}, ${body})
+    `;
+	await notifyMailStaff(sql, staff, school, { author_id: staff.user_id, assignee_id: assignee.user_id }, `مراسلة عن ${student.name}`, body);
+	return {
+		id: row.id,
+		studentName: student.name,
+		assigneeName: assignee.display_name,
+		dest: data.dest
+	};
+});
+export const listStudentMail = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	studentId: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const rows = await sql.query(MAIL_SQL + ` where m.school_id = $1 and m.student_id = $2 order by m.updated_at desc, m.id desc limit 80`, [staff.school_id, data.studentId]);
+	return {
+		threads: rows.filter((r) => canAccessMail(staff, school, r)).map((r) => mapMailRow(r, staff))
+	};
+});
+export const listMyMail = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const p = mappedPerms(staff, school);
+	const seeAll = staff.role === "admin" || p.takeActions || p.counseling;
+	const rows = seeAll ? await sql.query(MAIL_SQL + ` where m.school_id = $1 order by m.updated_at desc, m.id desc limit 120`, [staff.school_id]) : await sql.query(MAIL_SQL + ` where m.school_id = $1 and (m.author_id = $2 or m.assignee_id = $2) order by m.updated_at desc, m.id desc limit 120`, [staff.school_id, staff.user_id]);
+	return { threads: rows.map((r) => mapMailRow(r, staff)) };
+});
+export const listMailMessages = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	mailId: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const mail = (await sql`
+      select m.id, m.author_id, m.assignee_id, m.dest, s.name as student_name
+      from student_mail m
+      join students s on s.id = m.student_id
+      where m.id = ${data.mailId} and m.school_id = ${staff.school_id}
+    `)[0];
+	if (!mail) throw new Error("المراسلة غير موجودة");
+	if (!canAccessMail(staff, school, mail)) throw new Error("ليست لديك صلاحية هذه المراسلة");
+	const rows = await sql`
+      select msg.id, msg.mail_id, msg.author_id, msg.kind, msg.body, msg.created_at::text as created_at,
+             coalesce(sf.display_name, 'موظف') as author_name,
+             coalesce(sf.role, 'teacher') as author_role
+      from student_mail_msg msg
+      left join staff sf on sf.user_id = msg.author_id
+      where msg.mail_id = ${mail.id} and msg.school_id = ${staff.school_id}
+      order by msg.created_at asc, msg.id asc
+    `;
+	return {
+		mailId: mail.id,
+		studentName: mail.student_name,
+		messages: rows.map((m) => ({
+			id: m.id,
+			mailId: m.mail_id,
+			authorId: m.author_id,
+			authorName: m.author_name,
+			authorRole: m.author_role,
+			kind: m.kind === "forward" ? "forward" : "message",
+			body: m.body,
+			createdAt: m.created_at,
+			mine: m.author_id === staff.user_id
+		}))
+	};
+});
+export const postMailMessage = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	mailId: z.number(),
+	body: z.string().min(1).max(2000)
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const mail = (await sql`
+      select m.id, m.author_id, m.assignee_id, m.dest, s.name as student_name
+      from student_mail m
+      join students s on s.id = m.student_id
+      where m.id = ${data.mailId} and m.school_id = ${staff.school_id}
+    `)[0];
+	if (!mail) throw new Error("المراسلة غير موجودة");
+	if (!canAccessMail(staff, school, mail)) throw new Error("ليست لديك صلاحية هذه المراسلة");
+	const body = data.body.trim();
+	if (!body) throw new Error("اكتب نص المراسلة");
+	const row = (await sql`
+      insert into student_mail_msg (school_id, mail_id, author_id, kind, body)
+      values (${staff.school_id}, ${mail.id}, ${staff.user_id}, ${"message"}, ${body})
+      returning id, created_at::text as created_at
+    `)[0];
+	await sql`update student_mail set updated_at = now() where id = ${mail.id} and school_id = ${staff.school_id}`;
+	await notifyMailStaff(sql, staff, school, mail, `رد على مراسلة ${mail.student_name}`, body);
+	return {
+		id: row.id,
+		mailId: mail.id,
+		authorId: staff.user_id,
+		authorName: staff.display_name,
+		authorRole: staff.role,
+		kind: "message",
+		body,
+		createdAt: row.created_at,
+		mine: true
+	};
+});
+export const forwardStudentMail = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	mailId: z.number(),
+	dest: z.enum(["vp", "counselor", "health", "teacher"]),
+	assigneeId: z.string().optional()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureStaffMail(sql);
+	const mail = (await sql`
+      select m.id, m.author_id, m.assignee_id, m.dest, s.name as student_name
+      from student_mail m
+      join students s on s.id = m.student_id
+      where m.id = ${data.mailId} and m.school_id = ${staff.school_id}
+    `)[0];
+	if (!mail) throw new Error("المراسلة غير موجودة");
+	const p = mappedPerms(staff, school);
+	const allowed = staff.role === "admin" || mail.author_id === staff.user_id || mail.assignee_id === staff.user_id || p.takeActions || p.counseling;
+	if (!allowed) throw new Error("ليست لديك صلاحية تحويل هذه المراسلة");
+	const assignee = await resolveMailAssignee(sql, school, data.dest, data.assigneeId);
+	if (!assignee) throw new Error("لا يوجد مستلم لهذه الجهة في المدرسة");
+	const destLabel = data.dest === "vp" ? "وكيل شؤون الطلاب" : data.dest === "counselor" ? "المرشد الطلابي" : data.dest === "health" ? "المرشد الصحي" : assignee.display_name;
+	const body = `حُوّلت المراسلة من ${staff.display_name} إلى ${assignee.display_name} (${destLabel})`;
+	await sql`
+      update student_mail
+      set assignee_id = ${assignee.user_id}, dest = ${data.dest}, updated_at = now()
+      where id = ${mail.id} and school_id = ${staff.school_id}
+    `;
+	await sql`
+      insert into student_mail_msg (school_id, mail_id, author_id, kind, body)
+      values (${staff.school_id}, ${mail.id}, ${staff.user_id}, ${"forward"}, ${body})
+    `;
+	await notifyMailStaff(sql, staff, school, { author_id: mail.author_id, assignee_id: assignee.user_id }, `تحويل مراسلة ${mail.student_name}`, body);
+	return {
+		ok: true,
+		assigneeName: assignee.display_name,
+		dest: data.dest
+	};
 });

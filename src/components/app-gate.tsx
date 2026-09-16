@@ -1,9 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useRouterState } from "@tanstack/react-router";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getWorkspace } from "@/lib/school/api";
-import { pagePermissionForPath, staffCan } from "@/lib/school/permissions";
 import { WorkspaceContext } from "@/lib/school/workspace";
 import { AppShell } from "./app-shell";
 import { SchoolMark } from "./school-mark";
@@ -17,7 +15,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     queryFn: () => getWorkspace(),
     enabled: Boolean(user),
   });
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
   if (isPending) return <BootScreen />;
   if (!user) return <RedirectToSignIn />;
   if (workspace.isPending) return <BootScreen />;
@@ -35,26 +33,6 @@ export function AppGate({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
-  }
-
-  
-
-  if (workspace.data.staff.role !== "admin") {
-    const pagePermission = pagePermissionForPath(pathname);
-    if (pagePermission && !staffCan(workspace.data.staff, pagePermission)) {
-      return (
-        <div className="grid min-h-dvh place-items-center bg-bg px-6 text-center">
-          <div className="max-w-md space-y-4">
-            <SchoolMark size="lg" className="mx-auto" />
-            <h1 className="text-2xl font-semibold">الصفحة غير متاحة</h1>
-            <p className="text-fg-muted">لم يمنحك مدير التطبيق صلاحية الوصول إلى هذه الصفحة.</p>
-            <Link to="/" className="inline-flex h-11 items-center rounded-[var(--radius-sm)] bg-primary px-5 text-sm font-medium text-primary-fg">
-              العودة إلى الفصول
-            </Link>
-          </div>
-        </div>
-      );
-    }
   }
 
   if (workspace.data.staff.role === "pending") {

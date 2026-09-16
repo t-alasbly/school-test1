@@ -54,9 +54,7 @@
     line-height: 1.5;
   }
 
-  h1,
-  h2,
-  h3 {
+  h1, h2, h3 {
     font-family: var(--font-display);
     text-wrap: balance;
     letter-spacing: 0;
@@ -81,14 +79,18 @@
   );
 }
 
+.font-naskh {
+  font-family: var(--font-naskh);
+}
+
 .font-diwani {
-  font-family: "Katibeh", "Aref Ruqaa", "Noto Naskh Arabic", serif;
+  font-family: Katibeh, "Aref Ruqaa", "Noto Naskh Arabic", serif;
 }
 
 .ksa-diwani {
-  height: 35px;
   width: auto;
   max-width: 100%;
+  height: 35px;
 }
 
 .official-sheet {
@@ -132,15 +134,6 @@
   font-size: 12.5px;
 }
 
-.official-roster-table {
-  table-layout: fixed;
-}
-
-.official-roster-table th,
-.official-roster-table td {
-  overflow-wrap: anywhere;
-}
-
 .official-report-table th,
 .official-report-table td {
   padding: 5px 6px;
@@ -161,17 +154,41 @@
   print-color-adjust: exact;
 }
 
+.official-tint {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.official-accent {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 #school-print-mount {
   display: none;
+}
+
+.rdp-root {
+  --rdp-accent-color: var(--color-primary);
+  --rdp-accent-background-color: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  --rdp-day-height: 40px;
+  --rdp-day-width: 40px;
+  font-family: var(--font-sans);
+  color: var(--color-fg);
+}
+
+.rdp-root .rdp-selected .rdp-day_button {
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
   }
 }
 
@@ -180,29 +197,14 @@
     size: A4;
     margin: 0;
   }
-
   html,
   body {
-    background: #ffffff !important;
-    color: #111111 !important;
+    color: #111 !important;
+    background: #fff !important;
   }
-
   .no-print {
     display: none !important;
   }
-
-  .print-root,
-  .print-root * {
-    background: #ffffff !important;
-    color: #111111 !important;
-    box-shadow: none !important;
-  }
-
-  .print-root {
-    display: block !important;
-    border: none !important;
-  }
-
   nav,
   header.app-header,
   aside,
@@ -210,148 +212,101 @@
   .app-header {
     display: none !important;
   }
-
-  .min-h-dvh,
-  .bg-bg,
-  .bg-card,
-  .bg-bg-elevated,
-  .bg-muted {
-    background: #ffffff !important;
-  }
-
   body.printing-form,
   body.printing-form html {
+    background: #fff !important;
     height: auto !important;
     overflow: visible !important;
-    background: #ffffff !important;
   }
-
-  body.printing-form > *:not(#school-print-mount) {
+  body.printing-form > :not(#school-print-mount) {
     display: none !important;
   }
-
   body.printing-form #school-print-mount {
-    display: block !important;
-    position: static !important;
-    inset: auto !important;
+    color: #111 !important;
+    background: #fff !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    background: #ffffff !important;
-    color: #111111 !important;
+    display: block !important;
+    position: static !important;
     overflow: visible !important;
   }
-
   body.printing-form #school-print-mount .print-form,
   body.printing-form #school-print-mount .print-form * {
     visibility: visible !important;
-    color: #111111 !important;
-    background: #ffffff !important;
+    color: #111 !important;
     box-shadow: none !important;
+    background: #fff !important;
   }
-
   body.printing-form #school-print-mount .print-form {
-    position: static !important;
-    inset: auto !important;
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm)
-      var(--print-margin-bottom, 12mm) var(--print-margin-left, 8mm) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    display: block !important;
-    overflow: visible !important;
-    font-family: var(--font-naskh), "Noto Naskh Arabic", serif !important;
-    box-sizing: border-box !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     page-break-inside: avoid;
-    break-inside: avoid;
-    max-height: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm)
+      var(--print-margin-bottom, 12mm) var(--print-margin-left, 8mm) !important;
+    font-family: var(--font-naskh), "Noto Naskh Arabic", serif !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
   }
-
   body.printing-form #school-print-mount .print-report {
     page-break-inside: auto;
-    break-inside: auto;
     font-size: 13px !important;
     line-height: 1.45 !important;
   }
-
-  body.printing-form #school-print-mount .print-report * {
-    overflow: visible !important;
-  }
-
   body.printing-form #school-print-mount .print-report thead {
     display: table-header-group;
   }
-
   body.printing-form #school-print-mount .print-report tr {
     break-inside: avoid;
-    page-break-inside: avoid;
   }
-
-  body.printing-form #school-print-mount .print-report .official-report-table {
-    font-size: 12.5px !important;
-  }
-
-  body.printing-form #school-print-mount .print-report .official-report-table th,
-  body.printing-form #school-print-mount .print-report .official-report-table td {
-    padding: 5px 6px !important;
-    font-size: 12.5px !important;
-    color: #111111 !important;
-  }
-
   body.printing-form #school-print-mount .print-form .official-accent {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color: #fff !important;
     background: #00857c !important;
-    color: #ffffff !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
-
   body.printing-form #school-print-mount .print-form img {
-    background: transparent !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    background: transparent !important;
   }
-
   body.printing-form #school-print-mount .print-form .ksa-diwani {
     background: transparent !important;
     height: 35px !important;
     max-height: 38px !important;
   }
-
   body.printing-form #school-print-mount .print-form .ksa-ministry {
     color: #14532d !important;
   }
-
   body.printing-form #school-print-mount .print-form .official-tint,
   body.printing-form #school-print-mount .print-form .official-tint * {
-    background: #f3faf8 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
     color: #0f4f4a !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    background: #f3faf8 !important;
   }
-
   body.printing-form #school-print-mount .official-table th {
-    background: #e7f4f2 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    background: #e7f4f2 !important;
   }
-
   body.printing-form #school-print-mount .official-sheet {
-    max-width: none !important;
     width: 100% !important;
+    max-width: none !important;
     padding: 0 !important;
   }
-
   body.printing-form #school-print-mount .official-meta,
   body.printing-form #school-print-mount .official-meta * {
-    background: #ffffff !important;
-    color: #111111 !important;
+    color: #111 !important;
+    background: #fff !important;
   }
-
   body.printing-form #school-print-mount .official-meta p:first-child {
     color: #00857c !important;
   }

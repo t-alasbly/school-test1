@@ -65,6 +65,7 @@ function AppearanceSettings() {
       themeId: id,
       font: theme?.font ?? draft.font,
       fontScale: draft.fontScale ?? 1,
+      calendar: draft.calendar ?? "hijri",
       custom: undefined,
     };
     setDraft(next);
@@ -171,6 +172,45 @@ function AppearanceSettings() {
               </button>
             );
           })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>التقويم</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-sm text-fg-muted">الأساس الهجري. يمكنك إظهار التواريخ بالميلادي من هنا أو من شاشة الغياب.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["hijri", "هجري", "أم القرى — المعتمد في الوزارة"],
+                ["gregorian", "ميلادي", "التقويم الميلادي بجانب الهجري"],
+              ] as const
+            ).map(([id, label, hint]) => {
+              const selected = (draft.calendar ?? "hijri") === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    const next = { ...draft, calendar: id };
+                    setDraft(next);
+                    applyAppearance(next);
+                  }}
+                  className={cn(
+                    "min-h-16 rounded-[var(--radius-md)] border px-3 py-2 text-right",
+                    selected
+                      ? "border-primary bg-primary/5 font-semibold text-primary"
+                      : "border-border bg-bg-elevated",
+                  )}
+                >
+                  <span className="block text-base">{label}</span>
+                  <span className="mt-0.5 block text-xs font-normal text-fg-muted">{hint}</span>
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 

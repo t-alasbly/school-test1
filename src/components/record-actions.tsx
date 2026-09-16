@@ -46,6 +46,8 @@ export function invalidateRecords(qc: ReturnType<typeof useQueryClient>) {
   void qc.invalidateQueries({ queryKey: ["workspace"] });
   void qc.invalidateQueries({ queryKey: ["notifications"] });
   void qc.invalidateQueries({ queryKey: ["archive-cases"] });
+  void qc.invalidateQueries({ queryKey: ["desk-notes"] });
+  void qc.invalidateQueries({ queryKey: ["home-desk"] });
 }
 
 export type EditableNote = {

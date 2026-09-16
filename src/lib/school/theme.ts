@@ -1,3 +1,5 @@
+import { parseCalendar, type CalendarKind } from "./calendar";
+
 export type ThemeId =
   | "oasis"
   | "ministry"
@@ -31,6 +33,7 @@ export type Appearance = {
   themeId: ThemeId;
   font: FontId;
   fontScale?: number;
+  calendar?: CalendarKind;
   custom?: Partial<Pick<ThemeTokens, "primary" | "bg" | "fg" | "card">>;
 };
 
@@ -41,7 +44,6 @@ export function clampFontScale(value: unknown): number {
   if (!Number.isFinite(n)) return 1;
   return Math.min(1.5, Math.max(0.85, Math.round(n * 100) / 100));
 }
-
 
 export const FONT_STACKS: Record<FontId, string> = {
   cairo: '"Cairo", "IBM Plex Sans Arabic", system-ui, sans-serif',
@@ -263,7 +265,7 @@ export const FONT_LIST = Object.keys(FONT_LABEL) as FontId[];
 
 export function parseAppearance(raw: unknown): Appearance {
   const optional = parseOptionalAppearance(raw);
-  return optional ?? { themeId: "oasis", font: "cairo", fontScale: 1 };
+  return optional ?? { themeId: "oasis", font: "cairo", fontScale: 1, calendar: "hijri" };
 }
 
 export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
@@ -277,7 +279,8 @@ export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const rec = value as Record<string, unknown>;
-  if (rec.themeId == null && rec.font == null && rec.custom == null && rec.fontScale == null) return undefined;
+  if (rec.themeId == null && rec.font == null && rec.custom == null && rec.fontScale == null && rec.calendar == null)
+    return undefined;
   const themeId = THEMES[rec.themeId as ThemeId] ? (rec.themeId as ThemeId) : "oasis";
   const font = FONT_STACKS[rec.font as FontId] ? (rec.font as FontId) : THEMES[themeId].font;
   const customRaw = rec.custom;
@@ -292,13 +295,18 @@ export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
     if (Object.keys(custom).length === 0) custom = undefined;
   }
   const fontScale = rec.fontScale == null ? 1 : clampFontScale(rec.fontScale);
-  return { themeId, font, custom, fontScale };
-
+  return { themeId, font, custom, fontScale, calendar: parseCalendar(rec.calendar) };
 }
 
 export function mergeAppearance(school: Appearance, personal: Appearance | undefined): Appearance {
-  if (personal && personal.themeId) return personal;
-  return school;
+  if (personal && personal.themeId) {
+    return {
+      ...school,
+      ...personal,
+      calendar: personal.calendar ?? school.calendar ?? "hijri",
+    };
+  }
+  return { ...school, calendar: school.calendar ?? "hijri" };
 }
 
 export function resolvedTokens(appearance: Appearance): ThemeTokens {
@@ -341,9 +349,7 @@ export function applyAppearance(appearance: Appearance) {
     "--font-sans": FONT_STACKS[appearance.font],
     "--font-display": FONT_DISPLAY[appearance.font] ?? FONT_STACKS[appearance.font],
   };
-  for (const [key, value] of Object.entries(map)) {
-    root.style.setProperty(key, value);
-  }
+  for (const [key, value] of Object.entries(map)) root.style.setProperty(key, value);
   const themeColor = document.querySelector('meta[name="theme-color"]');
   if (themeColor) themeColor.setAttribute("content", tokens.primary);
   root.style.colorScheme = appearance.themeId === "night" ? "dark" : "light";

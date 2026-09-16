@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { OfficialLetterhead } from "@/components/print-forms";
 import { SettingsBack } from "@/components/settings-back";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateSchool } from "@/lib/school/api";
 import {
-  SAUDI_REGIONS,
   SEASON_LABEL,
   SUMMER_SCHEDULE,
   WINTER_SCHEDULE,
@@ -94,41 +94,58 @@ function SchoolSettings() {
       <div>
         <SettingsBack />
         <h1 className="text-3xl font-semibold tracking-tight">بيانات المدرسة</h1>
-        <p className="text-sm text-fg-muted">المنطقة والإدارة واسم المدرسة وأسماء القيادة — تظهر في ترويسة الخطابات</p>
+        <p className="text-sm text-fg-muted">
+          ثلاثة أسطر تُكتب يدوياً كما تريدها في يسار ترويسة الخطاب — السطر الأسفل اسم المدرسة
+        </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>هوية المدرسة في الخطابات</CardTitle>
+          <CardTitle>ترويسة الخطاب — الجهة اليسرى</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <p className="text-sm text-fg-muted">
+            ثلاث خانات فاضية تُكتب كاملة كما تظهر في الخطاب. لا تُضاف كلمات تلقائياً — اكتب «منطقة…» أو «إدارة التعليم بـ…» بنفسك إن أردت.
+          </p>
           <div className="space-y-1.5">
-            <Label htmlFor="region">المنطقة</Label>
+            <Label htmlFor="region">السطر الأول</Label>
             <Input
               id="region"
-              list="regions"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              placeholder="مثال: مكة المكرمة"
+              placeholder="مثال: منطقة مكة المكرمة"
+              maxLength={120}
             />
-            <datalist id="regions">
-              {SAUDI_REGIONS.map((r) => (
-                <option key={r} value={r} />
-              ))}
-            </datalist>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="gov">المحافظة</Label>
+            <Label htmlFor="gov">السطر الثاني</Label>
             <Input
               id="gov"
               value={governorate}
               onChange={(e) => setGovernorate(e.target.value)}
-              placeholder="مثال: جدة"
+              placeholder="مثال: إدارة التعليم بمحافظة جدة"
+              maxLength={120}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="school">اسم المدرسة</Label>
-            <Input id="school" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} />
+            <Label htmlFor="school">اسم المدرسة (السطر الثالث — الأسفل)</Label>
+            <Input
+              id="school"
+              value={schoolName}
+              onChange={(e) => setSchoolName(e.target.value)}
+              placeholder="مثال: متوسطة الأمير سلطان"
+              maxLength={120}
+            />
+          </div>
+          <div className="overflow-hidden rounded-[var(--radius-md)] border border-border bg-white text-black">
+            <OfficialLetterhead
+              school={{
+                ...school,
+                name: schoolName,
+                region,
+                governorate,
+              }}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>صفة القيادة في النماذج</Label>

@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { updateInviteReasons, updateMessageTemplates } from "@/lib/school/api";
-import { DEFAULT_INVITE_REASONS, WHATSAPP_TEMPLATES } from "@/lib/school/constants";
+import { updateMessageTemplates } from "@/lib/school/api";
+import { WHATSAPP_TEMPLATES } from "@/lib/school/constants";
 import type { CustomMessage, MessageKind, MessageTemplate } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 
@@ -34,10 +34,6 @@ function MessagesSettings() {
   const [custom, setCustom] = useState<CustomMessage[]>(() => school.customMessages ?? []);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(WHATSAPP_TEMPLATES.general.body);
-  const [invite, setInvite] = useState<string[]>(() =>
-    school.inviteReasons?.length ? school.inviteReasons : DEFAULT_INVITE_REASONS,
-  );
-  const [inviteDraft, setInviteDraft] = useState("");
 
   const mutation = useMutation({
     mutationFn: (customMessages: CustomMessage[]) =>
@@ -46,15 +42,6 @@ function MessagesSettings() {
       }),
     onSuccess: () => {
       toast.success("تم حفظ قوالب الرسائل");
-      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
-  });
-
-  const inviteMutation = useMutation({
-    mutationFn: (reasons: string[]) => updateInviteReasons({ data: { reasons } }),
-    onSuccess: () => {
-      toast.success("تم حفظ عبارات الاستدعاء");
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
@@ -189,62 +176,6 @@ function MessagesSettings() {
       <Button disabled={mutation.isPending} onClick={() => mutation.mutate(custom)}>
         حفظ كل القوالب
       </Button>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>عبارات استدعاء ولي الأمر</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-fg-muted">
-            تظهر كخيارات ثابتة في نموذج خطاب الدعوة، ويمكن تعديلها قبل الطباعة.
-          </p>
-          <ul className="space-y-2">
-            {invite.map((item, index) => (
-              <li key={`${item}-${index}`} className="flex gap-2">
-                <Input
-                  value={item}
-                  onChange={(e) =>
-                    setInvite((prev) => prev.map((row, i) => (i === index ? e.target.value : row)))
-                  }
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setInvite((prev) => prev.filter((_, i) => i !== index))}
-                >
-                  حذف
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={inviteDraft}
-              onChange={(e) => setInviteDraft(e.target.value)}
-              placeholder="عبارة جديدة"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                const text = inviteDraft.trim();
-                if (text.length < 4) return;
-                setInvite((prev) => [...prev, text]);
-                setInviteDraft("");
-              }}
-            >
-              إضافة
-            </Button>
-          </div>
-          <Button
-            disabled={inviteMutation.isPending}
-            onClick={() => inviteMutation.mutate(invite.map((s) => s.trim()).filter((s) => s.length >= 4))}
-          >
-            حفظ عبارات الاستدعاء
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

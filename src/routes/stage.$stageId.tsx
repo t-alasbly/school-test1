@@ -43,7 +43,7 @@ function StageBody() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link
-          to="/"
+          to="/classes"
           className="grid size-11 place-items-center rounded-[var(--radius-sm)] hover:bg-muted"
           aria-label="رجوع"
         >

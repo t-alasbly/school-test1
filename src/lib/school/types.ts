@@ -27,6 +27,9 @@ export type MessageKind = NoteType | "general";
 export type ImprovementStatus = "open" | "following" | "closed";
 export type DailyKind = "absence" | "late";
 export type CounselingKind = "health" | "psych" | "learning";
+export type NoteDest = "vp" | "counselor" | "health";
+export type NoteMessageTo = "vp" | "counselor" | "health" | "teacher";
+export type MailDest = "vp" | "counselor" | "health" | "teacher";
 
 export type Staff = {
   userId: string;
@@ -52,31 +55,18 @@ export type CustomMessage = {
   body: string;
 };
 
-export type RosterTemplatePayload = {
-  title: string;
-  showPhone: boolean;
-  showClass: boolean;
-  showStage: boolean;
-  extraCols: { id: string; title: string }[];
-  order: string[];
-  widths: Record<string, number>;
-};
-
-export type RosterTemplate = {
-  id: number;
-  name: string;
-  createdBy: string;
-  createdByName: string;
-  isProgram: boolean;
-  payload: RosterTemplatePayload;
-  createdAt: string;
-};
-
 export type PrintMargins = {
   top: number;
   right: number;
   bottom: number;
   left: number;
+};
+
+export type StatCounter = {
+  id: string;
+  title: string;
+  source: "daily-absence" | "daily-late" | "note-absence" | "note-late" | "homework" | "behavior";
+  range: "today" | "week" | "month" | "total";
 };
 
 export type PeriodSlot = {
@@ -110,13 +100,13 @@ export type School = {
   printMargins: PrintMargins;
   printSchoolLogo: boolean;
   schedules: SchoolSchedules;
+  statCounters: StatCounter[];
+  statHidden: string[];
   messageTemplates: MessageTemplates;
   customMessages: CustomMessage[];
-  inviteReasons: string[];
   teachersCanMessage: boolean;
   teachersCanViewAll: boolean;
   appearance: Appearance;
-  roleLabels: Partial<Record<StaffRole, string>>;
 };
 
 export type CatalogItem = {
@@ -211,8 +201,21 @@ export type NoteRecord = {
   closedAt: string | null;
   occurrence: number;
   referCounselor: boolean;
+  dest: NoteDest;
   suggestedAction: string;
   compensation: string;
+};
+
+export type NoteMessage = {
+  id: number;
+  noteId: number;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  toKind: NoteMessageTo;
+  body: string;
+  createdAt: string;
+  mine: boolean;
 };
 
 export type DailyAttendanceRow = {
@@ -235,6 +238,45 @@ export type CounselingCase = {
   kind: CounselingKind;
   body: string;
   createdAt: string;
+};
+
+export type StaffDirectoryRow = {
+  userId: string;
+  displayName: string;
+  role: StaffRole;
+  subject: string;
+};
+
+export type StudentMail = {
+  id: number;
+  studentId: number;
+  studentName: string;
+  classLabel: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  assigneeId: string;
+  assigneeName: string;
+  assigneeRole: string;
+  dest: MailDest;
+  status: "open" | "closed";
+  lastBody: string;
+  createdAt: string;
+  updatedAt: string;
+  mine: boolean;
+  assignedToMe: boolean;
+};
+
+export type MailMessage = {
+  id: number;
+  mailId: number;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  kind: "message" | "forward";
+  body: string;
+  createdAt: string;
+  mine: boolean;
 };
 
 export type BehaviorImprovement = {

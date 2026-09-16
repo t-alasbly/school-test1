@@ -1,0 +1,179 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AppGate } from "@/components/app-gate";
+import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
+import { StudentQuickActions } from "@/components/student-quick-actions";
+import { StudentSheet } from "@/components/student-sheet";
+import { Input } from "@/components/ui/input";
+import { listStudents } from "@/lib/school/api";
+import { classLabel } from "@/lib/school/constants";
+import { staffCan } from "@/lib/school/permissions";
+import { useWorkspace } from "@/lib/school/workspace";
+import { cn } from "@/lib/utils";
+
+type Search = { stage?: number; sort?: ClassSort };
+
+export const Route = createFileRoute("/classes")({
+  validateSearch: (search: Record<string, unknown>): Search => {
+    const next: Search = {};
+    if (Number(search.stage) > 0) next.stage = Number(search.stage);
+    if (search.sort === "alpha") next.sort = "alpha";
+    return next;
+  },
+  component: ClassesPage,
+});
+
+function ClassesPage() {
+  return (
+    <AppGate>
+      <ClassesBody />
+    </AppGate>
+  );
+}
+
+type RosterStudent = {
+  id: number;
+  name: string;
+  classId: number;
+  stageId: number;
+  className: string;
+  stageName: string;
+  shortName: string;
+  label: string;
+  parentPhone?: string;
+};
+
+function ClassesBody() {
+  const { stages, classes, staff } = useWorkspace();
+  const navigate = useNavigate();
+  const search = Route.useSearch();
+  const [stageId, setStageId] = useState<number | null>(search.stage ?? stages[0]?.id ?? null);
+  const [classId, setClassId] = useState<number | null>(null);
+  const [sort, setSort] = useState<ClassSort>(search.sort ?? "order");
+  const [q, setQ] = useState("");
+  const [activeStudent, setActiveStudent] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (search.stage && search.stage !== stageId) setStageId(search.stage);
+    else if (stageId == null && stages[0]) setStageId(stages[0].id);
+  }, [search.stage, stages, stageId]);
+
+  const roster = useQuery({
+    queryKey: ["stage-students", stageId, classId],
+    queryFn: () =>
+      listStudents({
+        data: {
+          stageId: stageId ?? undefined,
+          classId: classId ?? undefined,
+        },
+      }),
+    enabled: Boolean(stageId) && staffCan(staff, "viewClasses"),
+  });
+  const students = ((roster.data as { students?: RosterStudent[] } | undefined)?.students ?? []) as RosterStudent[];
+
+  const shown = useMemo(() => {
+    const term = q.trim();
+    const filtered = term ? students.filter((s) => s.name.includes(term) || s.label.includes(term)) : students;
+    return sortedStudents(
+      filtered.map((s) => ({ ...s, studentName: s.name, classLabel: s.label })),
+      sort,
+    );
+  }, [students, q, sort]);
+
+  if (!staffCan(staff, "viewClasses")) {
+    return (
+      <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
+        صفحة الفصول غير ظاهرة لحسابك.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <StageClassBar
+        stages={stages}
+        classes={classes}
+        selectedStageId={stageId}
+        selectedClassId={classId}
+        sort={sort}
+        studentCount={shown.length}
+        onSort={(next) => {
+          setSort(next);
+          void navigate({
+            to: "/classes",
+            search: { stage: stageId ?? undefined, sort: next === "alpha" ? "alpha" : undefined },
+          });
+        }}
+        onChange={(nextStage, nextClass) => {
+          setStageId(nextStage);
+          setClassId(nextClass);
+          setQ("");
+          if (nextClass) {
+            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+            return;
+          }
+          void navigate({
+            to: "/classes",
+            search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined },
+          });
+        }}
+      />
+      <header className="space-y-1">
+        <p className="text-sm text-fg-muted">اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة أو غياب أو تأخر أو واجب (تذهب لوكيل شؤون الطلاب). الرسائل ومراسلة الزملاء داخل صفحة الطالب</p>
+        <h1 className="text-3xl font-semibold tracking-tight">الفصول</h1>
+      </header>
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="ابحث عن طالب…"
+          className="pr-10"
+        />
+      </div>
+      <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+        {shown.map((student) => (
+          <li key={student.id} className="flex items-start gap-1.5 px-3 py-3 sm:px-4">
+            <button
+              type="button"
+              className="min-w-0 flex-1 text-right"
+              onClick={() => setActiveStudent(student.id)}
+            >
+              <span className="block truncate text-base font-semibold">{student.name}</span>
+              <span className="block text-xs text-fg-muted">{student.label}</span>
+            </button>
+            <StudentQuickActions
+              studentId={student.id}
+              studentName={student.name}
+              classId={student.classId}
+              parentPhone={student.parentPhone}
+              className={student.className}
+              shortName={student.shortName}
+            />
+          </li>
+        ))}
+        {roster.isFetching ? (
+          <li className="px-4 py-10 text-center text-sm text-fg-muted">جارٍ تحميل الأسماء…</li>
+        ) : shown.length === 0 ? (
+          <li className="px-4 py-10 text-center text-sm text-fg-muted">
+            {stages.length === 0
+              ? "لم تُضف مراحل بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد."
+              : "لا يوجد طلاب في هذا النطاق."}
+          </li>
+        ) : null}
+      </ul>
+      <StudentSheet
+        studentId={activeStudent}
+        open={activeStudent != null}
+        onOpenChange={(open) => {
+          if (!open) setActiveStudent(null);
+        }}
+      />
+      <p className={cn("text-xs text-fg-muted", shown.length === 0 && "hidden")}>
+        اضغط الاسم لسجل الطالب، أو سجّل ملاحظة مباشرة من علامة الزائد حتى وأنت تعرض كل فصول المرحلة.
+      </p>
+    </div>
+  );
+}
