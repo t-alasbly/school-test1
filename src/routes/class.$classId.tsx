@@ -4,6 +4,8 @@ import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { ClassSwitcher } from "@/components/class-switcher";
+import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
+import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { AddStudentButton } from "@/components/student-editor";
 import { StudentQuickActions } from "@/components/student-quick-actions";
@@ -12,6 +14,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getClassPage } from "@/lib/school/api";
+import {
+  addGroupStudents,
+  clearGroupStudents,
+  elsewhereLabel,
+  finishGroupPick,
+  setGroupPicking,
+  toggleGroupStudent,
+  useGroupPick,
+} from "@/lib/school/group-pick";
 import { NOTE_META, formatTime, noteTone } from "@/lib/school/constants";
 import type { DailyKind, StudentRow } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -48,6 +59,8 @@ function ClassBody() {
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
+  const [groupOpen, setGroupOpen] = useState(false);
+  const { picking, targets } = useGroupPick();
   const query = useQuery({
     queryKey: ["class", id],
     queryFn: () => getClassPage({ data: { classId: id } }),
@@ -71,6 +84,10 @@ function ClassBody() {
       return a.name.localeCompare(b.name, "ar");
     });
   }, [query.data, q, sort]);
+
+  const pickedIds = useMemo(() => new Set(targets.map((item) => item.studentId)), [targets]);
+  const visibleIds = useMemo(() => new Set(students.map((student: StudentRow) => student.id)), [students]);
+  const kept = elsewhereLabel(targets, visibleIds);
 
   if (query.isPending) {
     const current = classes.find((c) => c.id === id);
@@ -143,6 +160,29 @@ function ClassBody() {
           className="pr-10"
         />
       </div>
+      <div className={cn(picking && "sticky top-14 z-20 -mx-4 border-y border-border bg-bg/95 px-4 py-2 backdrop-blur-sm")}>
+        <GroupViolationBar
+          picking={picking}
+          selected={targets.length}
+          shownCount={students.length}
+          elsewhere={kept}
+          onTogglePicking={() => {
+            setGroupPicking(!picking);
+            setGroupOpen(false);
+          }}
+          onSelectShown={() => {
+            addGroupStudents(
+              students.map((student: StudentRow) => ({
+                studentId: student.id,
+                studentName: student.name,
+                classId: id,
+              })),
+            );
+          }}
+          onClear={clearGroupStudents}
+          onApply={() => setGroupOpen(true)}
+        />
+      </div>
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {students.map((student: StudentRow) => {
           const latest = student.todayNotes[0];
@@ -156,12 +196,34 @@ function ClassBody() {
                 "px-3 py-3 sm:px-4",
                 absent && "bg-danger-soft/40",
                 late && "bg-warn-soft/40",
+                picking && pickedIds.has(student.id) && "bg-primary/5",
               )}
             >
               <div className="flex items-start gap-1.5">
+                {picking ? (
+                  <PickMark
+                    checked={pickedIds.has(student.id)}
+                    label={student.name}
+                    onToggle={() =>
+                      toggleGroupStudent({
+                        studentId: student.id,
+                        studentName: student.name,
+                        classId: id,
+                      })
+                    }
+                  />
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => setActiveStudent(student.id)}
+                  onClick={() => {
+                    if (picking) {
+                      toggleGroupStudent({
+                        studentId: student.id,
+                        studentName: student.name,
+                        classId: id,
+                      });
+                    } else setActiveStudent(student.id);
+                  }}
                   className="min-w-0 flex-1 text-right"
                 >
                   <span className="flex items-start gap-2">
@@ -238,6 +300,12 @@ function ClassBody() {
           <li className="px-4 py-10 text-center text-sm text-fg-muted">لا يوجد طلاب مطابقون</li>
         ) : null}
       </ul>
+      <NoteComposer
+        targets={targets}
+        open={groupOpen}
+        onOpenChange={setGroupOpen}
+        onSubmitted={(result) => finishGroupPick(result.failedIds)}
+      />
       <StudentSheet
         studentId={activeStudent}
         open={activeStudent != null}

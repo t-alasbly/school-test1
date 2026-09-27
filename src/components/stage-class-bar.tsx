@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { classLabel } from "@/lib/school/constants";
@@ -45,7 +45,7 @@ export function StageClassBar({
   sort,
   onChange,
   onSort,
-  studentCount,
+  actions,
 }: {
   stages: StageSummary[];
   classes: ClassOption[];
@@ -55,20 +55,20 @@ export function StageClassBar({
   onChange: (stageId: number, classId: number | null) => void;
   onSort: (sort: ClassSort) => void;
   studentCount?: number;
+  actions?: ReactNode;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
-  const selectedStage = stages.find((s) => s.id === selectedStageId) ?? null;
-  const selectedClass = classes.find((c) => c.id === selectedClassId) ?? null;
 
   return (
-    <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-3 border-b border-border bg-bg-elevated px-4 py-2.5">
-      <div className="mx-auto max-w-6xl space-y-2">
+    <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-2 border-b border-border bg-bg-elevated px-3 py-1 sm:px-4 sm:py-1.5">
+      <div className="mx-auto max-w-6xl">
         {stages.length === 0 ? (
           <p className="py-1 text-sm text-fg-muted">
             لا صفوف بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.
           </p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1">
             {stages.map((stage) => {
               const active = selectedStageId === stage.id;
               const stageClasses = sortedClasses(
@@ -88,14 +88,14 @@ export function StageClassBar({
                         if (selectedStageId !== stage.id) onChange(stage.id, null);
                       }}
                       className={cn(
-                        "inline-flex h-10 shrink-0 items-center gap-1 rounded-full border px-3 text-sm font-semibold",
+                        "inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full border px-2 text-xs font-semibold sm:h-9 sm:gap-1 sm:px-3 sm:text-sm",
                         active
                           ? "border-primary bg-primary text-primary-fg shadow-sm"
                           : "border-border bg-bg text-fg-muted hover:border-primary hover:text-fg",
                       )}
                     >
                       {stage.shortName || stage.name}
-                      <ChevronDown className={cn("size-4", active ? "opacity-90" : "opacity-60")} />
+                      <ChevronDown className={cn("size-3 sm:size-4", active ? "opacity-90" : "opacity-60")} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-64 p-2">
@@ -142,41 +142,34 @@ export function StageClassBar({
                 </Popover>
               );
             })}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <div className="grid grid-cols-2 overflow-hidden rounded-full border border-border">
+                <button
+                  type="button"
+                  onClick={() => onSort("order")}
+                  className={cn(
+                    "h-7 px-1.5 text-[10px] font-medium leading-none sm:h-8 sm:px-2 sm:text-xs",
+                    sort === "order" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
+                  )}
+                >
+                  تسلسل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSort("alpha")}
+                  className={cn(
+                    "h-7 px-1.5 text-[10px] font-medium leading-none sm:h-8 sm:px-2 sm:text-xs",
+                    sort === "alpha" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
+                  )}
+                >
+                  أبجدي
+                </button>
+              </div>
+              {actions}
+            </div>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="min-w-0 flex-1 text-xs text-fg-muted">
-            {selectedStage
-              ? selectedClass
-                ? selectedClass.label || classLabel(selectedClass.shortName, selectedClass.name)
-                : `جميع فصول ${selectedStage.shortName || selectedStage.name}`
-              : "اضغط الصف ثم اختر فصلاً أو جميع الفصول"}
-            {selectedStage && selectedClassId === null ? ` · ترتيب ${sort === "alpha" ? "أبجدي" : "تسلسلي"}` : ""}
-            {typeof studentCount === "number" ? ` · ${studentCount} طالب` : ""}
-          </p>
-          <div className="grid shrink-0 grid-cols-2 overflow-hidden rounded-full border border-border">
-            <button
-              type="button"
-              onClick={() => onSort("order")}
-              className={cn(
-                "h-9 px-2.5 text-xs font-medium",
-                sort === "order" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
-              )}
-            >
-              تسلسل
-            </button>
-            <button
-              type="button"
-              onClick={() => onSort("alpha")}
-              className={cn(
-                "h-9 px-2.5 text-xs font-medium",
-                sort === "alpha" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
-              )}
-            >
-              أبجدي
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -800,6 +800,46 @@ export function todayLabel() {
 export function fillTemplate(template: string, vars: Record<string, string>): string {
 	return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? "");
 }
+
+/** Names stored by a shared group violation: `مخالفة مشتركة — المشتركون: …` */
+export function sharedParticipantNames(details?: string | null): string[] {
+	const text = String(details ?? "");
+	const match = text.match(/المشتركون:\s*([^.]+)/);
+	if (!match?.[1]) return [];
+	return match[1]
+		.split("،")
+		.map((name) => name.trim())
+		.filter(Boolean);
+}
+
+export function detailsWithoutSharedRoster(details?: string | null): string {
+	const text = String(details ?? "");
+	const kept = text
+		.split(/(?:\s*[—\-]\s*)?مخالفة مشتركة\s*[—\-]\s*المشتركون:\s*[^.]+\.?\s*/)
+		.map((part) => part.trim())
+		.filter(Boolean);
+	return kept.join(" — ").replace(/^[\s.،—\-]+|[\s.،—\-]+$/g, "").trim();
+}
+
+export function violationTextForMessage(details: string, sharedText?: string | null): string {
+	const cleaned = detailsWithoutSharedRoster(details);
+	const people = sharedParticipantNames(sharedText || details);
+	if (cleaned) return cleaned;
+	if (people.length) return "مخالفة مشتركة";
+	return "";
+}
+
+const PARTICIPANT_LINE = /(?:\r?\n)+والمشاركون في هذه المخالفة المشتركة:[^\n]*/g;
+
+export function withoutParticipantLine(text: string): string {
+	return text.replace(PARTICIPANT_LINE, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function withParticipantLine(text: string, names: string[]): string {
+	const base = withoutParticipantLine(text);
+	if (!names.length) return base;
+	return `${base}\nوالمشاركون في هذه المخالفة المشتركة: ${names.join("، ")}`;
+}
 export function toWhatsAppNumber(phone: string): string {
 	const digits = phone.replace(/\D/g, "");
 	if (!digits) return "";

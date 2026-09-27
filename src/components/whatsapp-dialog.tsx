@@ -20,9 +20,13 @@ import {
   classLabel,
   fillTemplate,
   formatDay,
+  sharedParticipantNames,
+  violationTextForMessage,
   weekdayName,
   toWhatsAppNumber,
   periodShort,
+  withParticipantLine,
+  withoutParticipantLine,
 } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { MessageKind, MessageTemplate, NoteType } from "@/lib/school/types";
@@ -38,6 +42,7 @@ export function WhatsAppDialog({
   shortName,
   defaultType = "general",
   details = "",
+  sharedText = "",
   subject,
   createdAt,
   periodKey,
@@ -49,6 +54,8 @@ export function WhatsAppDialog({
   shortName: string;
   defaultType?: NoteType | "general";
   details?: string;
+  /** Raw note text that may include «مخالفة مشتركة — المشتركون». */
+  sharedText?: string;
   subject?: string;
   createdAt?: string;
   periodKey?: string;
@@ -58,6 +65,7 @@ export function WhatsAppDialog({
   const [open, setOpen] = useState(false);
   const [picker, setPicker] = useState<string>(defaultType);
   const [draft, setDraft] = useState("");
+  const [includeParticipants, setIncludeParticipants] = useState(true);
 
   const allowed = staffCan(staff, "sendMessages");
   const number = toWhatsAppNumber(parentPhone);
@@ -81,6 +89,11 @@ export function WhatsAppDialog({
     return "general";
   }
 
+  const participants = useMemo(
+    () => sharedParticipantNames(sharedText || details),
+    [sharedText, details],
+  );
+
   const vars = useMemo(
     () => ({
       name: studentName,
@@ -88,25 +101,31 @@ export function WhatsAppDialog({
       weekday: weekdayName(stamp),
       class: classLabel(shortName, className),
       school: school.name,
-      details: details || "—",
+      details: violationTextForMessage(details, sharedText) || "—",
       subjectLine: subjectName ? ` مادة ${subjectName}` : "",
       session: session ? ` (${session})` : "",
     }),
-    [studentName, className, shortName, school.name, details, subjectName, stamp, session],
+    [studentName, className, shortName, school.name, details, sharedText, subjectName, stamp, session],
   );
 
   if (!allowed) return null;
 
+  function draftFrom(key: string, withNames: boolean) {
+    const filled = fillTemplate(templateOf(key).body, vars);
+    return withNames ? withParticipantLine(filled, participants) : withoutParticipantLine(filled);
+  }
+
   function applyKind(next: string) {
     setPicker(next);
-    setDraft(fillTemplate(templateOf(next).body, vars));
+    setDraft(draftFrom(next, includeParticipants));
   }
 
   function onOpenChange(next: boolean) {
     setOpen(next);
     if (next) {
       setPicker(defaultType);
-      setDraft(fillTemplate(templateOf(defaultType).body, vars));
+      setIncludeParticipants(true);
+      setDraft(draftFrom(defaultType, true));
     }
   }
 
@@ -181,6 +200,28 @@ export function WhatsAppDialog({
               onChange={(e) => setDraft(e.target.value)}
             />
           </div>
+          {participants.length > 0 ? (
+            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1 size-4 accent-primary"
+                checked={includeParticipants}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setIncludeParticipants(on);
+                  setDraft((current) =>
+                    on ? withParticipantLine(current, participants) : withoutParticipantLine(current),
+                  );
+                }}
+              />
+              <span>
+                <span className="block font-semibold">إضافة أسماء المشاركين في الرسالة</span>
+                <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
+                  تُذكر أسماء من اشتركوا في المخالفة الجماعية داخل نص الرسالة. ألغِ الخيار لإرسال الرسالة عن الطالب وحده.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <Button className="w-full" onClick={send} disabled={!number || !draft.trim()}>
             إرسال عبر واتساب
           </Button>

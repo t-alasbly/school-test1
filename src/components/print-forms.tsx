@@ -25,6 +25,7 @@ import {
   procedureStageLabel,
   proceduresFor,
   schoolLogoSrc,
+  sharedParticipantNames,
   stageIndexFor,
   studentNoun,
   weekdayName,
@@ -208,6 +209,7 @@ function PrintFormsDialog({
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState({});
   const [showCompensation, setShowCompensation] = useState(true);
+  const [showParticipants, setShowParticipants] = useState(true);
   const sheetRef = useRef(null);
   const historyNotes = useQuery({
     queryKey: ["student", studentId, "print-forms"],
@@ -239,6 +241,7 @@ function PrintFormsDialog({
     setNoteIdx(idx >= 0 ? idx : 0);
   }, [open, defaultKind, historyNotes, seedAt, seedType, notes]);
   const selected = allNotes[noteIdx] ?? null;
+  const participants = sharedParticipantNames(selected?.details);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
@@ -298,6 +301,17 @@ function PrintFormsDialog({
             />
             إظهار فرص التعويض في التعهد والخطاب
           </label>
+          {kind === "pledge" && participants.length > 0 ? (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={showParticipants}
+                onChange={(e) => setShowParticipants(e.target.checked)}
+              />
+              إضافة أسماء المشاركين في التعهد
+            </label>
+          ) : null}
         </div>
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
@@ -387,6 +401,8 @@ function PrintFormsDialog({
           school={school}
           overrides={manual ? overrides : void 0}
           showCompensation={showCompensation && Boolean(selected?.compensation)}
+          showParticipants={kind === "pledge" && showParticipants}
+          participants={participants}
         />
       </DialogContent>
     </Dialog>
@@ -400,6 +416,8 @@ export function OfficialForm({
   school,
   overrides,
   showCompensation = false,
+  showParticipants = false,
+  participants = [],
   ref,
 }) {
   const { behaviorTypes } = useWorkspace();
@@ -490,6 +508,8 @@ export function OfficialForm({
     stageLabel: procedureStageLabel(stageIdx + 1),
     compensation: focus?.compensation || "",
     showCompensation: Boolean(showCompensation && focus?.compensation),
+    showParticipants: Boolean(showParticipants && participants.length),
+    participants,
   };
   return (
     <article
@@ -850,6 +870,12 @@ function PledgeBody({ ctx }) {
         بمشكلة سلوكية من الدرجة <Dotted value={ctx.degree} /> وهي{" "}
         <Dotted value={ctx.violation} />
       </p>
+      {ctx.showParticipants && ctx.participants?.length ? (
+        <p>
+          والمشاركون في هذه المخالفة المشتركة:{" "}
+          <Dotted value={ctx.participants.join("، ")} />
+        </p>
+      ) : null}
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
       <CompensationLine ctx={ctx} />

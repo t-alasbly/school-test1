@@ -378,6 +378,7 @@ function AdminNoteCard({
             shortName={note.shortName}
             defaultType={note.type}
             details={details}
+            sharedText={note.details}
             subject={note.teacherSubject}
             createdAt={note.createdAt}
             periodKey={note.periodKey}

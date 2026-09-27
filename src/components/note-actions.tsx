@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Plus, Send } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, ChevronDown, Plus, Send } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +28,12 @@ const TYPE_HINT: Record<NoteType, string> = {
   behavior: "اختر نوع المخالفة من الدليل ثم أرسل",
 };
 
+export type NoteTarget = {
+  studentId: number;
+  studentName: string;
+  classId: number;
+};
+
 export function NoteActions({
   studentId,
   studentName,
@@ -37,41 +43,137 @@ export function NoteActions({
   studentName: string;
   classId: number;
 }) {
+  return (
+    <NoteComposer
+      targets={[{ studentId, studentName, classId }]}
+      trigger={
+        <Button size="icon" variant="secondary" aria-label={`تسجيل ملاحظة لـ ${studentName}`}>
+          <Plus className="size-5" />
+        </Button>
+      }
+    />
+  );
+}
+
+export function NoteComposer({
+  targets,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
+  onSubmitted,
+  trigger,
+}: {
+  targets: NoteTarget[];
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
+  onSubmitted?: (result: { count: number; failedIds: number[] }) => void;
+  trigger?: ReactNode;
+}) {
   const { behaviorTypes, school, staff } = useWorkspace();
   const slots = scheduleFor(school.season, school.schedules);
   const auto = useMemo(() => currentPeriod(school.season, new Date(), school.schedules)?.key ?? "", [school.season, school.schedules]);
-  const [open, setOpen] = useState(false);
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = openProp ?? innerOpen;
   const [whenOpen, setWhenOpen] = useState(false);
   const [details, setDetails] = useState("");
   const [periodKey, setPeriodKey] = useState(auto);
   const [type, setType] = useState<NoteType | null>(null);
   const [behaviorTypeId, setBehaviorTypeId] = useState<number | null>(null);
   const [occurredAt, setOccurredAt] = useState(toDatetimeLocalValue());
+  const [sent, setSent] = useState(0);
+  const [shared, setShared] = useState(false);
+  const wasOpen = useRef(false);
   const queryClient = useQueryClient();
   const selectedBehavior = behaviorTypes.find((bt) => bt.id === behaviorTypeId);
   const otherBehavior = Boolean(selectedBehavior && isOtherChoice(selectedBehavior.name));
   const periodLabel = slots.find((s) => s.key === periodKey)?.label ?? "الحصة غير محددة";
+  const many = targets.length > 1;
+  const formKey = many ? "group" : String(targets[0]?.studentId ?? "note");
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
+      setOccurredAt(toDatetimeLocalValue());
+      setWhenOpen(false);
+    }
+    wasOpen.current = open;
+  }, [open, school.season, school.schedules]);
+  const namePreview =
+    targets.length <= 4
+      ? targets.map((t) => t.studentName).join("، ")
+      : `${targets
+          .slice(0, 3)
+          .map((t) => t.studentName)
+          .join("، ")} و${targets.length - 3} آخرين`;
+
+  function sharedDetails() {
+    const extra = details.trim();
+    const names = targets.map((item) => item.studentName);
+    let shown = [...names];
+    const build = (list: string[], more: number) => {
+      const who = `${list.join("، ")}${more > 0 ? ` و${more} آخرين` : ""}`;
+      const line = `مخالفة مشتركة — المشتركون: ${who}`;
+      return extra ? `${line}. ${extra}` : line;
+    };
+    while (shown.length > 1 && build(shown, names.length - shown.length).length > 500) {
+      shown = shown.slice(0, -1);
+    }
+    const text = build(shown, names.length - shown.length);
+    return text.length > 500 ? text.slice(0, 500) : text;
+  }
+
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!type) throw new Error("اختر نوع الملاحظة");
+      if (targets.length === 0) throw new Error("لم يُحدد طلاب");
       if (type === "behavior" && !behaviorTypeId) throw new Error("اختر نوع المخالفة السلوكية");
       if (otherBehavior && details.trim().length < 2) throw new Error("صف المخالفة يدوياً");
-      return createNote({
-        data: {
-          studentId,
-          type,
-          details,
-          behaviorTypeId: type === "behavior" ? behaviorTypeId ?? undefined : undefined,
-          periodKey,
-          occurredAt: fromDatetimeLocalValue(occurredAt),
-        },
-      });
+      const failedIds: number[] = [];
+      const failedNames: string[] = [];
+      let label = "";
+      let count = 0;
+      let firstError = "تعذر التسجيل";
+      setSent(0);
+      for (const target of targets) {
+        try {
+          const result = (await createNote({
+            data: {
+              studentId: target.studentId,
+              type,
+              details: many && shared ? sharedDetails() : details,
+              behaviorTypeId: type === "behavior" ? behaviorTypeId ?? undefined : undefined,
+              periodKey,
+              occurredAt: fromDatetimeLocalValue(occurredAt),
+            },
+          })) as { label: string };
+          label = result.label;
+          count += 1;
+          setSent(count);
+        } catch (err) {
+          failedIds.push(target.studentId);
+          failedNames.push(target.studentName);
+          if (failedIds.length === 1 && err instanceof Error && err.message) firstError = err.message;
+        }
+      }
+      if (count === 0) throw new Error(firstError);
+      return { label, count, failedIds, failedNames };
     },
     onSuccess: (result) => {
-      toast.success(`تم تسجيل ${result.label} لـ ${result.studentName}`);
+      if (targets.length === 1) {
+        toast.success(`تم تسجيل ${result.label} لـ ${targets[0]?.studentName ?? ""}`);
+      } else {
+        toast.success(
+          many && shared
+            ? `تم تسجيل مخالفة مشتركة على ${result.count} طلاب`
+            : `تم تسجيل ${result.label} على ${result.count} طلاب`,
+        );
+      }
+      if (result.failedIds.length > 0) {
+        toast.error(`تعذر على ${result.failedIds.length}: ${result.failedNames.slice(0, 4).join("، ")}`);
+      }
       reset();
-      setOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["class", classId] });
+      setInnerOpen(false);
+      onOpenChangeProp?.(false);
+      onSubmitted?.({ count: result.count, failedIds: result.failedIds });
+      void queryClient.invalidateQueries({ queryKey: ["class"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
       void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
@@ -90,10 +192,13 @@ export function NoteActions({
     setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
     setOccurredAt(toDatetimeLocalValue());
     setWhenOpen(false);
+    setSent(0);
+    setShared(false);
   }
 
   function onOpenChange(next: boolean) {
-    setOpen(next);
+    setInnerOpen(next);
+    onOpenChangeProp?.(next);
     if (next) {
       setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? periodKey);
       setOccurredAt(toDatetimeLocalValue());
@@ -103,6 +208,7 @@ export function NoteActions({
   }
 
   const canSend =
+    targets.length > 0 &&
     type != null &&
     (type !== "behavior" || behaviorTypeId != null) &&
     (!otherBehavior || details.trim().length >= 2) &&
@@ -111,11 +217,7 @@ export function NoteActions({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button size="icon" variant="secondary" aria-label={`تسجيل ملاحظة لـ ${studentName}`}>
-          <Plus className="size-5" />
-        </Button>
-      </DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         className={cn(
           "flex flex-col overflow-hidden p-4",
@@ -124,11 +226,45 @@ export function NoteActions({
         )}
       >
         <DialogHeader className="mb-2 shrink-0">
-          <DialogTitle>تسجيل ملاحظة أو مخالفة</DialogTitle>
+          <DialogTitle>{many ? "مخالفة جماعية" : "تسجيل ملاحظة أو مخالفة"}</DialogTitle>
           <DialogDescription>
-            {studentName}
-            {staff.subject ? ` · ${staff.subject}` : ""}
+            {many
+              ? namePreview
+              : `${targets[0]?.studentName ?? ""}${staff.subject ? ` · ${staff.subject}` : ""}`}
           </DialogDescription>
+          {many ? (
+            <p className="-mt-1 mb-2 text-xs text-fg-muted">
+              {shared
+                ? "ستُكتب أسماء كل المشاركين في تسجيل كل طالب، ويبقى لكل واحد إجراءه عند وكيل شؤون الطلاب."
+                : "تُسجَّل نفس المخالفة على كل طالب وحده، ولكل واحد إجراءه عند وكيل شؤون الطلاب."}
+            </p>
+          ) : null}
+          {many ? (
+            <button
+              type="button"
+              aria-pressed={shared}
+              onClick={() => setShared((value) => !value)}
+              className={cn(
+                "mb-2 flex w-full items-start gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-right",
+                shared ? "border-primary bg-primary/5" : "border-border bg-bg",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 grid size-5 shrink-0 place-items-center rounded border",
+                  shared ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg-elevated",
+                )}
+              >
+                {shared ? <Check className="size-3.5" /> : null}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">مخالفة مشتركة</span>
+                <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
+                  مثل المضاربة: يظهر في التسجيل اسم كل من اشترك، وليس نسخة منفصلة بلا ذكر البقية.
+                </span>
+              </span>
+            </button>
+          ) : null}
         </DialogHeader>
 
         <button
@@ -150,9 +286,9 @@ export function NoteActions({
         {whenOpen ? (
           <div className="mb-2 shrink-0 space-y-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
             <div className="space-y-1.5">
-              <Label htmlFor={`period-${studentId}`}>الحصة</Label>
+              <Label htmlFor={`period-${formKey}`}>الحصة</Label>
               <Select
-                id={`period-${studentId}`}
+                id={`period-${formKey}`}
                 value={periodKey}
                 onChange={(e) => setPeriodKey(e.target.value)}
               >
@@ -165,9 +301,9 @@ export function NoteActions({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`when-${studentId}`}>التاريخ والوقت</Label>
+              <Label htmlFor={`when-${formKey}`}>التاريخ والوقت</Label>
               <Input
-                id={`when-${studentId}`}
+                id={`when-${formKey}`}
                 type="datetime-local"
                 value={occurredAt}
                 onChange={(e) => setOccurredAt(e.target.value)}
@@ -223,9 +359,9 @@ export function NoteActions({
                 </button>
                 {otherBehavior ? (
                   <div className="space-y-1.5">
-                    <Label htmlFor={`other-${studentId}`}>صف المخالفة يدوياً</Label>
+                    <Label htmlFor={`other-${formKey}`}>صف المخالفة يدوياً</Label>
                     <Textarea
-                      id={`other-${studentId}`}
+                      id={`other-${formKey}`}
                       className="min-h-20"
                       placeholder="اكتب نوع المخالفة…"
                       value={details}
@@ -235,9 +371,9 @@ export function NoteActions({
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Label htmlFor={`details-${studentId}`}>الملاحظات</Label>
+                    <Label htmlFor={`details-${formKey}`}>الملاحظات</Label>
                     <Textarea
-                      id={`details-${studentId}`}
+                      id={`details-${formKey}`}
                       className="min-h-11"
                       placeholder="أضف تفاصيل الملاحظة…"
                       value={details}
@@ -269,9 +405,9 @@ export function NoteActions({
             )
           ) : type ? (
             <div className="space-y-1.5">
-              <Label htmlFor={`details-${studentId}`}>الملاحظات</Label>
+              <Label htmlFor={`details-${formKey}`}>الملاحظات</Label>
               <Textarea
-                id={`details-${studentId}`}
+                id={`details-${formKey}`}
                 className="min-h-20"
                 placeholder="أضف تفاصيل الملاحظة…"
                 value={details}
@@ -287,12 +423,20 @@ export function NoteActions({
           <Button className="w-full" disabled={!canSend} onClick={() => mutation.mutate()}>
             <Send className="size-4" />
             {mutation.isPending
-              ? "جارٍ الإرسال…"
-              : selectedBehavior
-                ? `إرسال — ${selectedBehavior.name}`
-                : type
-                  ? `إرسال — ${NOTE_META[type].label}`
-                  : "إرسال الملاحظة"}
+              ? many
+                ? `جارٍ التسجيل… ${sent} من ${targets.length}`
+                : "جارٍ الإرسال…"
+              : many
+                ? selectedBehavior
+                  ? `تسجيل «${selectedBehavior.name}» على ${targets.length}`
+                  : type
+                    ? `تسجيل ${NOTE_META[type].label} على ${targets.length}`
+                    : `تسجيل على ${targets.length}`
+                : selectedBehavior
+                  ? `إرسال — ${selectedBehavior.name}`
+                  : type
+                    ? `إرسال — ${NOTE_META[type].label}`
+                    : "إرسال الملاحظة"}
           </Button>
         </div>
       </DialogContent>

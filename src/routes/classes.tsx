@@ -3,12 +3,22 @@ import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
+import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
+import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
 import { Input } from "@/components/ui/input";
 import { listStudents } from "@/lib/school/api";
-import { classLabel } from "@/lib/school/constants";
+import {
+  addGroupStudents,
+  clearGroupStudents,
+  elsewhereLabel,
+  finishGroupPick,
+  setGroupPicking,
+  toggleGroupStudent,
+  useGroupPick,
+} from "@/lib/school/group-pick";
 import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -54,6 +64,8 @@ function ClassesBody() {
   const [sort, setSort] = useState<ClassSort>(search.sort ?? "order");
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(null);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const { picking, targets } = useGroupPick();
 
   useEffect(() => {
     if (search.stage && search.stage !== stageId) setStageId(search.stage);
@@ -81,6 +93,9 @@ function ClassesBody() {
       sort,
     );
   }, [students, q, sort]);
+
+  const pickedIds = useMemo(() => new Set(targets.map((item) => item.studentId)), [targets]);
+  const kept = elsewhereLabel(targets, new Set(shown.map((student) => student.id)));
 
   if (!staffCan(staff, "viewClasses")) {
     return (
@@ -121,7 +136,7 @@ function ClassesBody() {
         }}
       />
       <header className="space-y-1">
-        <p className="text-sm text-fg-muted">اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة أو غياب أو تأخر أو واجب (تذهب لوكيل شؤون الطلاب). الرسائل ومراسلة الزملاء داخل صفحة الطالب</p>
+        <p className="text-sm text-fg-muted">اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب</p>
         <h1 className="text-3xl font-semibold tracking-tight">الفصول</h1>
       </header>
       <div className="relative">
@@ -133,13 +148,63 @@ function ClassesBody() {
           className="pr-10"
         />
       </div>
+      <div className={cn(picking && "sticky top-14 z-20 -mx-4 border-y border-border bg-bg/95 px-4 py-2 backdrop-blur-sm")}>
+        <GroupViolationBar
+          picking={picking}
+          selected={targets.length}
+          shownCount={shown.length}
+          elsewhere={kept}
+          onTogglePicking={() => {
+            setGroupPicking(!picking);
+            setGroupOpen(false);
+          }}
+          onSelectShown={() => {
+            addGroupStudents(
+              shown.map((student) => ({
+                studentId: student.id,
+                studentName: student.name,
+                classId: student.classId,
+              })),
+            );
+          }}
+          onClear={clearGroupStudents}
+          onApply={() => setGroupOpen(true)}
+        />
+      </div>
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {shown.map((student) => (
-          <li key={student.id} className="flex items-start gap-1.5 px-3 py-3 sm:px-4">
+          <li
+            key={student.id}
+            className={cn(
+              "flex items-start gap-1.5 px-3 py-3 sm:px-4",
+              picking && pickedIds.has(student.id) && "bg-primary/5",
+            )}
+          >
+            {picking ? (
+              <PickMark
+                checked={pickedIds.has(student.id)}
+                label={student.name}
+                onToggle={() =>
+                  toggleGroupStudent({
+                    studentId: student.id,
+                    studentName: student.name,
+                    classId: student.classId,
+                  })
+                }
+              />
+            ) : null}
             <button
               type="button"
               className="min-w-0 flex-1 text-right"
-              onClick={() => setActiveStudent(student.id)}
+              onClick={() => {
+                if (picking) {
+                  toggleGroupStudent({
+                    studentId: student.id,
+                    studentName: student.name,
+                    classId: student.classId,
+                  });
+                } else setActiveStudent(student.id);
+              }}
             >
               <span className="block truncate text-base font-semibold">{student.name}</span>
               <span className="block text-xs text-fg-muted">{student.label}</span>
@@ -171,8 +236,14 @@ function ClassesBody() {
           if (!open) setActiveStudent(null);
         }}
       />
+      <NoteComposer
+        targets={targets}
+        open={groupOpen}
+        onOpenChange={setGroupOpen}
+        onSubmitted={(result) => finishGroupPick(result.failedIds)}
+      />
       <p className={cn("text-xs text-fg-muted", shown.length === 0 && "hidden")}>
-        اضغط الاسم لسجل الطالب، أو سجّل ملاحظة مباشرة من علامة الزائد حتى وأنت تعرض كل فصول المرحلة.
+        اضغط الاسم لسجل الطالب. في المخالفة الجماعية يبقى التحديد عند تغيير المرحلة أو الفصل حتى تسجّل الجميع.
       </p>
     </div>
   );

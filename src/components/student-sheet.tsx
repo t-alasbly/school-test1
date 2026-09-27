@@ -85,7 +85,8 @@ export function StudentSheet({
                 className={student.className}
                 shortName={student.shortName}
                 defaultType={notes[0]?.type ?? "general"}
-                details={notes[0]?.behaviorTypeName ?? notes[0]?.details ?? ""}
+                details={notes[0]?.behaviorTypeName || notes[0]?.details || ""}
+                sharedText={notes[0]?.details ?? ""}
                 subject={notes[0]?.teacherSubject}
                 createdAt={notes[0]?.createdAt}
                 periodKey={notes[0]?.periodKey}
