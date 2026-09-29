@@ -302,6 +302,25 @@
     max-width: none !important;
     padding: 0 !important;
   }
+  body.printing-form #school-print-mount .print-form.attendance-print {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 210mm !important;
+    padding: 5mm 5mm 6mm !important;
+    overflow: visible !important;
+  }
+  body.printing-form #school-print-mount .attendance-print .official-table tr {
+    break-inside: avoid;
+  }
+  body.printing-form #school-print-mount .attendance-print .official-table th,
+  body.printing-form #school-print-mount .attendance-print .official-table td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  body.printing-form #school-print-mount .attendance-print header,
+  body.printing-form #school-print-mount .attendance-print header * {
+    max-width: 100%;
+  }
   body.printing-form #school-print-mount .official-meta,
   body.printing-form #school-print-mount .official-meta * {
     color: #111 !important;

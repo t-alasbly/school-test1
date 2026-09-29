@@ -9,6 +9,7 @@ import { AppGate } from "@/components/app-gate";
 import { DayField } from "@/components/day-field";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -16,9 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDailyAttendance, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
-import { formatPrimaryDate, isoFromDate, type CalendarKind } from "@/lib/school/calendar";
-import { formatTime } from "@/lib/school/constants";
+import { getDailyAttendance, logParentMessage, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
+import { getStudentAttendanceDays, listAttendanceDayCounts } from "@/lib/school/attendance-totals";
+import { formatPrimaryDate, isoFromDate, weekdayAr, type CalendarKind } from "@/lib/school/calendar";
+import { formatTime, toWhatsAppNumber } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
 import { mergeAppearance, applyAppearance } from "@/lib/school/theme";
@@ -57,6 +59,39 @@ function isoFromDayTime(day: string, time: string) {
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+function dayCountLabel(n: number) {
+  if (n === 1) return "1 يوم";
+  if (n === 2) return "2 يومين";
+  if (n >= 3 && n <= 10) return `${n} أيام`;
+  return `${n} يوماً`;
+}
+
+type HistoryDay = { day: string; kind: DailyKind; arrivedAt: string | null };
+
+function historyLine(row: HistoryDay, calendar: CalendarKind) {
+  const date = `${weekdayAr(row.day)} ${formatPrimaryDate(row.day, calendar)}`;
+  if (row.kind === "late" && row.arrivedAt) return `${date} — ${formatTime(row.arrivedAt)}`;
+  return date;
+}
+
+function historyMessage(opts: {
+  name: string;
+  classLabel: string;
+  school: string;
+  kind: DailyKind;
+  lines: string[];
+}) {
+  const what = opts.kind === "absence" ? "الغياب" : "التأخر";
+  const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
+  const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
+  const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
+  if (packed(opts.lines).length <= 1900) return packed(opts.lines);
+  const note = "… وأيام أقدم لم تُذكر لطول الرسالة.\n";
+  const kept = [...opts.lines];
+  while (kept.length > 1 && packed(kept, note).length > 1900) kept.shift();
+  return packed(kept, note).slice(0, 2000);
+}
+
 function AttendancePage() {
   return (
     <AppGate>
@@ -70,10 +105,14 @@ function AttendanceBody() {
   const calendar = useCalendar();
   const queryClient = useQueryClient();
   const sheetRef = useRef<HTMLElement>(null);
+  const historyRef = useRef<HTMLElement>(null);
   const [day, setDay] = useState(todayISO);
   const [stageId, setStageId] = useState<number | null>(stages[0]?.id ?? null);
   const [classId, setClassId] = useState<number | null>(null);
   const [sort, setSort] = useState<ClassSort>("order");
+  const [historyId, setHistoryId] = useState<number | null>(null);
+  const [historyKind, setHistoryKind] = useState<DailyKind>("absence");
+  const [historyDraft, setHistoryDraft] = useState("");
   const [local, setLocal] = useState<Record<number, Draft>>({});
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const [printKind, setPrintKind] = useState<PrintKind>("all");
@@ -116,6 +155,36 @@ function AttendanceBody() {
       }),
     enabled: can,
   });
+  const totals = useQuery({
+    queryKey: ["attendance-day-counts"],
+    queryFn: () => listAttendanceDayCounts(),
+    enabled: can,
+  });
+  const history = useQuery({
+    queryKey: ["student-attendance-days", historyId],
+    queryFn: () => getStudentAttendanceDays({ data: { studentId: historyId! } }),
+    enabled: can && historyId != null,
+  });
+  const historyDays = useMemo(() => {
+    const all = history.data?.days ?? [];
+    return all.filter((row) => row.kind === historyKind);
+  }, [history.data, historyKind]);
+
+  useEffect(() => {
+    if (!history.data) return;
+    const lines = (history.data.days ?? [])
+      .filter((row) => row.kind === historyKind)
+      .map((row) => historyLine(row, calendar));
+    setHistoryDraft(
+      historyMessage({
+        name: history.data.studentName,
+        classLabel: history.data.classLabel,
+        school: school.name,
+        kind: historyKind,
+        lines,
+      }),
+    );
+  }, [history.data, historyKind, calendar, school.name]);
 
   useEffect(() => {
     setLocal({});
@@ -125,6 +194,24 @@ function AttendanceBody() {
 
   function statusOf(row: DailyAttendanceRow): DailyKind | "present" {
     return local[row.studentId]?.kind ?? row.kind ?? "present";
+  }
+
+  function dayTotals(row: DailyAttendanceRow) {
+    const found = totals.data?.counts.find((item) => item.studentId === row.studentId);
+    let absenceDays = found?.absenceDays ?? 0;
+    let lateDays = found?.lateDays ?? 0;
+    const saved = row.kind;
+    const now = statusOf(row);
+    if (saved !== now) {
+      if (saved === "absence") absenceDays -= 1;
+      if (saved === "late") lateDays -= 1;
+      if (now === "absence") absenceDays += 1;
+      if (now === "late") lateDays += 1;
+    }
+    return {
+      absenceDays: Math.max(0, absenceDays),
+      lateDays: Math.max(0, lateDays),
+    };
   }
 
   function arrivedOf(row: DailyAttendanceRow): string | null {
@@ -179,6 +266,8 @@ function AttendanceBody() {
         };
       });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["attendance-day-counts"] });
+      void queryClient.invalidateQueries({ queryKey: ["student-attendance-days", s.studentId] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "تعذر الحفظ");
     } finally {
@@ -284,6 +373,38 @@ function AttendanceBody() {
     }
   }
 
+  const canMessage = staffCan(staff, "sendMessages");
+  const historyPhone = history.data?.parentPhone ?? "";
+  const historyNumber = toWhatsAppNumber(historyPhone);
+
+  function printHistory() {
+    if (!historyRef.current || historyDays.length === 0) return;
+    printElement(historyRef.current);
+  }
+
+  async function sendHistory() {
+    if (!history.data || !historyNumber || !historyDraft.trim()) return;
+    try {
+      await logParentMessage({
+        data: {
+          studentId: history.data.studentId,
+          kind: historyKind,
+          body: historyDraft.trim(),
+          parentPhone: historyPhone,
+        },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "تعذر حفظ الرسالة");
+      return;
+    }
+    window.open(
+      `https://wa.me/${historyNumber}?text=${encodeURIComponent(historyDraft.trim())}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    toast.success("فُتحت واتساب وحُفظت الرسالة في السجل");
+  }
+
   if (!can) {
     return <p className="text-fg-muted">تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.</p>;
   }
@@ -331,7 +452,7 @@ function AttendanceBody() {
         }
       />
       <header className="no-print space-y-1">
-        <p className="text-sm text-fg-muted">حضور أو غياب اليوم أو التأخر عن الاصطفاف</p>
+        <p className="text-sm text-fg-muted">غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.</p>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">الغياب اليومي</h1>
       </header>
       <div className="no-print">
@@ -356,47 +477,58 @@ function AttendanceBody() {
         {shown.map((s) => {
           const kind = statusOf(s);
           const saving = pendingIds.includes(s.studentId);
+          const days = dayTotals(s);
           return (
-            <li key={s.studentId} className="px-3 py-2.5">
+            <li key={s.studentId} className="px-3 py-2">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
-                  <p
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryKind(kind === "late" ? "late" : "absence");
+                      setHistoryId(s.studentId);
+                    }}
                     className={cn(
-                      "truncate text-base font-semibold leading-6",
+                      "block w-full truncate text-right text-base font-semibold leading-6 hover:underline",
                       kind === "absence" && "text-danger",
                       kind === "late" && "text-warn",
                     )}
                   >
                     {s.studentName}
                     {saving ? <span className="ms-2 text-xs font-normal text-fg-muted">يُحفظ…</span> : null}
-                  </p>
+                  </button>
                   <p className="truncate text-xs text-fg-muted">{s.classLabel}</p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-start gap-1">
                   {(
                     [
-                      ["present", "حاضر"],
-                      ["late", "تأخر"],
-                      ["absence", "غياب"],
+                      ["late", "تأخر", days.lateDays, "text-warn"],
+                      ["absence", "غياب", days.absenceDays, "text-danger"],
                     ] as const
-                  ).map(([k, label]) => (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => void persist(s, k)}
-                      className={cn(
-                        "h-10 rounded-full border px-2.5 text-sm font-medium",
-                        kind === k
-                          ? k === "present"
-                            ? "border-ok bg-ok-soft text-ok"
-                            : k === "late"
+                  ).map(([k, label, count, tone]) => (
+                    <div key={k} className="flex flex-col items-center">
+                      <button
+                        type="button"
+                        aria-pressed={kind === k}
+                        onClick={() => void persist(s, kind === k ? "present" : k)}
+                        className={cn(
+                          "h-10 rounded-full border px-2.5 text-sm font-medium",
+                          kind === k
+                            ? k === "late"
                               ? "border-warn bg-warn-soft text-warn"
                               : "border-danger bg-danger-soft text-danger"
-                          : "border-border bg-bg-elevated text-fg-muted",
-                      )}
-                    >
-                      {label}
-                    </button>
+                            : "border-border bg-bg-elevated text-fg-muted",
+                        )}
+                      >
+                        {label}
+                      </button>
+                      <span
+                        title={`${count} أيام`}
+                        className={cn("mt-0.5 text-[10px] leading-3 tabular-nums", count > 0 ? tone : "text-fg-subtle")}
+                      >
+                        {count}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -424,7 +556,7 @@ function AttendanceBody() {
 
       <article
         ref={sheetRef}
-        className={cn("print-form official-sheet bg-white font-naskh text-black", !showSheet && "hidden")}
+        className={cn("print-form attendance-print official-sheet bg-white font-naskh text-black", !showSheet && "hidden")}
       >
         <OfficialLetterhead school={school} />
         <h2 className="mt-2 text-center text-[20px] font-semibold">{printTitle}</h2>
@@ -591,6 +723,110 @@ function AttendanceBody() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={historyId != null} onOpenChange={(open) => { if (!open) setHistoryId(null); }}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{history.data?.studentName ?? "أيام الطالب"}</DialogTitle>
+            <DialogDescription>
+              {history.data?.classLabel ?? "طباعة أيام الغياب أو التأخر، أو إرسالها لولي الأمر"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["absence", "أيام الغياب"],
+                ["late", "أيام التأخر"],
+              ] as const
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setHistoryKind(kind)}
+                className={cn(
+                  "min-h-11 rounded-[var(--radius-md)] border text-sm font-semibold",
+                  historyKind === kind
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border bg-bg text-fg",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {history.isPending ? (
+            <p className="text-sm text-fg-muted">جارٍ التحميل…</p>
+          ) : historyDays.length === 0 ? (
+            <p className="text-sm text-fg-muted">
+              {historyKind === "absence" ? "لا أيام غياب مسجّلة." : "لا أيام تأخر مسجّلة."}
+            </p>
+          ) : (
+            <ul className="max-h-40 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-border px-3 py-2 text-sm">
+              {historyDays.map((row) => (
+                <li key={`${row.kind}-${row.day}`}>{historyLine(row, calendar)}</li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-fg-muted">المجموع: {dayCountLabel(historyDays.length)}</p>
+          <Textarea
+            className="min-h-36"
+            value={historyDraft}
+            onChange={(e) => setHistoryDraft(e.target.value)}
+            aria-label="نص الرسالة"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="secondary" disabled={historyDays.length === 0} onClick={printHistory}>
+              <Printer className="size-4" />
+              طباعة
+            </Button>
+            {canMessage ? (
+              <Button type="button" disabled={!historyNumber || historyDays.length === 0 || !historyDraft.trim()} onClick={() => void sendHistory()}>
+                إرسال لولي الأمر
+              </Button>
+            ) : null}
+          </div>
+          {canMessage && history.data && !historyNumber ? (
+            <p className="text-xs text-fg-muted">لا يوجد رقم جوال محفوظ لولي الأمر.</p>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <article
+        ref={historyRef}
+        className="print-form attendance-print official-sheet hidden bg-white font-naskh text-black"
+      >
+        <OfficialLetterhead school={school} />
+        <h2 className="mt-2 text-center text-[18px] font-semibold">
+          {historyKind === "absence" ? "كشف أيام الغياب" : "كشف أيام التأخر"}
+        </h2>
+        <p className="text-center text-[15px] font-semibold">{history.data?.studentName ?? ""}</p>
+        <p className="text-center text-[13px]">{history.data?.classLabel ?? ""}</p>
+        <p className="mb-2 text-center text-[13px] text-[#00857c]">المجموع: {dayCountLabel(historyDays.length)}</p>
+        <table className="official-table">
+          <thead>
+            <tr>
+              <th className="w-10">م</th>
+              <th>اليوم والتاريخ</th>
+              {historyKind === "late" ? <th>وقت الحضور</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {historyDays.length === 0 ? (
+              <tr>
+                <td colSpan={historyKind === "late" ? 3 : 2}>لا أيام مسجّلة.</td>
+              </tr>
+            ) : (
+              historyDays.map((row, index) => (
+                <tr key={`${row.kind}-${row.day}`}>
+                  <td>{index + 1}</td>
+                  <td>{weekdayAr(row.day)} {formatPrimaryDate(row.day, calendar)}</td>
+                  {historyKind === "late" ? <td>{row.arrivedAt ? formatTime(row.arrivedAt) : "—"}</td> : null}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </article>
     </div>
   );
 }
