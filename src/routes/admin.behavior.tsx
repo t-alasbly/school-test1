@@ -1,9 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { NoteSession } from "@/components/note-session";
-import { PrintFormsButton } from "@/components/print-forms";
+import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
 import { ImprovementRecordTools, NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
@@ -19,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OptionChips } from "@/components/option-chips";
-import { rangeFromPreset } from "@/components/attendance-roster";
+import { MonthDays, rangeFromPreset } from "@/components/attendance-roster";
 import { closeNote, createCompensationOption, followImprovement, getAdminDashboard, getStudentNotes, listFollowupNotes, referToCounselor } from "@/lib/school/api";
 import {
   COMPENSATION_OPTIONS,
@@ -27,7 +28,9 @@ import {
   NOTE_META,
   classLabel,
   degreeLabel,
+  formatDay,
   formatStamp,
+  hijriDate,
   isOtherChoice,
   noteTone,
   occurrenceLabel,
@@ -37,10 +40,26 @@ import {
   proceduresFor,
   resolveOther,
   stageIndexFor,
+  todayLabel,
 } from "@/lib/school/constants";
+import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
 import type { BehaviorImprovement, ImprovementStatus, NoteRecord } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
+
+function noteDay(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function dayCountLabel(n: number) {
+  if (n === 1) return "1 يوم";
+  if (n === 2) return "2 يومين";
+  if (n >= 3 && n <= 10) return `${n} أيام`;
+  return `${n} يوماً`;
+}
 
 export const Route = createFileRoute("/admin/behavior")({
   validateSearch: (search: Record<string, unknown>): { student?: number; type?: string; range?: string } => ({
@@ -53,12 +72,14 @@ export const Route = createFileRoute("/admin/behavior")({
 
 function AdminBody() {
   const { student: studentParam, type: typeParam, range: rangeParam } = Route.useSearch();
-  const { staff } = useWorkspace();
+  const navigate = useNavigate();
+  const { staff, school } = useWorkspace();
   const canAct = staffCan(staff, "takeActions");
   const canImprove = staffCan(staff, "acceptImprovements");
   const allowed = canAct || canImprove;
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const bounds = rangeFromPreset(rangeParam);
+  const sheetRef = useRef<HTMLElement>(null);
   const query = useQuery({
     queryKey: ["admin"],
     queryFn: () => getAdminDashboard(),
@@ -90,10 +111,38 @@ function AdminBody() {
       : typeParam === "homework"
         ? "الواجبات"
         : typeParam === "absence"
-          ? "غياب الحصة"
+          ? "الغياب عن الحصة"
           : typeParam === "late"
-            ? "تأخر الحصة"
+            ? "التأخر عن الحصة"
             : null;
+  const periodMode = typeParam === "absence" || typeParam === "late";
+  const periodGroups = useMemo(() => {
+    if (!periodMode) return [];
+    const map = new Map<number, { studentId: number; studentName: string; classLabel: string; days: Map<string, string[]> }>();
+    for (const note of feed as NoteRecord[]) {
+      const day = noteDay(note.occurredAt || note.createdAt);
+      const current = map.get(note.studentId) ?? {
+        studentId: note.studentId,
+        studentName: note.studentName,
+        classLabel: classLabel(note.shortName, note.className),
+        days: new Map<string, string[]>(),
+      };
+      const bits = current.days.get(day) ?? [];
+      const period = note.periodKey ? periodShort(note.periodKey, school.season, school.schedules) : "";
+      const bit = [period && period !== "—" ? period : "", note.teacherSubject || ""].filter(Boolean).join(" · ");
+      if (bit && !bits.includes(bit)) bits.push(bit);
+      current.days.set(day, bits);
+      map.set(note.studentId, current);
+    }
+    return [...map.values()]
+      .map((group) => {
+        const days = [...group.days.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([day, bits]) => ({ day, extra: bits.join("، ") }));
+        return { ...group, days, count: group.days.size };
+      })
+      .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
+  }, [feed, periodMode, school.season, school.schedules]);
 
   if (typeParam && filtered.isPending) return <p className="text-fg-muted">جارٍ تحميل الكشف…</p>;
   if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">جارٍ تحميل اللوحة…</p>;
@@ -103,22 +152,197 @@ function AdminBody() {
     <div className="space-y-6">
       {canAct || typeParam ? (
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">{typeLabel ?? "المخالفات الواردة من المعلمين"}</h2>
-        {feed.length === 0 ? (
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">{typeLabel ?? "المخالفات الواردة من المعلمين"}</h2>
+            <p className="text-xs text-fg-muted">
+              غياب الحصة وتأخرها هنا مع المخالفات السلوكية، وليس في الغياب اليومي.
+            </p>
+            {periodMode ? (
+              <p className="text-xs text-fg-muted">
+                {bounds.label}: كل طالب مرة واحدة مع عدد أيام {typeParam === "absence" ? "غيابه عن الحصة" : "تأخره عن الحصة"}.
+              </p>
+            ) : null}
+          </div>
+          {periodMode ? (
+            <Button type="button" variant="secondary" onClick={() => sheetRef.current && printElement(sheetRef.current)}>
+              <Printer className="size-4" />
+              طباعة الكشف
+            </Button>
+          ) : null}
+        </div>
+        <div className="no-print flex flex-wrap gap-1.5">
+          {(
+            [
+              ["", "الكل"],
+              ["behavior", "مخالفات سلوكية"],
+              ["absence", "غياب عن الحصة"],
+              ["late", "تأخر عن الحصة"],
+              ["homework", "واجبات"],
+            ] as const
+          ).map(([key, label]) => {
+            const active = (typeParam ?? "") === key;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  void navigate({
+                    to: "/admin/behavior",
+                    search: {
+                      student: studentParam,
+                      type: key || undefined,
+                      range: key === "absence" || key === "late" ? rangeParam || "today" : undefined,
+                    },
+                  });
+                }}
+                className={
+                  active
+                    ? "h-9 rounded-full border border-primary bg-primary px-3 text-sm font-medium text-primary-fg"
+                    : "h-9 rounded-full border border-border bg-bg-elevated px-3 text-sm font-medium text-fg-muted"
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {periodMode ? (
+          <div className="no-print flex flex-wrap gap-1.5">
+            {(
+              [
+                ["today", "اليوم"],
+                ["week", "أسبوع"],
+                ["month", "شهر"],
+                ["all", "الكل"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  void navigate({
+                    to: "/admin/behavior",
+                    search: { student: studentParam, type: typeParam, range: key },
+                  });
+                }}
+                className={
+                  (rangeParam || "today") === key
+                    ? "h-8 rounded-full border border-primary bg-primary/5 px-3 text-xs font-medium text-primary"
+                    : "h-8 rounded-full border border-border bg-bg px-3 text-xs font-medium text-fg-muted"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {periodMode ? (
+          <ul className="no-print divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+            {periodGroups.map((group) => (
+              <li key={group.studentId} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <button type="button" onClick={() => setActiveStudent(group.studentId)} className="min-w-0 text-right">
+                    <p className="font-semibold hover:text-primary hover:underline">{group.studentName}</p>
+                    <p className="text-xs text-fg-muted">{group.classLabel}</p>
+                  </button>
+                  <span
+                    className={
+                      typeParam === "late"
+                        ? "shrink-0 rounded-full bg-warn-soft px-2.5 py-1 text-xs font-semibold text-warn"
+                        : "shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger"
+                    }
+                  >
+                    {dayCountLabel(group.count)}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-fg-muted">
+                  <MonthDays days={group.days} />
+                </div>
+              </li>
+            ))}
+            {periodGroups.length === 0 ? (
+              <li className="px-4 py-8 text-center text-sm text-fg-muted">لا توجد سجلات في هذا النطاق.</li>
+            ) : null}
+          </ul>
+        ) : null}
+        {feed.length === 0 && !periodMode ? (
           <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
             {typeParam ? "لا توجد سجلات في هذا النطاق." : "لا توجد ملاحظات بعد. سيظهر هنا كل ما يسجّله المعلمون فورًا."}
           </p>
-        ) : (
-          <ul className="space-y-2">
-            {feed.map((note: any) => (
-              <AdminNoteCard
-                key={note.id}
-                note={note}
-                onOpenStudent={() => setActiveStudent(note.studentId)}
-              />
-            ))}
-          </ul>
-        )}
+        ) : feed.length > 0 ? (
+          <>
+            {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">تفاصيل كل حصة</h3> : null}
+            <ul className="space-y-2">
+              {feed.map((note: any) => (
+                <AdminNoteCard
+                  key={note.id}
+                  note={note}
+                  onOpenStudent={() => setActiveStudent(note.studentId)}
+                />
+              ))}
+            </ul>
+          </>
+        ) : null}
+        {periodMode ? (
+          <article ref={sheetRef} className="print-form attendance-print official-sheet hidden bg-white font-naskh text-black">
+            <OfficialLetterhead school={school} />
+            <h2 className="mt-2 text-center text-[20px] font-semibold">{typeLabel}</h2>
+            <p className="text-center text-[13px] text-[#00857c]">
+              {todayLabel()} — {hijriDate()} — {bounds.label}
+            </p>
+            <table className="official-table mb-3">
+              <thead>
+                <tr>
+                  <th>الفترة</th>
+                  <th>الطلاب</th>
+                  <th>عدد الأيام</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="py-2 font-semibold">
+                    {formatDay(`${bounds.from}T12:00:00`)}
+                    {bounds.from !== bounds.to ? ` — ${formatDay(`${bounds.to}T12:00:00`)}` : ""}
+                  </td>
+                  <td className="font-semibold">{periodGroups.length}</td>
+                  <td className="font-semibold">{periodGroups.reduce((sum, group) => sum + group.count, 0)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table className="official-table">
+              <thead>
+                <tr>
+                  <th className="w-10">م</th>
+                  <th>اسم الطالب</th>
+                  <th>الصف</th>
+                  <th className="w-16">عدد الأيام</th>
+                  <th>الأيام والحصص</th>
+                </tr>
+              </thead>
+              <tbody>
+                {periodGroups.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8">لا توجد سجلات في هذا النطاق.</td>
+                  </tr>
+                ) : (
+                  periodGroups.map((group, index) => (
+                    <tr key={group.studentId}>
+                      <td>{index + 1}</td>
+                      <td className="text-[15px] font-semibold">{group.studentName}</td>
+                      <td>{group.classLabel}</td>
+                      <td className="font-semibold">{group.count}</td>
+                      <td className="text-right align-top text-[12px]"><MonthDays days={group.days} /></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            <p className="mt-6 text-center text-[13px] leading-7">
+              {school.principalName ? `${school.principalName} — ` : ""}التوقيع: ……………… — الختم
+            </p>
+          </article>
+        ) : null}
       </section>
       ) : null}
       {canImprove && !typeParam ? (

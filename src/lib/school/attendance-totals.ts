@@ -63,10 +63,11 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
         id: number;
         name: string;
         parent_phone: string;
+        class_id: number;
         class_name: string;
         short_name: string;
       }>`
-        select s.id, s.name, coalesce(s.parent_phone, '') as parent_phone,
+        select s.id, s.name, coalesce(s.parent_phone, '') as parent_phone, s.class_id,
                c.name as class_name, st.short_name
         from students s
         join classes c on c.id = s.class_id
@@ -84,6 +85,7 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
     return {
       studentId: student.id,
       studentName: student.name,
+      classId: student.class_id,
       classLabel: classLabel(student.short_name, student.class_name),
       parentPhone: perms.sendMessages ? student.parent_phone : "",
       days: days.map((row) => ({

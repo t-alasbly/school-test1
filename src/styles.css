@@ -125,6 +125,17 @@
   height: 2rem;
 }
 
+.attendance-print .official-table tr {
+  height: auto;
+}
+
+.student-print-line {
+  margin: 2px 0 8px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
 .official-report {
   font-size: 13.5px;
   line-height: 1.5;
@@ -242,7 +253,7 @@
   body.printing-form #school-print-mount .print-form {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-    page-break-inside: avoid;
+    page-break-inside: auto;
     width: 100% !important;
     max-width: none !important;
     padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm)
@@ -310,6 +321,7 @@
     overflow: visible !important;
   }
   body.printing-form #school-print-mount .attendance-print .official-table tr {
+    height: auto;
     break-inside: avoid;
   }
   body.printing-form #school-print-mount .attendance-print .official-table th,

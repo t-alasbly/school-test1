@@ -22,6 +22,7 @@ import {
   parseSchedules,
   NOTE_META,
   OFFICIAL_BEHAVIOR_TYPES,
+  LEGACY_DEGREE_PROCEDURES,
   classLabel,
   foldArabic,
   canonicalStage,
@@ -350,25 +351,62 @@ async function ensureCatalog(sql, schoolId, table, defaults) {
 async function ensureBehaviorTypes(sql, schoolId) {
 	const existing = await sql.query(`select id, name, coalesce(degree, 1)::int as degree, procedures
      from behavior_types where school_id = $1`, [schoolId]);
-	const have = new Set(existing.map((r) => r.name));
-	let order = existing.length;
+	const byName = new Map(existing.map((row) => [row.name, row]));
+	const used = new Set();
+	let order = 0;
 	for (const item of OFFICIAL_BEHAVIOR_TYPES) {
-		if (have.has(item.name)) continue;
 		order += 1;
+		let row = byName.get(item.name);
+		if (!row) {
+			for (const alias of item.aliases ?? []) {
+				const candidate = byName.get(alias);
+				if (candidate && !used.has(candidate.id)) {
+					row = candidate;
+					break;
+				}
+			}
+		}
 		const ladder = procedureLadder(item.degree);
-		await sql.query(`insert into behavior_types (school_id, name, sort_order, active, degree, procedures)
-       values ($1, $2, $3, true, $4, $5::jsonb)`, [
-			schoolId,
-			item.name,
-			order,
-			item.degree,
-			JSON.stringify(ladder)
-		]);
+		if (row) {
+			used.add(row.id);
+			await sql.query(`update behavior_types set name = $1, degree = $2, sort_order = $3 where id = $4`, [
+				item.name,
+				item.degree,
+				order,
+				row.id,
+			]);
+			const raw = row.procedures;
+			const parsed = typeof raw === "string" ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : raw;
+			const stages = Array.isArray(parsed) ? parsed : [];
+			const legacy = LEGACY_DEGREE_PROCEDURES[item.degree] ?? [];
+			const empty = stages.length === 0;
+			const untouched = JSON.stringify(stages) === JSON.stringify(legacy);
+			if (empty || untouched) {
+				await sql.query(`update behavior_types set procedures = $1::jsonb where id = $2`, [JSON.stringify(ladder), row.id]);
+			}
+		} else {
+			const inserted = await sql.query(`insert into behavior_types (school_id, name, sort_order, active, degree, procedures)
+       values ($1, $2, $3, true, $4, $5::jsonb) returning id`, [
+				schoolId,
+				item.name,
+				order,
+				item.degree,
+				JSON.stringify(ladder),
+			]);
+			if (inserted[0]?.id) used.add(inserted[0].id);
+		}
 	}
+	let extra = order;
+	const officialNames = new Set(OFFICIAL_BEHAVIOR_TYPES.map((item) => item.name));
+	const aliasNames = new Set(OFFICIAL_BEHAVIOR_TYPES.flatMap((item) => item.aliases ?? []));
 	for (const row of existing) {
-		const stored = parseProcedures(row.procedures, row.degree);
-		if (row.procedures == null || row.procedures === "[]" || Array.isArray(row.procedures) && row.procedures.length === 0) await sql.query(`update behavior_types set procedures = $1::jsonb where id = $2`, [JSON.stringify(procedureLadder(row.degree ?? 1)), row.id]);
-		else if (!stored.length) await sql.query(`update behavior_types set procedures = $1::jsonb where id = $2`, [JSON.stringify(procedureLadder(row.degree ?? 1)), row.id]);
+		if (used.has(row.id)) continue;
+		if (officialNames.has(row.name) || aliasNames.has(row.name)) {
+			await sql.query(`update behavior_types set active = false where id = $1`, [row.id]);
+			continue;
+		}
+		extra += 1;
+		await sql.query(`update behavior_types set sort_order = $1 where id = $2`, [extra, row.id]);
 	}
 }
 async function ensureActionTypes(sql, schoolId) {
@@ -811,21 +849,27 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	const { sql, staff, school } = await requireApproved(context.userId);
 	await ensureNoteThread(sql);
 	const student = (await sql`
-      select id, name, class_id from students
-      where id = ${data.studentId} and school_id = ${staff.school_id}
+      select s.id, s.name, s.class_id, coalesce(s.parent_phone, '') as parent_phone,
+             c.name as class_name, st.short_name, st.name as stage_name
+      from students s
+      join classes c on c.id = s.class_id
+      join stages st on st.id = c.stage_id
+      where s.id = ${data.studentId} and s.school_id = ${staff.school_id}
     `)[0];
 	if (!student) throw new Error("الطالب غير موجود");
 	let behaviorTypeId = null;
 	let behaviorName = null;
+	let behaviorDegree = null;
 	if (data.type === "behavior") {
 		if (!data.behaviorTypeId) throw new Error("اختر نوع المخالفة السلوكية");
 		const types = await sql`
-        select id, name from behavior_types
+        select id, name, coalesce(degree, 1)::int as degree from behavior_types
         where id = ${data.behaviorTypeId} and school_id = ${staff.school_id} and active = true
       `;
 		if (!types[0]) throw new Error("نوع المخالفة غير صالح");
 		behaviorTypeId = types[0].id;
 		behaviorName = types[0].name;
+		behaviorDegree = types[0].degree;
 	}
 	const periodKey = data.periodKey?.trim() ?? "";
 	const occurredAt = data.occurredAt?.trim() ? new Date(data.occurredAt).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
@@ -873,7 +917,14 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	if (refer) await notifyCounselingStaff(sql, school, staff, "إحالة إلى الإرشاد الطلابي", `أُحيل الطالب ${student.name} إلى الإرشاد الطلابي — ${label}.`, noteId);
 	return {
 		id: noteId,
+		studentId: student.id,
 		studentName: student.name,
+		parentPhone: revealPhone(staff, school, student.parent_phone),
+		className: student.class_name,
+		shortName: student.short_name,
+		stageName: student.stage_name,
+		behaviorName,
+		behaviorDegree,
 		type: data.type,
 		label,
 		occurrence,
@@ -1194,14 +1245,16 @@ export const closeNote = createServerFn({ method: "POST" }).middleware([authMidd
 });
 export const getNotifications = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff } = await requireApproved(context.userId);
+	await sql.query(`alter table notifications add column if not exists student_id integer`);
 	const rows = await sql`
       select ntf.id, ntf.note_id, ntf.kind, ntf.title, ntf.body, ntf.tone, ntf.read,
              ntf.created_at::text as created_at,
-             notes.student_id as student_id,
-             s.class_id as class_id
+             coalesce(notes.student_id, ntf.student_id) as student_id,
+             coalesce(s.class_id, s2.class_id) as class_id
       from notifications ntf
       left join notes on notes.id = ntf.note_id
       left join students s on s.id = notes.student_id
+      left join students s2 on s2.id = ntf.student_id
       where ntf.user_id = ${staff.user_id} and ntf.school_id = ${staff.school_id}
       order by ntf.created_at desc
       limit 40
@@ -2045,7 +2098,7 @@ export const listAllBehaviorTypes = createServerFn({ method: "GET" }).middleware
 	return listBehaviorTypeRows(sql, staff.school_id, false);
 });
 export const createBehaviorType = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	name: z.string().min(2).max(80),
+	name: z.string().min(2).max(300),
 	degree: z.number().int().min(1).max(5).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
@@ -2063,7 +2116,7 @@ export const createBehaviorType = createServerFn({ method: "POST" }).middleware(
 });
 export const updateBehaviorType = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	id: z.number(),
-	name: z.string().min(2).max(80).optional(),
+	name: z.string().min(2).max(300).optional(),
 	active: z.boolean().optional(),
 	degree: z.number().int().min(1).max(5).optional(),
 	procedures: z.array(z.array(z.string().max(220)).max(10)).max(8).optional()
@@ -2137,6 +2190,60 @@ export const updateStudent = createServerFn({ method: "POST" }).middleware([auth
 		ok: true,
 		classId: data.classId
 	};
+});
+export const requestClassMove = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	studentId: z.number(),
+	classId: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await sql.query(`alter table notifications add column if not exists student_id integer`);
+	const student = (await sql`
+      select s.id, s.name, s.class_id, c.name as class_name, st.short_name
+      from students s
+      join classes c on c.id = s.class_id
+      join stages st on st.id = c.stage_id
+      where s.id = ${data.studentId} and s.school_id = ${staff.school_id}
+    `)[0];
+	if (!student) throw new Error("الطالب غير موجود");
+	if (student.class_id === data.classId) throw new Error("الطالب في هذا الفصل بالفعل");
+	const target = (await sql`
+      select c.id, c.name, st.short_name
+      from classes c
+      join stages st on st.id = c.stage_id
+      where c.id = ${data.classId} and c.school_id = ${staff.school_id}
+    `)[0];
+	if (!target) throw new Error("الفصل غير موجود");
+	const fromLabel = classLabel(student.short_name, student.class_name);
+	const toLabel = classLabel(target.short_name, target.name);
+	const people = await sql`
+      select user_id, role, coalesce(permissions::text, '{}') as permissions
+      from staff
+      where school_id = ${staff.school_id}
+        and coalesce(active, true) = true
+        and role <> 'pending'
+    `;
+	const mapped = mapSchool(school);
+	const canEditRow = (row) => row.role === "admin" || row.role === "principal" || Boolean(parsePermissions(row.permissions, row.role, mapped).editStudents);
+	const editors = people.filter(canEditRow);
+	const others = editors.filter((row) => row.user_id !== staff.user_id);
+	const senderCanEdit = staff.role === "admin" || staff.role === "principal" || Boolean(mappedPerms(staff, school).editStudents);
+	if (others.length === 0 && senderCanEdit) {
+		await sql`
+        update students set class_id = ${target.id}
+        where id = ${student.id} and school_id = ${staff.school_id}
+      `;
+		return { ok: true, applied: true, count: 0, toLabel };
+	}
+	if (others.length === 0) throw new Error("لا يوجد مسؤول يملك صلاحية تعديل الطلاب");
+	const title = "طلب تغيير فصل";
+	const body = `${staff.display_name} يطلب نقل الطالب ${student.name} من ${fromLabel} إلى ${toLabel}.`;
+	for (const row of others) {
+		await sql`
+        insert into notifications (school_id, user_id, note_id, student_id, kind, title, body, tone)
+        values (${staff.school_id}, ${row.user_id}, ${null}, ${student.id}, ${"class-move"}, ${title}, ${body}, ${"warn"})
+      `;
+	}
+	return { ok: true, applied: false, count: others.length, toLabel };
 });
 export const deleteStudent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ studentId: z.number() })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editStudents");

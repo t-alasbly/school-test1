@@ -46,6 +46,7 @@ export function WhatsAppDialog({
   subject,
   createdAt,
   periodKey,
+  label,
 }: {
   studentId: number;
   studentName: string;
@@ -59,6 +60,7 @@ export function WhatsAppDialog({
   subject?: string;
   createdAt?: string;
   periodKey?: string;
+  label?: string;
 }) {
   const { school, staff } = useWorkspace();
   const custom = school.customMessages ?? [];
@@ -154,12 +156,14 @@ export function WhatsAppDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button
-          size="icon"
-          variant="ghost"
-          aria-label={`مراسلة ولي أمر ${studentName}`}
+          size={label ? "default" : "icon"}
+          variant={label ? "secondary" : "ghost"}
+          className={label ? "w-full" : undefined}
+          aria-label={label ?? `مراسلة ولي أمر ${studentName}`}
           disabled={!number}
         >
           <MessageCircle className="size-5" />
+          {label}
         </Button>
       </DialogTrigger>
       <DialogContent>

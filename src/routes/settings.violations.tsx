@@ -14,7 +14,10 @@ import {
   updateBehaviorType,
 } from "@/lib/school/api";
 import {
+  DEGREE_DEDUCT,
   degreeLabel,
+  degreeTone,
+  isStaffViolation,
   procedureLadder,
   procedureStageLabel,
 } from "@/lib/school/constants";
@@ -26,6 +29,8 @@ function ViolationsSettings() {
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
   const [newDegree, setNewDegree] = useState("1");
+  const [audience, setAudience] = useState<"students" | "staff">("students");
+  const [degree, setDegree] = useState(1);
   const [openId, setOpenId] = useState<number | null>(null);
   const query = useQuery({
     queryKey: ["behavior-types"],
@@ -43,20 +48,65 @@ function ViolationsSettings() {
     onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
   });
 
-  const grouped = [1, 2, 3, 4, 5].map((degree) => ({
-    degree,
-    items: (query.data ?? []).filter((item: any) => (item.degree ?? 1) === degree),
-  }));
+  const rows = (query.data ?? []) as CatalogItem[];
+  const inAudience = rows.filter((item) => isStaffViolation(item) === (audience === "staff"));
+  const degrees = audience === "staff" ? [4, 5] : [1, 2, 3, 4, 5];
+  const activeDegree = degrees.includes(degree) ? degree : degrees[0];
+  const items = inAudience.filter((item) => (item.degree ?? 1) === activeDegree);
+  const ladder = procedureLadder(activeDegree);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 pb-8">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">المخالفات</h1>
-        <p className="text-sm text-fg-muted">
-          لكل مخالفة سلم إجراءات: الأول ثم الثاني حتى الأخير، ويُعاد الأخير عند التكرار بعدها.
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">المخالفات</h1>
+        <p className="text-sm leading-6 text-fg-muted">
+          مخالفات الطلبة منفصلة عن المخالفات تجاه المعلمين ومن في حكمهم. لكل درجة لونها وإجراءاتها.
         </p>
       </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => { setAudience("students"); setDegree(1); }}
+          className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "students" ? "border-primary bg-primary text-primary-fg" : "border-border bg-card"}`}
+        >
+          مخالفات الطلبة
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAudience("staff"); setDegree(4); }}
+          className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "staff" ? "border-[#7f1d1d] bg-[#7f1d1d] text-white" : "border-border bg-card"}`}
+        >
+          تجاه المعلمين ومن في حكمهم
+        </button>
+      </div>
+
+      <div className={`grid gap-2 ${degrees.length === 2 ? "grid-cols-2" : "grid-cols-5"}`}>
+        {degrees.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setDegree(value)}
+            className={`min-h-[4.25rem] rounded-2xl border-2 px-1 text-center ${degreeTone(value)} ${activeDegree === value ? "ring-2 ring-offset-2 ring-current" : "opacity-80"}`}
+          >
+            <span className="block text-sm font-bold leading-5 sm:text-base">الدرجة {degreeLabel(value)}</span>
+            <span className="mt-0.5 block text-[11px] font-semibold leading-4">{DEGREE_DEDUCT[value]}</span>
+          </button>
+        ))}
+      </div>
+
+      <section className={`space-y-3 rounded-2xl border-2 p-3 sm:p-4 ${degreeTone(activeDegree)}`}>
+        <h2 className="text-lg font-bold">إجراءات الدرجة {degreeLabel(activeDegree)}</h2>
+        <ol className="space-y-2 text-sm leading-6 text-fg">
+          {ladder.map((stage, index) => (
+            <li key={index} className="rounded-xl bg-white/80 px-3 py-2 text-[#111]">
+              <p className="font-semibold">{procedureStageLabel(index + 1)}</p>
+              <p>{stage.join(" — ")}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <Card>
         <CardHeader>
@@ -64,7 +114,7 @@ function ViolationsSettings() {
         </CardHeader>
         <CardContent>
           <form
-            className="flex flex-wrap gap-2"
+            className="flex flex-col gap-2 sm:flex-row sm:flex-wrap"
             onSubmit={(e) => {
               e.preventDefault();
               if (newName.trim().length >= 2) createMutation.mutate();
@@ -74,39 +124,35 @@ function ViolationsSettings() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="اسم المخالفة…"
-              className="min-w-48 flex-1"
+              className="min-h-12 min-w-48 flex-1 text-base"
             />
-            <Select value={newDegree} onChange={(e) => setNewDegree(e.target.value)} className="w-36">
+            <Select value={newDegree} onChange={(e) => setNewDegree(e.target.value)} className="min-h-12 w-full text-base sm:w-36">
               <option value="1">الدرجة الأولى</option>
               <option value="2">الدرجة الثانية</option>
               <option value="3">الدرجة الثالثة</option>
               <option value="4">الدرجة الرابعة</option>
               <option value="5">الدرجة الخامسة</option>
             </Select>
-            <Button type="submit" disabled={createMutation.isPending || newName.trim().length < 2}>
+            <Button type="submit" className="min-h-12" disabled={createMutation.isPending || newName.trim().length < 2}>
               إضافة
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {grouped.map((group) =>
-        group.items.length ? (
-          <section key={group.degree} className="space-y-3">
-            <h2 className="text-lg font-semibold">الدرجة {degreeLabel(group.degree)}</h2>
-            <ul className="space-y-2">
-              {group.items.map((item: any) => (
-                <ViolationCard
-                  key={item.id}
-                  item={item}
-                  open={openId === item.id}
-                  onToggle={() => setOpenId(openId === item.id ? null : item.id)}
-                />
-              ))}
-            </ul>
-          </section>
-        ) : null,
-      )}
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <ViolationCard
+            key={item.id}
+            item={item}
+            open={openId === item.id}
+            onToggle={() => setOpenId(openId === item.id ? null : item.id)}
+          />
+        ))}
+        {items.length === 0 ? (
+          <li className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-fg-muted">لا مخالفات في هذه الدرجة.</li>
+        ) : null}
+      </ul>
     </div>
   );
 }

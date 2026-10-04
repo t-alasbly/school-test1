@@ -170,6 +170,7 @@ export function PrintFormsButton({
   label = "طباعة نموذج",
   size = "sm",
   studentId,
+  className,
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -178,6 +179,7 @@ export function PrintFormsButton({
         type="button"
         size={size}
         variant="secondary"
+        className={className}
         aria-label={label}
         onClick={() => setOpen(true)}
       >

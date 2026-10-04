@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { getReport, getStudentNotes } from "@/lib/school/api";
-import { formatDay, weekdayName } from "@/lib/school/constants";
+import { NOTE_META, formatDay, weekdayName } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
 import { useWorkspace } from "@/lib/school/workspace";
 
@@ -167,7 +167,9 @@ function FormsBody() {
             ) : (
               notes.map((n, i) => (
                 <option key={`${n.createdAt}-${i}`} value={i}>
-                  {(n.behaviorTypeName || n.details || "ملاحظة") +
+                  {(n.type === "absence" || n.type === "late"
+                    ? NOTE_META[n.type].label
+                    : n.behaviorTypeName || n.details || "ملاحظة") +
                     (n.createdAt ? ` — ${n.createdAt.slice(0, 10)}` : "")}
                 </option>
               ))

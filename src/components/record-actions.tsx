@@ -26,8 +26,10 @@ import {
 import {
   NOTE_META,
   NOTE_TYPES,
+  degreeLabel,
   fromDatetimeLocalValue,
   isOtherChoice,
+  isStaffViolation,
   scheduleFor,
   toDatetimeLocalValue,
 } from "@/lib/school/constants";
@@ -358,11 +360,28 @@ function EditNoteButton({ note }: { note: EditableNote }) {
                   }
                 >
                   <option value="">اختر…</option>
-                  {behaviorTypes.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
+                  {[1, 2, 3, 4, 5].map((degree) => {
+                    const group = behaviorTypes.filter((b) => (b.degree ?? 1) === degree && !isStaffViolation(b));
+                    if (!group.length) return null;
+                    return (
+                      <optgroup key={`s-${degree}`} label={`مخالفات الطلبة — الدرجة ${degreeLabel(degree)}`}>
+                        {group.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {[4, 5].map((degree) => {
+                    const group = behaviorTypes.filter((b) => (b.degree ?? 1) === degree && isStaffViolation(b));
+                    if (!group.length) return null;
+                    return (
+                      <optgroup key={`t-${degree}`} label={`تجاه المعلمين — الدرجة ${degreeLabel(degree)}`}>
+                        {group.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
                 </Select>
               </div>
             ) : null}

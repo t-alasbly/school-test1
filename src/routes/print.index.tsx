@@ -4,6 +4,7 @@ import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
+import { MonthDays } from "@/components/attendance-roster";
 import { MessageRecordTools, NoteRecordTools } from "@/components/record-actions";
 import {
   DEFAULT_COL_MM,
@@ -43,6 +44,13 @@ import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
+
+function localDay(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export const Route = createFileRoute("/print/")({ component: ReportsBody });
 
@@ -122,6 +130,38 @@ function ReportsBody() {
   const scopedToTeacher = query.data?.scopedToTeacher;
   const notes = query.data?.notes ?? [];
   const reportSchool = query.data?.school ?? school;
+  const periodSummaries = useMemo(() => {
+    if (mode !== "notes") return [];
+    const kinds = (type === "all" ? ["absence", "late"] : type === "absence" || type === "late" ? [type] : []) as NoteType[];
+    return kinds.map((kind) => {
+      const map = new Map<number, { studentId: number; studentName: string; classLabel: string; days: Map<string, string[]> }>();
+      for (const note of notes) {
+        if (note.type !== kind) continue;
+        const day = localDay(note.occurredAt || note.createdAt);
+        const current = map.get(note.studentId) ?? {
+          studentId: note.studentId,
+          studentName: note.studentName,
+          classLabel: classLabel(note.shortName, note.className),
+          days: new Map<string, string[]>(),
+        };
+        const bits = current.days.get(day) ?? [];
+        const period = note.periodKey ? periodShort(note.periodKey, reportSchool.season, reportSchool.schedules) : "";
+        const bit = [period && period !== "—" ? period : "", note.teacherSubject || ""].filter(Boolean).join(" · ");
+        if (bit && !bits.includes(bit)) bits.push(bit);
+        current.days.set(day, bits);
+        map.set(note.studentId, current);
+      }
+      const groups = [...map.values()]
+        .map((group) => {
+          const days = [...group.days.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([day, bits]) => ({ day, extra: bits.join("، ") }));
+          return { studentId: group.studentId, studentName: group.studentName, classLabel: group.classLabel, days, count: group.days.size };
+        })
+        .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
+      return { kind, title: NOTE_META[kind].label, groups };
+    }).filter((summary) => type !== "all" || summary.groups.length > 0);
+  }, [mode, type, notes, reportSchool.season, reportSchool.schedules]);
 
   const selectedClass = classes.find((c) => String(c.id) === classId);
   const selectedStage = stages.find((s: any) => String(s.id) === stageId);
@@ -488,8 +528,8 @@ function ReportsBody() {
         <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
           {(
             [
-              ["غياب", counts.absence],
-              ["تأخر", counts.late],
+              ["غياب حصة", counts.absence],
+              ["تأخر حصة", counts.late],
               ["واجب", counts.homework],
               ["سلوك", counts.behavior],
               ["مفتوحة", counts.open],
@@ -595,6 +635,46 @@ function ReportsBody() {
           </tbody>
         </table>
         ) : (
+        <>
+        {periodSummaries.map((summary) => (
+          <div key={summary.kind} className="mb-3">
+            <h3 className="mb-1 text-center text-[16px] font-semibold">{summary.title}</h3>
+            <p className="mb-1 text-center text-[12px]">
+              {summary.groups.length} طالب · {summary.groups.reduce((sum, group) => sum + group.count, 0)} يوم
+            </p>
+            <table className="official-table">
+              <thead>
+                <tr>
+                  <th className="w-8">م</th>
+                  <th>اسم الطالب</th>
+                  <th>الصف</th>
+                  <th className="w-16">عدد الأيام</th>
+                  <th>الأيام والحصص</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.groups.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center">لا سجلات في هذا النطاق.</td>
+                  </tr>
+                ) : (
+                  summary.groups.map((group, index) => (
+                    <tr key={group.studentId}>
+                      <td>{index + 1}</td>
+                      <td className="text-right font-medium">{group.studentName}</td>
+                      <td>{group.classLabel}</td>
+                      <td className="font-semibold">{group.count}</td>
+                      <td className="text-right align-top text-[12px]"><MonthDays days={group.days} /></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        {periodSummaries.length > 0 ? (
+          <h3 className="mb-1 text-center text-[15px] font-semibold">{type === "all" ? "تفاصيل السجلات" : "تفاصيل الحصص"}</h3>
+        ) : null}
         <table className="official-table official-report-table">
           <thead>
             <tr>
@@ -659,6 +739,7 @@ function ReportsBody() {
             )}
           </tbody>
         </table>
+        </>
         )}
         </div>
 

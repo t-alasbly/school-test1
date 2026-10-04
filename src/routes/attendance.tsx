@@ -9,6 +9,7 @@ import { AppGate } from "@/components/app-gate";
 import { DayField } from "@/components/day-field";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -17,11 +18,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDailyAttendance, logParentMessage, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
+import { getDailyAttendance, logParentMessage, requestClassMove, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
 import { getStudentAttendanceDays, listAttendanceDayCounts } from "@/lib/school/attendance-totals";
 import { formatPrimaryDate, isoFromDate, weekdayAr, type CalendarKind } from "@/lib/school/calendar";
 import { formatTime, toWhatsAppNumber } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
+import { rangeFromPreset } from "@/components/attendance-roster";
 import { staffCan } from "@/lib/school/permissions";
 import { mergeAppearance, applyAppearance } from "@/lib/school/theme";
 import { useCalendar } from "@/lib/school/use-calendar";
@@ -79,10 +81,11 @@ function historyMessage(opts: {
   classLabel: string;
   school: string;
   kind: DailyKind;
+  span: string;
   lines: string[];
 }) {
   const what = opts.kind === "absence" ? "الغياب" : "التأخر";
-  const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
+  const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel} خلال ${opts.span}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
   const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
   const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
   if (packed(opts.lines).length <= 1900) return packed(opts.lines);
@@ -112,7 +115,9 @@ function AttendanceBody() {
   const [sort, setSort] = useState<ClassSort>("order");
   const [historyId, setHistoryId] = useState<number | null>(null);
   const [historyKind, setHistoryKind] = useState<DailyKind>("absence");
+  const [historySpan, setHistorySpan] = useState<"week" | "month" | "term" | "all">("term");
   const [historyDraft, setHistoryDraft] = useState("");
+  const [moveClassId, setMoveClassId] = useState("");
   const [local, setLocal] = useState<Record<number, Draft>>({});
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const [printKind, setPrintKind] = useState<PrintKind>("all");
@@ -165,15 +170,26 @@ function AttendanceBody() {
     queryFn: () => getStudentAttendanceDays({ data: { studentId: historyId! } }),
     enabled: can && historyId != null,
   });
+  const historyBounds = useMemo(() => rangeFromPreset(historySpan), [historySpan]);
+  const historySpanText =
+    historySpan === "all"
+      ? "كل الأيام المسجّلة"
+      : `${historyBounds.label} (${formatPrimaryDate(historyBounds.from, calendar)} — ${formatPrimaryDate(historyBounds.to, calendar)})`;
   const historyDays = useMemo(() => {
     const all = history.data?.days ?? [];
-    return all.filter((row) => row.kind === historyKind);
-  }, [history.data, historyKind]);
+    return all.filter((row) => {
+      const iso = String(row.day).slice(0, 10);
+      return row.kind === historyKind && iso >= historyBounds.from && iso <= historyBounds.to;
+    });
+  }, [history.data, historyKind, historyBounds]);
 
   useEffect(() => {
     if (!history.data) return;
     const lines = (history.data.days ?? [])
-      .filter((row) => row.kind === historyKind)
+      .filter((row) => {
+        const iso = String(row.day).slice(0, 10);
+        return row.kind === historyKind && iso >= historyBounds.from && iso <= historyBounds.to;
+      })
       .map((row) => historyLine(row, calendar));
     setHistoryDraft(
       historyMessage({
@@ -181,10 +197,11 @@ function AttendanceBody() {
         classLabel: history.data.classLabel,
         school: school.name,
         kind: historyKind,
+        span: historySpan === "all" ? "كل المدة المسجّلة" : historyBounds.label,
         lines,
       }),
     );
-  }, [history.data, historyKind, calendar, school.name]);
+  }, [history.data, historyKind, historyBounds, historySpan, calendar, school.name]);
 
   useEffect(() => {
     setLocal({});
@@ -404,6 +421,26 @@ function AttendanceBody() {
     );
     toast.success("فُتحت واتساب وحُفظت الرسالة في السجل");
   }
+
+  const moveClass = useMutation({
+    mutationFn: () =>
+      requestClassMove({
+        data: { studentId: historyId!, classId: Number(moveClassId) },
+      }),
+    onSuccess: (result) => {
+      if (result.applied) {
+        toast.success(`تم نقل الطالب إلى ${result.toLabel}`);
+        void queryClient.invalidateQueries({ queryKey: ["daily-attendance"] });
+        void queryClient.invalidateQueries({ queryKey: ["student-attendance-days"] });
+        void queryClient.invalidateQueries({ queryKey: ["attendance-roster"] });
+      } else {
+        toast.success(`أُرسل طلب النقل إلى ${result.count}`);
+        void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      }
+      setMoveClassId("");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر إرسال الطلب"),
+  });
 
   if (!can) {
     return <p className="text-fg-muted">تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.</p>;
@@ -724,12 +761,14 @@ function AttendanceBody() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={historyId != null} onOpenChange={(open) => { if (!open) setHistoryId(null); }}>
+      <Dialog open={historyId != null} onOpenChange={(open) => { if (!open) { setHistoryId(null); setMoveClassId(""); } }}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{history.data?.studentName ?? "أيام الطالب"}</DialogTitle>
             <DialogDescription>
-              {history.data?.classLabel ?? "طباعة أيام الغياب أو التأخر، أو إرسالها لولي الأمر"}
+              {history.data?.classLabel
+                ? `${history.data.classLabel} — طباعة أيام المدة في صفحة واحدة`
+                : "طباعة أيام الغياب أو التأخر حسب المدة"}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2">
@@ -754,11 +793,36 @@ function AttendanceBody() {
               </button>
             ))}
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ["week", "أسبوع"],
+                ["month", "شهر"],
+                ["term", "ترم"],
+                ["all", "الكل"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setHistorySpan(key)}
+                className={cn(
+                  "h-9 rounded-full border px-3 text-sm font-medium",
+                  historySpan === key
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border bg-bg text-fg-muted",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-fg-muted">{historySpanText}</p>
           {history.isPending ? (
             <p className="text-sm text-fg-muted">جارٍ التحميل…</p>
           ) : historyDays.length === 0 ? (
             <p className="text-sm text-fg-muted">
-              {historyKind === "absence" ? "لا أيام غياب مسجّلة." : "لا أيام تأخر مسجّلة."}
+              {historyKind === "absence" ? "لا أيام غياب في هذه المدة." : "لا أيام تأخر في هذه المدة."}
             </p>
           ) : (
             <ul className="max-h-40 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-border px-3 py-2 text-sm">
@@ -788,20 +852,44 @@ function AttendanceBody() {
           {canMessage && history.data && !historyNumber ? (
             <p className="text-xs text-fg-muted">لا يوجد رقم جوال محفوظ لولي الأمر.</p>
           ) : null}
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-sm font-semibold">طلب تغيير الفصل</p>
+            <Select value={moveClassId} onChange={(e) => setMoveClassId(e.target.value)} aria-label="الفصل الجديد">
+              <option value="">اختر الفصل الجديد</option>
+              {classes
+                .filter((item) => item.id !== history.data?.classId)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+            </Select>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={!historyId || !moveClassId || moveClass.isPending}
+              onClick={() => moveClass.mutate()}
+            >
+              {moveClass.isPending ? "جارٍ الإرسال…" : "إرسال لمن يعدّل بيانات الطلاب"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
       <article
         ref={historyRef}
-        className="print-form attendance-print official-sheet hidden bg-white font-naskh text-black"
+        className="print-form print-report attendance-print official-sheet hidden bg-white font-naskh text-black"
       >
         <OfficialLetterhead school={school} />
         <h2 className="mt-2 text-center text-[18px] font-semibold">
           {historyKind === "absence" ? "كشف أيام الغياب" : "كشف أيام التأخر"}
         </h2>
-        <p className="text-center text-[15px] font-semibold">{history.data?.studentName ?? ""}</p>
-        <p className="text-center text-[13px]">{history.data?.classLabel ?? ""}</p>
-        <p className="mb-2 text-center text-[13px] text-[#00857c]">المجموع: {dayCountLabel(historyDays.length)}</p>
+        <p className="student-print-line">
+          <strong>{history.data?.studentName ?? ""}</strong>
+          {history.data?.classLabel ? <span> · {history.data.classLabel}</span> : null}
+          <span> · {historySpan === "all" ? "كل المدة" : historyBounds.label}</span>
+          <span> · المجموع: {dayCountLabel(historyDays.length)}</span>
+        </p>
         <table className="official-table">
           <thead>
             <tr>

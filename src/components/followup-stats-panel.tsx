@@ -18,8 +18,8 @@ import { cn } from "@/lib/utils";
 const SOURCES = [
   { key: "daily-absence", label: "الغياب اليومي" },
   { key: "daily-late", label: "التأخر الصباحي" },
-  { key: "note-absence", label: "غياب الحصة" },
-  { key: "note-late", label: "تأخر الحصة" },
+  { key: "note-absence", label: "الغياب عن الحصة" },
+  { key: "note-late", label: "التأخر عن الحصة" },
   { key: "homework", label: "الواجبات" },
   { key: "behavior", label: "المخالفات" },
 ] as const;
