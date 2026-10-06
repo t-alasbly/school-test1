@@ -85,13 +85,19 @@ function LoginForm() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{tr("تسجيل الدخول برقم الجوال")}</CardTitle>
+            <CardTitle className="text-base leading-6">
+              <span className="block">تسجيل الدخول برقم الجوال</span>
+              <span className="mt-0.5 block text-sm font-normal text-fg-muted">Sign in with your mobile number</span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {authEnabled ? (
               <form className="space-y-3" onSubmit={onSubmit}>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">{tr("رقم الجوال")}</Label>
+                  <Label htmlFor="email">
+                    رقم الجوال
+                    <span className="ms-2 font-normal text-fg-muted">Mobile number</span>
+                  </Label>
                   <Input
                     id="email"
                     type="tel"
@@ -105,7 +111,10 @@ function LoginForm() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="password">{tr("كلمة المرور")}</Label>
+                  <Label htmlFor="password">
+                    كلمة المرور
+                    <span className="ms-2 font-normal text-fg-muted">Password</span>
+                  </Label>
                   <Input
                     id="password"
                     type="password"
@@ -119,7 +128,7 @@ function LoginForm() {
                 </div>
                 {error ? <p className="text-sm text-danger">{error}</p> : null}
                 <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? tr("جارٍ التنفيذ…") : tr("دخول")}
+                  {busy ? tr("جارٍ التنفيذ…") : "دخول · Sign in"}
                 </Button>
               </form>
             ) : (
