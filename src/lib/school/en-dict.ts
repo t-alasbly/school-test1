@@ -282,6 +282,8 @@ export const EN_UI: Record<string, string> = {
   "اليوم السابق": "Previous day",
   "اليوم التالي": "Next day",
   "غياب اليوم": "Absent today",
+  "عدد الفصل": "Class size",
+  "الحضور": "Present",
   "مجموع الغياب": "Total absences",
   "مجموع التأخر": "Total lateness",
   "مجموع المخالفات": "Total violations",
@@ -1217,4 +1219,6 @@ export const EN_UI: Record<string, string> = {
   "دون إجراء من الوكيل": "No student-affairs action",
   "تُحال إلى الوكيل": "Sent to student affairs",
   "المرحلة تعتمد على عدد مرات كل طالب.": "The stage depends on how many times each student has this violation.",
+  "اللغة المفضلة": "Preferred language",
+  "تُفتح لك الصفحة بهذه اللغة عند الدخول، ويتغير العرض فوراً بعد التحديث.": "The app opens in this language when you sign in, and the page refreshes as soon as you change it.",
 };

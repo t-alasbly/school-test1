@@ -285,6 +285,7 @@ function AttendanceBody() {
         };
       });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["attendance-day-counts"] });
       void queryClient.invalidateQueries({ queryKey: ["student-attendance-days", s.studentId] });
     } catch (err) {

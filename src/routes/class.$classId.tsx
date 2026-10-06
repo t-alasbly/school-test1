@@ -231,7 +231,13 @@ function ClassBody() {
                   }}
                   className="min-w-0 flex-1 text-right"
                 >
-                  <span className="flex items-start gap-2">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {student.healthNote ? (
+                      <span className="inline-flex max-w-full items-center gap-1.5">
+                        <Badge tone="warn" className="shrink-0">{tr("ملاحظة صحية")}</Badge>
+                        <span className="text-xs font-medium leading-5 text-warn">{student.healthNote}</span>
+                      </span>
+                    ) : null}
                     <span
                       className={cn(
                         "min-w-0 flex-1 text-lg font-semibold leading-7 break-words",
@@ -258,11 +264,6 @@ function ClassBody() {
                         {tr("متأخر")}
                         {student.arrivedAt ? ` · ${tr("حضر الساعة")} ${formatTime(student.arrivedAt)}` : ""}
                       </Badge>
-                    </span>
-                  ) : null}
-                  {student.healthNote ? (
-                    <span className="mt-1 block text-xs font-medium leading-5 text-warn">
-                      {tr("ملاحظة صحية")}: {student.healthNote}
                     </span>
                   ) : null}
                   <span className="mt-1 block">

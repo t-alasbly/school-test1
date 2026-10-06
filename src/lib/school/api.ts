@@ -493,7 +493,12 @@ async function listActionTypeRows(sql, schoolId, activeOnly = false) {
 }
 async function listClassOptions(sql, schoolId) {
 	return (await sql`
-    select c.id, c.stage_id, st.name as stage_name, c.name, st.short_name
+    select c.id, c.stage_id, st.name as stage_name, c.name, st.short_name,
+      (select count(*)::int from students s where s.class_id = c.id) as student_count,
+      (select count(*)::int from daily_attendance a
+         join students s on s.id = a.student_id
+         where s.class_id = c.id and a.school_id = c.school_id
+           and a.day = current_date and a.kind = 'absence') as absence_today
     from classes c
     join stages st on st.id = c.stage_id
     where c.school_id = ${schoolId}
@@ -505,7 +510,9 @@ async function listClassOptions(sql, schoolId) {
 		stageName: r.stage_name,
 		name: r.name,
 		shortName: r.short_name,
-		label: classLabel(r.short_name, r.name)
+		label: classLabel(r.short_name, r.name),
+		studentCount: r.student_count ?? 0,
+		absenceToday: r.absence_today ?? 0
 	}));
 }
 async function seedSchool(sql, schoolId) {
@@ -1652,10 +1659,16 @@ async function insertCredentialStaff(sql, opts) {
     insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
     values (${id}, ${id}, ${"credential"}, ${id}, ${hashed}, now(), now())
   `;
-	await sql`
-    insert into staff (user_id, school_id, display_name, role, subject, phone)
-    values (${id}, ${opts.schoolId}, ${opts.name}, ${opts.role}, ${opts.subject}, ${opts.phone})
-  `;
+	await sql.query(`insert into staff (user_id, school_id, display_name, role, subject, phone, appearance)
+    values ($1, $2, $3, $4, $5, $6, $7::jsonb)`, [
+		id,
+		opts.schoolId,
+		opts.name,
+		opts.role,
+		opts.subject,
+		opts.phone,
+		JSON.stringify(opts.locale === "en" ? { locale: "en" } : { locale: "ar" })
+	]);
 	return id;
 }
 async function setCredentialPassword(sql, userId, password) {
@@ -1684,6 +1697,7 @@ export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddl
              coalesce(st.subject, '') as subject,
              coalesce(st.phone, '') as phone,
              coalesce(st.permissions::text, '{}') as permissions,
+             coalesce(st.appearance::text, '{}') as appearance,
              coalesce(st.active, true) as active
       from staff st
       left join "user" u on u.id = st.user_id
@@ -1727,7 +1741,8 @@ export const listStaff = createServerFn({ method: "GET" }).middleware([authMiddl
 		subject: r.subject,
 		phone: r.phone,
 		permissions: parsePermissions(r.permissions, r.role, mapped),
-		active: r.active !== false
+		active: r.active !== false,
+		locale: parseOptionalAppearance(r.appearance)?.locale === "en" ? "en" : "ar"
 	}));
 });
 export const setStaffRole = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -1789,7 +1804,8 @@ export const updateStaffMember = createServerFn({ method: "POST" }).middleware([
 	]),
 	subject: z.string().max(80).optional(),
 	phone: z.string().max(20).optional(),
-	password: z.string().max(80).optional()
+	password: z.string().max(80).optional(),
+	locale: z.enum(["ar", "en"]).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requirePerm(context.userId, "editStaff");
 	if (data.userId === staff.user_id && data.role !== "admin") throw new Error("لا يمكنك إزالة صلاحية المدير عن حسابك");
@@ -1827,6 +1843,13 @@ export const updateStaffMember = createServerFn({ method: "POST" }).middleware([
 		if (pass.length < 4) throw new Error("كلمة المرور يجب ألا تقل عن 4 خانات");
 		await setCredentialPassword(sql, data.userId, pass);
 	}
+	if (data.locale) {
+		await sql.query(`update staff set appearance = coalesce(appearance, '{}'::jsonb) || $1::jsonb where user_id = $2 and school_id = $3`, [
+			JSON.stringify({ locale: data.locale }),
+			data.userId,
+			staff.school_id
+		]);
+	}
 	return { ok: true };
 });
 export const createStaffUser = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -1848,7 +1871,8 @@ export const createStaffUser = createServerFn({ method: "POST" }).middleware([au
 		"admin_assistant",
 		"admin_staff"
 	]),
-	subject: z.string().max(80).optional()
+	subject: z.string().max(80).optional(),
+	locale: z.enum(["ar", "en"]).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editStaff");
 	const phone = data.phone ? normalizeSaudiPhone(data.phone) : "";
@@ -1863,7 +1887,8 @@ export const createStaffUser = createServerFn({ method: "POST" }).middleware([au
 		password: data.password,
 		role: data.role,
 		subject: data.subject?.trim() ?? "",
-		phone
+		phone,
+		locale: data.locale === "en" ? "en" : "ar"
 	}) };
 });
 async function assertNotLastAdmin(sql, schoolId, userId, nextRole, nextActive) {
@@ -2705,6 +2730,7 @@ var appearanceShape = z.object({
 	]),
 	fontScale: z.number().min(.8).max(1.5).optional(),
 	calendar: z.enum(["hijri", "gregorian"]).optional(),
+	locale: z.enum(["ar", "en"]).optional(),
 	custom: z.object({
 		primary: z.string().max(20).optional(),
 		bg: z.string().max(20).optional(),
@@ -2726,14 +2752,29 @@ export const updateAppearance = createServerFn({ method: "POST" }).middleware([a
 		};
 	}
 	const appearance = parseAppearance(data.appearance);
+	if (!appearance.locale) {
+		const prev = parseOptionalAppearance(staff.appearance)?.locale;
+		if (prev) appearance.locale = prev;
+	}
 	if (data.scope === "school") {
 		if (staff.role !== "admin") throw new Error("تعميم المظهر على المدرسة للمدير فقط");
-		await sql.query(`update schools set appearance = $1::jsonb where id = $2`, [JSON.stringify(appearance), staff.school_id]);
+		const { locale: _locale, ...schoolLook } = appearance;
+		await sql.query(`update schools set appearance = $1::jsonb where id = $2`, [JSON.stringify(schoolLook), staff.school_id]);
 	} else await sql.query(`update staff set appearance = $1::jsonb where user_id = $2`, [JSON.stringify(appearance), staff.user_id]);
 	return {
 		scope: data.scope,
 		appearance
 	};
+});
+export const setPreferredLocale = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	locale: z.enum(["ar", "en"])
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	await sql.query(`update staff set appearance = coalesce(appearance, '{}'::jsonb) || $1::jsonb where user_id = $2`, [
+		JSON.stringify({ locale: data.locale }),
+		staff.user_id
+	]);
+	return { locale: data.locale };
 });
 function todayISODate() {
 	const d = /* @__PURE__ */ new Date();
@@ -3999,7 +4040,7 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 		params.push(data.stageId);
 		where += ` and c.stage_id = $${params.length}`;
 	}
-	const rows = await sql.query(`select s.id, s.name, s.class_id, coalesce(s.parent_phone, '') as parent_phone, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
+	const rows = await sql.query(`select s.id, s.name, s.class_id, coalesce(s.parent_phone, '') as parent_phone, coalesce(s.health_note, '') as health_note, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
      from students s
      join classes c on c.id = s.class_id
      join stages st on st.id = c.stage_id
@@ -4015,6 +4056,7 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 			stageName: s.stage_name,
 			shortName: s.short_name,
 			parentPhone: revealPhone(staff, school, s.parent_phone),
+			healthNote: s.health_note ?? "",
 			label: classLabel(s.short_name, s.class_name)
 		}))
 	};

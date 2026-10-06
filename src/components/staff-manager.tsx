@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { tr } from "@/lib/school/i18n";
+import { tr, type Locale } from "@/lib/school/i18n";
 import { Ban, Check, Shield, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -47,6 +47,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
   const [password, setPassword] = useState("1234");
   const [subject, setSubject] = useState("");
   const [role, setRole] = useState<Exclude<StaffRole, "pending">>("teacher");
+  const [locale, setLocalePref] = useState<Locale>("ar");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [permsFor, setPermsFor] = useState<StaffRow | null>(null);
   const [cancelFor, setCancelFor] = useState<StaffRow | null>(null);
@@ -58,12 +59,13 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
     subject: string;
     phone: string;
     password: string;
+    locale: Locale;
   } | null>(null);
 
   const createMutation = useMutation({
     mutationFn: () =>
       createStaffUser({
-        data: { name, email, phone, password, role, subject },
+        data: { name, email, phone, password, role, subject, locale },
       }),
     onSuccess: () => {
       toast.success(tr("تم إضافة المستخدم"));
@@ -73,6 +75,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       setPassword("1234");
       setSubject("");
       setRole("teacher");
+      setLocalePref("ar");
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
@@ -87,6 +90,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       subject: string;
       phone: string;
       password?: string;
+      locale: Locale;
     }) =>
       updateStaffMember({
         data: {
@@ -248,6 +252,17 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 ))}
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-locale">{tr("اللغة المفضلة")}</Label>
+              <Select
+                id="new-locale"
+                value={locale}
+                onChange={(e) => setLocalePref(e.target.value as Locale)}
+              >
+                <option value="ar">{tr("العربية")}</option>
+                <option value="en">English</option>
+              </Select>
+            </div>
             <div className="sm:col-span-2">
               <Button
                 type="submit"
@@ -350,6 +365,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                     subject: member.subject,
                     phone: member.phone,
                     password: "",
+                    locale: member.locale === "en" ? "en" : "ar",
                   })
                 }
               >
@@ -465,6 +481,17 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                       {tr(ROLE_LABEL[r])}
                     </option>
                   ))}
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-locale">{tr("اللغة المفضلة")}</Label>
+                <Select
+                  id="edit-locale"
+                  value={editing.locale}
+                  onChange={(e) => setEditing({ ...editing, locale: e.target.value as Locale })}
+                >
+                  <option value="ar">{tr("العربية")}</option>
+                  <option value="en">English</option>
                 </Select>
               </div>
               <Button

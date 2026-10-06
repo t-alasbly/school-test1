@@ -1,10 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { tr } from "@/lib/school/i18n";
+import { tr, useLocale, type Locale } from "@/lib/school/i18n";
 import {
   Archive,
   Award,
   Gavel,
   HeartPulse,
+  Languages,
   Layers,
   MessageCircle,
   Palette,
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/settings/")({ component: SettingsHub });
 
 function SettingsHub() {
   const { staff } = useWorkspace();
+  const { locale, setLocale } = useLocale();
   const admin = staff.role === "admin";
   const cards = [
     {
@@ -146,6 +148,40 @@ function SettingsHub() {
         <p className="text-sm text-fg-muted">{tr("كل بطاقة تفتح صفحتها فقط")}</p>
         <h1 className="text-3xl font-semibold tracking-tight">{tr("الإعدادات")}</h1>
       </header>
+      <section className="rounded-[var(--radius-xl)] border border-border bg-card p-6 shadow-[var(--shadow-card)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid size-12 shrink-0 place-items-center rounded-[var(--radius-md)] bg-primary/10 text-primary">
+              <Languages className="size-6" />
+            </span>
+            <div>
+              <h2 className="text-xl font-semibold">{tr("اللغة المفضلة")}</h2>
+              <p className="mt-1 text-sm text-fg-muted">{tr("تُفتح لك الصفحة بهذه اللغة عند الدخول، ويتغير العرض فوراً بعد التحديث.")}</p>
+            </div>
+          </div>
+          <div className="grid h-11 w-full grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-border sm:w-64">
+            {(
+              [
+                ["ar", "العربية"],
+                ["en", "English"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setLocale(key as Locale)}
+                className={
+                  locale === key
+                    ? "bg-primary text-sm font-semibold text-primary-fg"
+                    : "bg-bg text-sm font-medium text-fg-muted hover:text-fg"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => {
           const Icon = card.icon;

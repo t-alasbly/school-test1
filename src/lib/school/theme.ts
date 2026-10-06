@@ -34,6 +34,7 @@ export type Appearance = {
   font: FontId;
   fontScale?: number;
   calendar?: CalendarKind;
+  locale?: "ar" | "en";
   custom?: Partial<Pick<ThemeTokens, "primary" | "bg" | "fg" | "card">>;
 };
 
@@ -265,7 +266,10 @@ export const FONT_LIST = Object.keys(FONT_LABEL) as FontId[];
 
 export function parseAppearance(raw: unknown): Appearance {
   const optional = parseOptionalAppearance(raw);
-  return optional ?? { themeId: "oasis", font: "cairo", fontScale: 1, calendar: "hijri" };
+  const base: Appearance = { themeId: "oasis", font: "cairo", fontScale: 1, calendar: "hijri" };
+  if (!optional) return base;
+  if (!optional.themeId) return { ...base, locale: optional.locale };
+  return { ...base, ...optional };
 }
 
 export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
@@ -279,8 +283,11 @@ export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const rec = value as Record<string, unknown>;
-  if (rec.themeId == null && rec.font == null && rec.custom == null && rec.fontScale == null && rec.calendar == null)
+  if (rec.themeId == null && rec.font == null && rec.custom == null && rec.fontScale == null && rec.calendar == null && rec.locale == null)
     return undefined;
+  const locale = rec.locale === "en" || rec.locale === "ar" ? rec.locale : undefined;
+  const hasLook = rec.themeId != null || rec.font != null || rec.custom != null || rec.fontScale != null || rec.calendar != null;
+  if (!hasLook) return locale ? ({ locale } as Appearance) : undefined;
   const themeId = THEMES[rec.themeId as ThemeId] ? (rec.themeId as ThemeId) : "oasis";
   const font = FONT_STACKS[rec.font as FontId] ? (rec.font as FontId) : THEMES[themeId].font;
   const customRaw = rec.custom;
@@ -295,18 +302,20 @@ export function parseOptionalAppearance(raw: unknown): Appearance | undefined {
     if (Object.keys(custom).length === 0) custom = undefined;
   }
   const fontScale = rec.fontScale == null ? 1 : clampFontScale(rec.fontScale);
-  return { themeId, font, custom, fontScale, calendar: parseCalendar(rec.calendar) };
+  return { themeId, font, custom, fontScale, calendar: parseCalendar(rec.calendar), locale };
 }
 
 export function mergeAppearance(school: Appearance, personal: Appearance | undefined): Appearance {
+  const locale = personal?.locale ?? school.locale;
   if (personal && personal.themeId) {
     return {
       ...school,
       ...personal,
       calendar: personal.calendar ?? school.calendar ?? "hijri",
+      locale,
     };
   }
-  return { ...school, calendar: school.calendar ?? "hijri" };
+  return { ...school, calendar: school.calendar ?? "hijri", locale };
 }
 
 export function resolvedTokens(appearance: Appearance): ThemeTokens {

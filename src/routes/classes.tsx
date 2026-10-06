@@ -9,6 +9,7 @@ import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { listStudents } from "@/lib/school/api";
 import {
@@ -54,6 +55,7 @@ type RosterStudent = {
   shortName: string;
   label: string;
   parentPhone?: string;
+  healthNote?: string;
 };
 
 function ClassesBody() {
@@ -208,7 +210,15 @@ function ClassesBody() {
                 } else setActiveStudent(student.id);
               }}
             >
-              <span className="block truncate text-base font-semibold">{studentLabel(locale, student.name)}</span>
+              <span className="flex flex-wrap items-center gap-2">
+                {student.healthNote ? (
+                  <span className="inline-flex max-w-full items-center gap-1.5">
+                    <Badge tone="warn" className="shrink-0">{tr("ملاحظة صحية")}</Badge>
+                    <span className="text-xs font-medium leading-5 text-warn">{student.healthNote}</span>
+                  </span>
+                ) : null}
+                <span className="min-w-0 text-base font-semibold">{studentLabel(locale, student.name)}</span>
+              </span>
               <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>
             </button>
             <StudentQuickActions

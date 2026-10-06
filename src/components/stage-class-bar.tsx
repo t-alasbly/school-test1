@@ -59,6 +59,12 @@ export function StageClassBar({
   actions?: ReactNode;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  const scope = selectedClassId
+    ? classes.filter((cls) => cls.id === selectedClassId)
+    : classes.filter((cls) => cls.stageId === selectedStageId);
+  const classSize = scope.reduce((sum, cls) => sum + (cls.studentCount ?? 0), 0);
+  const absentToday = scope.reduce((sum, cls) => sum + (cls.absenceToday ?? 0), 0);
+  const presentToday = Math.max(0, classSize - absentToday);
 
   return (
     <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-2 border-b border-border bg-bg-elevated px-3 py-1 sm:px-4 sm:py-1.5">
@@ -68,6 +74,7 @@ export function StageClassBar({
             {tr("لا صفوف بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.")}
           </p>
         ) : (
+          <>
           <div className="flex items-center gap-1.5">
             <div className="flex min-w-0 flex-1 flex-wrap gap-1">
             {stages.map((stage) => {
@@ -100,7 +107,7 @@ export function StageClassBar({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-64 p-2">
-                    <p className="px-2 pb-2 text-xs text-fg-muted">{placeLabel(stage.name)} — {tr("اختر الفصل")}</p>
+                    <p className="px-2 pb-2 text-xs text-fg-muted">{placeLabel(stage.name)} — {tr("اختر الفصل")} · {tr("الحضور")} · {tr("غياب اليوم")}</p>
                     <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
                       <button
                         type="button"
@@ -126,13 +133,18 @@ export function StageClassBar({
                             setOpenId(null);
                           }}
                           className={cn(
-                            "flex min-h-10 items-center rounded-[var(--radius-sm)] px-3 text-sm",
+                            "flex min-h-10 items-center justify-between gap-2 rounded-[var(--radius-sm)] px-3 text-sm",
                             selectedClassId === cls.id
                               ? "bg-primary text-primary-fg"
                               : "hover:bg-muted",
                           )}
                         >
-                          {placeLabel(cls.label || classLabel(cls.shortName, cls.name))}
+                          <span className="min-w-0 truncate">{placeLabel(cls.label || classLabel(cls.shortName, cls.name))}</span>
+                          <span className={cn("shrink-0 text-[11px] tabular-nums", selectedClassId === cls.id ? "text-primary-fg/80" : "text-fg-muted")}>
+                            {Math.max(0, (cls.studentCount ?? 0) - (cls.absenceToday ?? 0))}
+                            {" · "}
+                            {cls.absenceToday ?? 0}
+                          </span>
                         </button>
                       ))}
                       {stageClasses.length === 0 ? (
@@ -170,6 +182,14 @@ export function StageClassBar({
               {actions}
             </div>
           </div>
+          <p className="mt-1 text-xs text-fg-muted">
+            {selectedClassId ? tr("عدد الفصل") : tr("الطلاب")} <span className="font-semibold text-fg">{classSize}</span>
+            <span className="mx-1.5">·</span>
+            {tr("الحضور")} <span className="font-semibold text-ok">{presentToday}</span>
+            <span className="mx-1.5">·</span>
+            {tr("غياب اليوم")} <span className={cn("font-semibold", absentToday > 0 ? "text-danger" : "text-fg")}>{absentToday}</span>
+          </p>
+          </>
         )}
       </div>
     </div>

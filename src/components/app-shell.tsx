@@ -9,11 +9,11 @@ import {
   Printer,
   Settings,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { ROLE_LABEL, schoolLogoSrc } from "@/lib/school/constants";
-import { useLocale, tr } from "@/lib/school/i18n";
+import { rememberLocale, tr, useLocale } from "@/lib/school/i18n";
 import { formatToday } from "@/lib/school/calendar";
 import { canFollowup, staffCan } from "@/lib/school/permissions";
 import { useCalendar } from "@/lib/school/use-calendar";
@@ -59,6 +59,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
+  useEffect(() => {
+    const preferred = staff.appearance?.locale;
+    if (preferred !== "ar" && preferred !== "en") return;
+    if (window.localStorage.getItem("school-locale-user") === staff.userId) return;
+    window.localStorage.setItem("school-locale-user", staff.userId);
+    rememberLocale(preferred);
+    if (preferred !== locale) window.location.reload();
+  }, [staff.userId, staff.appearance?.locale, locale]);
   const schoolLogo = schoolLogoSrc(school.logoUrl);
   const items = NAV.filter((item) => {
     if (staff.role === "pending") return false;
