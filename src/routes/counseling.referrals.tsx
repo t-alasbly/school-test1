@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { NoteThread } from "@/components/note-thread";
@@ -24,8 +25,8 @@ function ReferralsPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">يحيلها وكيل شؤون الطلاب من لوحة المخالفات</p>
-        <h1 className="text-3xl font-semibold tracking-tight">المخالفات المحالة للإرشاد</h1>
+        <p className="text-sm text-fg-muted">{tr("يحيلها وكيل شؤون الطلاب من لوحة المخالفات")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("المخالفات المحالة للإرشاد")}</h1>
       </header>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
@@ -45,7 +46,7 @@ function ReferralsPage() {
                 </Badge>
                 {item.behaviorTypeName ? (
                   <span className="text-xs text-fg-muted">
-                    {item.behaviorTypeName}
+                    {tr(item.behaviorTypeName)}
                     {item.behaviorDegree ? ` · ${degreeLabel(item.behaviorDegree)}` : ""}
                   </span>
                 ) : null}
@@ -85,7 +86,7 @@ function ReferralsPage() {
                   ]}
                   studentId={item.studentId}
                   defaultKind="referral"
-                  label="نموذج الإحالة"
+                  label={tr("نموذج الإحالة")}
                 />
                 <PrintFormsButton
                   student={{
@@ -110,7 +111,7 @@ function ReferralsPage() {
                   ]}
                   studentId={item.studentId}
                   defaultKind="compensation"
-                  label="نموذج التعويض"
+                  label={tr("نموذج التعويض")}
                 />
               </div>
             </li>
@@ -122,7 +123,7 @@ function ReferralsPage() {
           ) : null}
         </ul>
         <aside className="h-fit space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 lg:sticky lg:top-24">
-          <h2 className="text-base font-semibold">فرص تعويض الدرجات</h2>
+          <h2 className="text-base font-semibold">{tr("فرص تعويض الدرجات")}</h2>
           <p className="text-xs leading-5 text-fg-muted">
             خاصية جانبية. اختر منها للطالب المحال في بطاقته، أو أضف فرصة غير موجودة في القائمة.
           </p>

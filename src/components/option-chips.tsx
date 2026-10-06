@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { tr } from "@/lib/school/i18n";
 import { isOtherChoice } from "@/lib/school/constants";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +9,7 @@ export function OptionChips({
   onToggle,
   otherValue,
   onOtherChange,
-  otherPlaceholder = "اكتب يدوياً…",
+  otherPlaceholder = tr("اكتب يدوياً…"),
 }: {
   items: string[];
   selected: string[];
@@ -35,7 +36,7 @@ export function OptionChips({
                   : "border-border bg-bg-elevated text-fg-muted",
               )}
             >
-              {item}
+              {tr(item)}
             </button>
           );
         })}

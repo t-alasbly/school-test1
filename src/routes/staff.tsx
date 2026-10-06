@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +25,7 @@ function StaffPage() {
 function StaffBody() {
   const { staff, school } = useWorkspace();
   if (!staffCan(staff, "editStaff")) {
-    return <p className="text-fg-muted">إدارة الموظفين متاحة لمن مُنح صلاحية تعديل الموظفين.</p>;
+    return <p className="text-fg-muted">{tr("إدارة الموظفين متاحة لمن مُنح صلاحية تعديل الموظفين.")}</p>;
   }
   return (
     <div className="space-y-6">
@@ -33,7 +34,7 @@ function StaffBody() {
         <p className="text-sm text-fg-muted">
           اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف الدخول دون حذف السجل. «حذف نهائي» يزيل الحساب تماماً.
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">شؤون الموظفين</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("شؤون الموظفين")}</h1>
       </header>
       {staff.role === "admin" ? <TeacherDefaults school={school} /> : null}
       <StaffManager />
@@ -54,10 +55,10 @@ function TeacherDefaults({
     mutationFn: (next: { teachersCanMessage: boolean; teachersCanViewAll: boolean }) =>
       updateSchoolPermissions({ data: next }),
     onSuccess: () => {
-      toast.success("تم حفظ الافتراضي للمعلمين الجدد");
+      toast.success(tr("تم حفظ الافتراضي للمعلمين الجدد"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function apply(partial: Partial<{ teachersCanMessage: boolean; teachersCanViewAll: boolean }>) {
@@ -73,29 +74,29 @@ function TeacherDefaults({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>افتراضي المعلمين الجدد</CardTitle>
+        <CardTitle>{tr("افتراضي المعلمين الجدد")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         <p className="text-sm text-fg-muted">
           يُطبَّق على المعلم عند إنشائه. لأي موظف محدد استخدم «صلاحيات» أمام اسمه في القائمة أدناه.
         </p>
         <ToggleRow
-          title="إرسال رسالة لولي الأمر"
-          body="إن أُخفي، لا يظهر زر واتساب للمعلم الجديد حتى يُمنح من صلاحياته."
+          title={tr("إرسال رسالة لولي الأمر")}
+          body={tr("إن أُخفي، لا يظهر زر واتساب للمعلم الجديد حتى يُمنح من صلاحياته.")}
           on={teachersCanMessage}
-          onLabel="إظهار الإرسال"
-          offLabel="إخفاء الإرسال"
+          onLabel={tr("إظهار الإرسال")}
+          offLabel={tr("إخفاء الإرسال")}
           onChange={(on) => apply({ teachersCanMessage: on })}
         />
         <ToggleRow
-          title="مشاهدة جميع المخالفات"
-          body="إن لم يُفعَّل، يرى المعلم الجديد ملاحظاته فقط."
+          title={tr("مشاهدة جميع المخالفات")}
+          body={tr("إن لم يُفعَّل، يرى المعلم الجديد ملاحظاته فقط.")}
           on={teachersCanViewAll}
-          onLabel="مفعّل — كل المعلمين"
-          offLabel="مخالفات المعلم فقط"
+          onLabel={tr("مفعّل — كل المعلمين")}
+          offLabel={tr("مخالفات المعلم فقط")}
           onChange={(on) => apply({ teachersCanViewAll: on })}
         />
-        {mutation.isPending ? <p className="text-xs text-fg-muted">جارٍ الحفظ…</p> : null}
+        {mutation.isPending ? <p className="text-xs text-fg-muted">{tr("جارٍ الحفظ…")}</p> : null}
       </CardContent>
     </Card>
   );

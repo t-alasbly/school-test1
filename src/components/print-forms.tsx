@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { tr } from "@/lib/school/i18n";
 import { Printer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -85,64 +86,64 @@ export const FORM_ORDER = [
 ] as const;
 export const FORM_META: Record<string, { title: string; confidential?: boolean }> = {
   commitment: {
-    title: "نموذج الالتزام المدرسي",
+    title: tr("نموذج الالتزام المدرسي"),
   },
   excellence: {
-    title: "نموذج رصد درجات السلوك المتميز",
+    title: tr("نموذج رصد درجات السلوك المتميز"),
   },
   plan: {
-    title: "نموذج خطة تعديل السلوك",
+    title: tr("نموذج خطة تعديل السلوك"),
   },
   "teacher-log": {
-    title: "نموذج رصد المعلم لمشكلة سلوكية",
+    title: tr("نموذج رصد المعلم لمشكلة سلوكية"),
   },
   record: {
-    title: "نموذج رصد المشكلات السلوكية",
+    title: tr("نموذج رصد المشكلات السلوكية"),
   },
   compensation: {
-    title: "نموذج فرص تعويض درجات السلوك الإيجابي",
+    title: tr("نموذج فرص تعويض درجات السلوك الإيجابي"),
   },
   referral: {
-    title: "إحالة طالب / طالبة",
+    title: tr("إحالة طالب / طالبة"),
     confidential: true,
   },
   pledge: {
-    title: "تعهد سلوكي",
+    title: tr("تعهد سلوكي"),
   },
   notice: {
-    title: "إشعار ولي الأمر بمشكلة سلوكية",
+    title: tr("إشعار ولي الأمر بمشكلة سلوكية"),
     confidential: true,
   },
   invite: {
-    title: "خطاب دعوة ولي الأمر",
+    title: tr("خطاب دعوة ولي الأمر"),
   },
   incident: {
-    title: "محضر ضبط واقعة",
+    title: tr("محضر ضبط واقعة"),
     confidential: true,
   },
   committee: {
-    title: "محضر اجتماع لجنة التوجيه الطلابي",
+    title: tr("محضر اجتماع لجنة التوجيه الطلابي"),
     confidential: true,
   },
   violence: {
-    title: "إبلاغ عن حالة إيذاء",
+    title: tr("إبلاغ عن حالة إيذاء"),
     confidential: true,
   },
   risk: {
-    title: "إبلاغ عن حالة عالية الخطورة",
+    title: tr("إبلاغ عن حالة عالية الخطورة"),
     confidential: true,
   },
   "absence-excused": {
-    title: "نموذج إجراءات الغياب بعذر",
+    title: tr("نموذج إجراءات الغياب بعذر"),
   },
   "absence-unexcused": {
-    title: "نموذج إجراءات الغياب بدون عذر",
+    title: tr("نموذج إجراءات الغياب بدون عذر"),
   },
   attendance: {
-    title: "تعهد الالتزام بالحضور",
+    title: tr("تعهد الالتزام بالحضور"),
   },
   receipt: {
-    title: "إفادة استلام قواعد السلوك",
+    title: tr("إفادة استلام قواعد السلوك"),
   },
 };
 export function notesToPrintable(notes) {
@@ -167,7 +168,7 @@ export function PrintFormsButton({
   student,
   notes,
   defaultKind,
-  label = "طباعة نموذج",
+  label = tr("طباعة نموذج"),
   size = "sm",
   studentId,
   className,
@@ -252,20 +253,20 @@ function PrintFormsDialog({
         </DialogHeader>
         <div className="no-print mb-4 flex flex-wrap items-end gap-3">
           <div className="min-w-48 flex-1 space-y-1.5">
-            <Label htmlFor="form-kind">النموذج</Label>
+            <Label htmlFor="form-kind">{tr("النموذج")}</Label>
             <Select
               id="form-kind"
               value={kind}
               onChange={(e) => setKind(e.target.value)}
             >
               {FORM_ORDER.map((k) => (
-                <option value={k}>{FORM_META[k].title}</option>
+                <option value={k}>{tr(FORM_META[k].title)}</option>
               ))}
             </Select>
           </div>
           {allNotes.length > 1 ? (
             <div className="min-w-48 flex-1 space-y-1.5">
-              <Label htmlFor="form-note">الملاحظة المعتمدة للتعبئة</Label>
+              <Label htmlFor="form-note">{tr("الملاحظة المعتمدة للتعبئة")}</Label>
               <Select
                 id="form-note"
                 value={String(noteIdx)}
@@ -273,7 +274,7 @@ function PrintFormsDialog({
               >
                 {allNotes.map((n, i) => (
                   <option value={i}>
-                    {(n.behaviorTypeName || n.details || "ملاحظة") +
+                    {(n.behaviorTypeName || n.details || tr("ملاحظة")) +
                       (n.createdAt ? ` — ${formatDay(n.createdAt)}` : "")}
                   </option>
                 ))}
@@ -284,7 +285,7 @@ function PrintFormsDialog({
             onClick={() => sheetRef.current && printElement(sheetRef.current)}
           >
             <Printer className="size-4" />
-            طباعة
+            {tr("طباعة")}
           </Button>
           <Button
             type="button"
@@ -318,34 +319,34 @@ function PrintFormsDialog({
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
             {[
-              ["name", "اسم الطالب", student.name],
-              ["classLine", "الصف / الفصل", student.classLabel],
+              ["name", tr("اسم الطالب"), student.name],
+              ["classLine", tr("الصف / الفصل"), student.classLabel],
               [
                 "violation",
-                "المخالفة / الموضوع",
+                tr("المخالفة / الموضوع"),
                 selected?.behaviorTypeName || selected?.details || "",
               ],
               [
                 "degree",
-                "الدرجة",
+                tr("الدرجة"),
                 selected?.behaviorDegree ? String(selected.behaviorDegree) : "",
               ],
               [
                 "day",
-                "التاريخ",
+                tr("التاريخ"),
                 selected
                   ? formatDay(selected.occurredAt || selected.createdAt)
                   : "",
               ],
               [
                 "weekday",
-                "اليوم",
+                tr("اليوم"),
                 selected
                   ? weekdayName(selected.occurredAt || selected.createdAt)
                   : "",
               ],
-              ["period", "الحصة", ""],
-              ["subject", "المادة", selected?.teacherSubject || ""],
+              ["period", tr("الحصة"), ""],
+              ["subject", tr("المادة"), selected?.teacherSubject || ""],
             ].map(([key, label, fallback]) => (
               <div className="space-y-1.5">
                 <Label htmlFor={`ov-${key}`}>{label}</Label>
@@ -363,7 +364,7 @@ function PrintFormsDialog({
               </div>
             ))}
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ov-action">الإجراءات (سطر لكل إجراء)</Label>
+              <Label htmlFor="ov-action">{tr("الإجراءات (سطر لكل إجراء)")}</Label>
               <textarea
                 id="ov-action"
                 className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
@@ -374,11 +375,11 @@ function PrintFormsDialog({
                     actionText: e.target.value,
                   }))
                 }
-                placeholder="اتركه فارغاً لاستخدام الإجراء الرسمي تلقائياً"
+                placeholder={tr("اتركه فارغاً لاستخدام الإجراء الرسمي تلقائياً")}
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ov-extra">بيانات إضافية / ملاحظات يدوية</Label>
+              <Label htmlFor="ov-extra">{tr("بيانات إضافية / ملاحظات يدوية")}</Label>
               <textarea
                 id="ov-extra"
                 className="min-h-16 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
@@ -389,7 +390,7 @@ function PrintFormsDialog({
                     extra: e.target.value,
                   }))
                 }
-                placeholder="يظهر في النموذج أسفل بيانات المخالفة"
+                placeholder={tr("يظهر في النموذج أسفل بيانات المخالفة")}
               />
             </div>
           </div>
@@ -446,7 +447,7 @@ export function OfficialForm({
   const studentWord = studentNoun(school.studentGender);
   const principal = principalTitle(school.leadershipGender);
   const counselor = counselorTitle(school.leadershipGender);
-  const did = school.studentGender === "female" ? "قامت" : "قام";
+  const did = school.studentGender === "female" ? tr("قامت") : tr("قام");
   const previous = previousSame(notes, focus);
   const occurrence =
     focus?.occurrence ||
@@ -520,7 +521,7 @@ export function OfficialForm({
     >
       <FormHeader school={school} confidential={FORM_META[kind].confidential} />
       <h2 className="mb-2 text-center text-[20px] font-semibold tracking-wide">
-        {FORM_META[kind].title}
+        {tr(FORM_META[kind].title)}
       </h2>
       <StudentIdentity
         name={ctx.name}
@@ -608,7 +609,7 @@ function ActionNoteBox({ note }) {
   if (!note.trim()) return null;
   return (
     <div className="my-2 rounded-sm border border-black px-3 py-2 text-[13.5px] leading-7">
-      <p className="font-semibold">الملاحظات</p>
+      <p className="font-semibold">{tr("الملاحظات")}</p>
       <p>{note}</p>
     </div>
   );
@@ -646,26 +647,26 @@ export function OfficialLetterhead({
         <div className="flex flex-col items-center justify-center px-1 text-center">
           <img
             src="/ksa-diwani.png"
-            alt="المملكة العربية السعودية"
+            alt={tr("المملكة العربية السعودية")}
             className="ksa-diwani mx-auto h-[35px] w-auto max-w-full object-contain object-center"
           />
           <p className="ksa-ministry mt-0.5 text-[13px] font-semibold tracking-wide text-[#14532d]">
-            وزارة التعليم
+            {tr("وزارة التعليم")}
           </p>
           {confidential ? (
-            <p className="mt-1 text-[12px] font-semibold text-[#00857c]">سري</p>
+            <p className="mt-1 text-[12px] font-semibold text-[#00857c]">{tr("سري")}</p>
           ) : null}
         </div>
         <div className="flex items-center justify-center gap-2">
           <img
             src="/moe-logo.jpg"
-            alt="شعار وزارة التعليم"
+            alt={tr("شعار وزارة التعليم")}
             className="h-[62px] w-auto max-w-[6.5rem] object-contain"
           />
           {school.extraLogoUrl ? (
             <img
               src={school.extraLogoUrl}
-              alt="شعار الرؤية"
+              alt={tr("شعار الرؤية")}
               className="h-[62px] w-auto max-w-[6.5rem] object-contain"
             />
           ) : null}
@@ -674,7 +675,7 @@ export function OfficialLetterhead({
           {school.printSchoolLogo && schoolLogoSrc(school.logoUrl) ? (
             <img
               src={schoolLogoSrc(school.logoUrl)}
-              alt="شعار المدرسة"
+              alt={tr("شعار المدرسة")}
               className="h-[62px] w-auto max-w-[5.5rem] object-contain"
             />
           ) : null}
@@ -695,7 +696,7 @@ function StudentIdentity({ name, classLine, studentWord }) {
       <thead>
         <tr>
           <th>اسم {studentWord}</th>
-          <th>الصف / الفصل</th>
+          <th>{tr("الصف / الفصل")}</th>
         </tr>
       </thead>
       <tbody>
@@ -721,14 +722,14 @@ function ViolationStrip({
   time,
 }) {
   const cells = [
-    ["المخالفة / الموضوع", violation || "………………"],
-    ["الدرجة", degree || "…………"],
+    [tr("المخالفة / الموضوع"), violation || "………………"],
+    [tr("الدرجة"), degree || "…………"],
     [
-      "اليوم والتاريخ",
+      tr("اليوم والتاريخ"),
       [weekday || "…………", day || "………………", time].filter(Boolean).join(" — "),
     ],
     [
-      "الحصة / المادة",
+      tr("الحصة / المادة"),
       [period, subject].filter(Boolean).join(" · ") || "………………",
     ],
   ];
@@ -757,10 +758,10 @@ function SignRow({ items, note }) {
       <div className="mt-5 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
         {items.map((item) => (
           <div>
-            <p className="font-semibold">{item.title}</p>
+            <p className="font-semibold">{tr(item.title)}</p>
             <p>الاسم: {item.name || "………………"}</p>
-            <p>التوقيع: ………………</p>
-            <p>التاريخ: ………………</p>
+            <p>{tr("التوقيع: ………………")}</p>
+            <p>{tr("التاريخ: ………………")}</p>
           </div>
         ))}
       </div>
@@ -781,18 +782,18 @@ function RepeatBox({ ctx }) {
     <div className="official-tint my-2 rounded-sm border border-[#00857c] px-3 py-2 text-[12px] leading-6">
       <p className="font-semibold text-[#00857c]">
         هذه {occurrenceLabel(ctx.occurrence)} لنفس المخالفة
-        {ctx.focus?.behaviorTypeName ? ` (${ctx.focus.behaviorTypeName})` : ""}.
+        {ctx.focus?.behaviorTypeName ? ` (${tr(ctx.focus.behaviorTypeName)})` : ""}.
       </p>
       {ctx.previous.length ? (
         <table className="official-table mt-1">
           <thead>
             <tr>
               {[
-                "المرة",
-                "اليوم والتاريخ",
-                "الحصة",
-                "المادة",
-                "الإجراء السابق",
+                tr("المرة"),
+                tr("اليوم والتاريخ"),
+                tr("الحصة"),
+                tr("المادة"),
+                tr("الإجراء السابق"),
               ].map((h) => (
                 <th>{h}</th>
               ))}
@@ -854,7 +855,7 @@ function PledgeBody({ ctx }) {
       </p>
       <p>
         أنني قمت في يوم <Dotted value={ctx.weekday} /> الموافق{" "}
-        <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} />
+        <Dotted value={ctx.day} /> {tr("هجريًا")}<Dotted value={ctx.hijri} />
         {ctx.period ? (
           <Fragment>
             {" "}
@@ -875,13 +876,13 @@ function PledgeBody({ ctx }) {
       {ctx.showParticipants && ctx.participants?.length ? (
         <p>
           والمشاركون في هذه المخالفة المشتركة:{" "}
-          <Dotted value={ctx.participants.join("، ")} />
+          <Dotted value={ctx.participants.join(tr("، "))} />
         </p>
       ) : null}
       <RepeatBox ctx={ctx} />
       <ProcedureList ctx={ctx} />
       <CompensationLine ctx={ctx} />
-      <p>وأتعهد بعدم تكرار أي مشكلة سلوكية مستقبلاً وعلى ذلك جرى التوقيع.</p>
+      <p>{tr("وأتعهد بعدم تكرار أي مشكلة سلوكية مستقبلاً وعلى ذلك جرى التوقيع.")}</p>
       <SignRow
         note={ctx.actionNote}
         items={[
@@ -890,7 +891,7 @@ function PledgeBody({ ctx }) {
             name: ctx.name,
           },
           {
-            title: "ولي الأمر",
+            title: tr("ولي الأمر"),
           },
           {
             title: ctx.principal,
@@ -911,13 +912,13 @@ function ReceiptBody({ ctx }) {
         <Dotted value={ctx.schoolName} />، واطلعت على ما ورد فيها، وأتعهد
         بالتعاون مع إدارة المدرسة لتطبيقها.
       </p>
-      <p>اسم ولي الأمر: …………………………………… رقم الهوية: ……………………</p>
+      <p>{tr("اسم ولي الأمر: …………………………………… رقم الهوية: ……………………")}</p>
       <p>الجوال: {ctx.parentPhone || "……………………"}</p>
       <SignRow
         note={ctx.actionNote}
         items={[
           {
-            title: "ولي الأمر",
+            title: tr("ولي الأمر"),
           },
           {
             title: ctx.principal,
@@ -945,19 +946,19 @@ function CommitmentBody({ ctx }) {
           محتوى قواعد السلوك والمواظبة، وبناء عليه أتعهد أن ألتزم بالأنظمة
           والتعليمات الخاصة بها.
         </p>
-        <p className="mt-2">التوقيع: ……………… التاريخ: / / 14هـ</p>
+        <p className="mt-2">{tr("التوقيع: ……………… التاريخ: / / 14هـ")}</p>
       </div>
       <div className="rounded border border-black p-3">
-        <p className="mb-1 text-[11px] font-semibold">خاص بولي الأمر</p>
+        <p className="mb-1 text-[11px] font-semibold">{tr("خاص بولي الأمر")}</p>
         <p>
           نعم أنا ولي أمر {ctx.studentWord} الموضح اسمه أعلاه، قد اطلعت على
           محتوى قواعد السلوك والمواظبة، وأتعهد أن أتعاون مع إدارة المدرسة في
           سبيل مصلحة ابني / ابنتي، وأتحمل مسؤولية صحة أرقام التواصل التالية:
         </p>
-        <p className="mt-1">الاسم: ……………… العمل: ………………</p>
-        <p>هاتف العمل: ……………… هاتف المنزل: ………………</p>
+        <p className="mt-1">{tr("الاسم: ……………… العمل: ………………")}</p>
+        <p>{tr("هاتف العمل: ……………… هاتف المنزل: ………………")}</p>
         <p>رقم الجوال: {ctx.parentPhone || "………………"} رقم آخر: ………………</p>
-        <p className="mt-1">التوقيع: ……………… التاريخ: / / 14هـ</p>
+        <p className="mt-1">{tr("التوقيع: ……………… التاريخ: / / 14هـ")}</p>
       </div>
       <p className="text-[11px] leading-5">
         ملحوظة: يؤخذ توقيع {ctx.studentWord} وولي الأمر في بداية العام الدراسي،
@@ -973,10 +974,10 @@ function NoticeBody({ ctx }) {
         المكرم ولي أمر {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
         <Dotted value={ctx.classLine} />
       </p>
-      <p>السلام عليكم ورحمة الله وبركاته</p>
+      <p>{tr("السلام عليكم ورحمة الله وبركاته")}</p>
       <p>
         نشعركم بأن {ctx.studentWord} {ctx.did} بمشكلة سلوكية من الدرجة{" "}
-        <Dotted value={ctx.degree} /> وهي <Dotted value={ctx.violation} />
+        <Dotted value={ctx.degree} /> {tr("وهي")}<Dotted value={ctx.violation} />
         {ctx.period ? (
           <Fragment>
             {" "}
@@ -999,11 +1000,11 @@ function NoticeBody({ ctx }) {
       </p>
       <NamesTail note={ctx.actionNote}>
         <div className="mt-6 flex justify-between">
-          <p className="text-[12px]">الختم</p>
+          <p className="text-[12px]">{tr("الختم")}</p>
           <div className="text-center text-[12px] leading-6">
             <p className="font-semibold">{ctx.principal}</p>
             <p>الاسم: {ctx.principalName || "………………"}</p>
-            <p>التوقيع: ………………</p>
+            <p>{tr("التوقيع: ………………")}</p>
           </div>
         </div>
       </NamesTail>
@@ -1017,32 +1018,32 @@ function InviteBody({ ctx }) {
         المكرم ولي أمر {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
         <Dotted value={ctx.classLine} />
       </p>
-      <p>السلام عليكم ورحمة الله وبركاته</p>
+      <p>{tr("السلام عليكم ورحمة الله وبركاته")}</p>
       <p>
         نأمل منكم الحضور إلى المدرسة في يوم <Dotted value={ctx.weekday} />{" "}
-        الموافق <Dotted value={ctx.day} /> هجريًا <Dotted value={ctx.hijri} />{" "}
+        الموافق <Dotted value={ctx.day} /> {tr("هجريًا")}<Dotted value={ctx.hijri} />{" "}
         لمقابلة {ctx.principal}، وذلك بهدف مناقشة مشكلة سلوكية ({ctx.violation}
         ).
       </p>
       <p>شاكرين لكم تعاونكم معنا لتحقيق مصلحة {ctx.studentWord}.</p>
       <NamesTail note={ctx.actionNote}>
         <div className="mt-4 flex justify-between">
-          <p className="text-[12px]">الختم</p>
+          <p className="text-[12px]">{tr("الختم")}</p>
           <div className="text-center text-[12px] leading-6">
             <p className="font-semibold">{ctx.principal}</p>
             <p>الاسم: {ctx.principalName || "………………"}</p>
-            <p>التوقيع: ………………</p>
+            <p>{tr("التوقيع: ………………")}</p>
           </div>
         </div>
       </NamesTail>
       <div className="mt-4 border-t border-black pt-2 text-[13px] leading-7">
-        <p className="font-semibold">رد ولي الأمر:</p>
-        <p>☐ أقر بالعلم، وسأحضر في الموعد المحدد.</p>
+        <p className="font-semibold">{tr("رد ولي الأمر:")}</p>
+        <p>{tr("☐ أقر بالعلم، وسأحضر في الموعد المحدد.")}</p>
         <p>
           ☐ أقر بالعلم، وأرغب بتغيير الموعد (خلال نفس الأسبوع)، وذلك في يوم
           ……………… الموافق / / 14هـ
         </p>
-        <p>الاسم: ……………… التوقيع: ……………… التاريخ: ………………</p>
+        <p>{tr("الاسم: ……………… التوقيع: ……………… التاريخ: ………………")}</p>
       </div>
     </div>
   );
@@ -1050,12 +1051,12 @@ function InviteBody({ ctx }) {
 function ReferralBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
-      <p>المكرم الموجه الطلابي / الموجهة الطلابية</p>
-      <p>السلام عليكم ورحمة الله وبركاته</p>
+      <p>{tr("المكرم الموجه الطلابي / الموجهة الطلابية")}</p>
+      <p>{tr("السلام عليكم ورحمة الله وبركاته")}</p>
       <p>
         نحيل إليكم {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
         <Dotted value={ctx.classLine} /> ذي المشكلة السلوكية من الدرجة{" "}
-        <Dotted value={ctx.degree} /> وهي <Dotted value={ctx.violation} />
+        <Dotted value={ctx.degree} /> {tr("وهي")}<Dotted value={ctx.violation} />
       </p>
       <RepeatBox ctx={ctx} />
       <p>
@@ -1063,11 +1064,11 @@ function ReferralBody({ ctx }) {
       </p>
       <NamesTail note={ctx.actionNote}>
         <div className="mt-8 flex justify-between">
-          <p className="text-[12px]">الختم</p>
+          <p className="text-[12px]">{tr("الختم")}</p>
           <div className="text-center text-[12px] leading-6">
             <p className="font-semibold">{ctx.counselor}</p>
             <p>الاسم: {ctx.counselorName || "………………"}</p>
-            <p>التوقيع: ………………</p>
+            <p>{tr("التوقيع: ………………")}</p>
           </div>
         </div>
       </NamesTail>
@@ -1079,7 +1080,7 @@ function AttendanceBody({ ctx }) {
     ? String(ctx.absenceNotes.length)
     : "…………";
   const dates =
-    ctx.absenceNotes.map((n) => formatDay(n.createdAt)).join("، ") || "………………";
+    ctx.absenceNotes.map((n) => formatDay(n.createdAt)).join(tr("، ")) || "………………";
   return (
     <div className="space-y-3 text-[13.5px] leading-8">
       <p>
@@ -1102,7 +1103,7 @@ function AttendanceBody({ ctx }) {
             name: ctx.name,
           },
           {
-            title: "ولي الأمر",
+            title: tr("ولي الأمر"),
           },
           {
             title: ctx.principal,
@@ -1127,14 +1128,14 @@ function RecordBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "المشكلة السلوكية",
-              "نوعها ودرجتها",
-              "تاريخها",
-              "درجات السلوك المحسومة",
-              "الإجراءات المتخذة",
-              "تاريخ الإجراء",
-              "توقيع الطالب",
-              "توقيع ولي الأمر",
+              tr("المشكلة السلوكية"),
+              tr("نوعها ودرجتها"),
+              tr("تاريخها"),
+              tr("درجات السلوك المحسومة"),
+              tr("الإجراءات المتخذة"),
+              tr("تاريخ الإجراء"),
+              tr("توقيع الطالب"),
+              tr("توقيع ولي الأمر"),
             ].map((h) => (
               <th>{h}</th>
             ))}
@@ -1145,7 +1146,7 @@ function RecordBody({ ctx }) {
             <tr>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
               <td>
-                {n ? `الدرجة ${degreeLabel(n.behaviorDegree) || "—"}` : ""}
+                {n ? `${degreeLabel(n.behaviorDegree) || "—"}` : ""}
               </td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
               <td />
@@ -1184,13 +1185,13 @@ function TeacherLogBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "المشكلة السلوكية",
-              "درجة المشكلة",
-              "الإجراء المتخذ",
-              "مدى الاستجابة",
-              "عدد مرات التكرار",
-              "التاريخ",
-              "الحصة",
+              tr("المشكلة السلوكية"),
+              tr("درجة المشكلة"),
+              tr("الإجراء المتخذ"),
+              tr("مدى الاستجابة"),
+              tr("عدد مرات التكرار"),
+              tr("التاريخ"),
+              tr("الحصة"),
             ].map((h) => (
               <th>{h}</th>
             ))}
@@ -1214,7 +1215,7 @@ function TeacherLogBody({ ctx }) {
       </table>
       {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
       <div className="pt-3 text-center text-[12px] leading-6">
-        <p className="font-semibold">المعلم / المعلمة</p>
+        <p className="font-semibold">{tr("المعلم / المعلمة")}</p>
         <p>الاسم: {teacher || "………………"} — التوقيع: ……………… — التاريخ: ………………</p>
       </div>
     </div>
@@ -1223,14 +1224,14 @@ function TeacherLogBody({ ctx }) {
 function PlanBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-7">
-      <p className="font-semibold">أولاً: تحديد المشكلة السلوكية</p>
+      <p className="font-semibold">{tr("أولاً: تحديد المشكلة السلوكية")}</p>
       <p>
         المشكلة: <Dotted value={ctx.violation} /> درجتها:{" "}
         <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
       <p>وصف المشكلة / المظاهر: {ctx.focus?.details || "—"}</p>
-      <p className="font-semibold">ثالثاً: الإجراءات المستخدمة</p>
+      <p className="font-semibold">{tr("ثالثاً: الإجراءات المستخدمة")}</p>
       {ctx.actionSteps.filter((s) => s.trim()).length ? (
         <ol className="list-decimal pr-5">
           {ctx.actionSteps
@@ -1241,15 +1242,15 @@ function PlanBody({ ctx }) {
             ))}
         </ol>
       ) : null}
-      <p className="font-semibold">رابعاً: تقييم فاعلية الخطة</p>
+      <p className="font-semibold">{tr("رابعاً: تقييم فاعلية الخطة")}</p>
       <p>رأي {ctx.counselor}: …………………………………………</p>
-      <p>رأي معلم الفصل: …………………………………………</p>
-      <p>رأي ولي الأمر: …………………………………………</p>
+      <p>{tr("رأي معلم الفصل: …………………………………………")}</p>
+      <p>{tr("رأي ولي الأمر: …………………………………………")}</p>
       <SignRow
         note={ctx.actionNote}
         items={[
           {
-            title: "القائم بتعديل السلوك",
+            title: tr("القائم بتعديل السلوك"),
           },
           {
             title: ctx.counselor,
@@ -1278,12 +1279,12 @@ function CompensationBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "المشكلة السلوكية",
-              "نوعها ودرجتها",
-              "درجات السلوك المحسومة",
-              "فرص التعويض",
-              "الدرجات المكتسبة",
-              "توقيع الطالب",
+              tr("المشكلة السلوكية"),
+              tr("نوعها ودرجتها"),
+              tr("درجات السلوك المحسومة"),
+              tr("فرص التعويض"),
+              tr("الدرجات المكتسبة"),
+              tr("توقيع الطالب"),
             ].map((h) => (
               <th>{h}</th>
             ))}
@@ -1317,13 +1318,13 @@ function ExcellenceBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "موضوع ممارسة السلوك المتميز",
-              "نوع الممارسة",
-              "تاريخ التنفيذ",
-              "شواهد السلوك المتميز",
-              "الدرجة المكتسبة",
-              "اسم راصد السلوك",
-              "التوقيع",
+              tr("موضوع ممارسة السلوك المتميز"),
+              tr("نوع الممارسة"),
+              tr("تاريخ التنفيذ"),
+              tr("شواهد السلوك المتميز"),
+              tr("الدرجة المكتسبة"),
+              tr("اسم راصد السلوك"),
+              tr("التوقيع"),
             ].map((h) => (
               <th>{h}</th>
             ))}
@@ -1359,12 +1360,12 @@ function IncidentBody({ ctx }) {
         <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
-      <p>نوع المشاهدة المضبوطة: ☐ صور ☐ مقاطع فيديو ☐ محادثات ☐ أخرى ………………</p>
-      <p>مكان ضبط الواقعة: …………………………………… شهود الواقعة: ……………………</p>
+      <p>{tr("نوع المشاهدة المضبوطة: ☐ صور ☐ مقاطع فيديو ☐ محادثات ☐ أخرى ………………")}</p>
+      <p>{tr("مكان ضبط الواقعة: …………………………………… شهود الواقعة: ……………………")}</p>
       <table className="official-table">
         <thead>
           <tr>
-            {["م", "الاسم", "الوظيفة", "العمل المسند إليه", "التوقيع"].map(
+            {[tr("م"), tr("الاسم"), tr("الوظيفة"), tr("العمل المسند إليه"), tr("التوقيع")].map(
               (h) => (
                 <th>{h}</th>
               ),
@@ -1393,7 +1394,7 @@ function IncidentBody({ ctx }) {
             name: ctx.name,
           },
           {
-            title: "ولي الأمر",
+            title: tr("ولي الأمر"),
           },
           {
             title: ctx.principal,
@@ -1414,7 +1415,7 @@ function CommitteeBody({ ctx }) {
         تصنيف المشكلة: الدرجة <Dotted value={ctx.degree} />
       </p>
       <RepeatBox ctx={ctx} />
-      <p>قرارات اللجنة:</p>
+      <p>{tr("قرارات اللجنة:")}</p>
       {ctx.actionSteps.filter((s) => s.trim()).length ? (
         <ol className="list-decimal pr-5">
           {ctx.actionSteps
@@ -1428,7 +1429,7 @@ function CommitteeBody({ ctx }) {
       <table className="official-table">
         <thead>
           <tr>
-            {["م", "اسم العضو", "الوظيفة", "العمل المسند إليه", "التوقيع"].map(
+            {[tr("م"), tr("اسم العضو"), tr("الوظيفة"), tr("العمل المسند إليه"), tr("التوقيع")].map(
               (h) => (
                 <th>{h}</th>
               ),
@@ -1437,12 +1438,12 @@ function CommitteeBody({ ctx }) {
         </thead>
         <tbody>
           {[
-            ["1", ctx.counselorName || "", ctx.counselor, "رئيس / رئيسة"],
-            ["2", "", "وكيل الشؤون التعليمية", "عضو"],
-            ["3", "", "الموجه الطلابي", "مقرر / مقررة"],
-            ["4", "", "معلم متميز", "عضو"],
-            ["5", "", "معلم متميز", "عضو"],
-            ["6", "", "معلم متميز", "عضو"],
+            ["1", ctx.counselorName || "", ctx.counselor, tr("رئيس / رئيسة")],
+            ["2", "", tr("وكيل الشؤون التعليمية"), tr("عضو")],
+            ["3", "", tr("الموجه الطلابي"), tr("مقرر / مقررة")],
+            ["4", "", tr("معلم متميز"), tr("عضو")],
+            ["5", "", tr("معلم متميز"), tr("عضو")],
+            ["6", "", tr("معلم متميز"), tr("عضو")],
           ].map((row) => (
             <tr>
               {row.map((c, i) => (
@@ -1464,18 +1465,18 @@ function CommitteeBody({ ctx }) {
 function ViolenceBody({ ctx }) {
   return (
     <div className="space-y-2 text-[12.5px] leading-7">
-      <p className="text-center text-[11px] font-semibold">(سري للغاية)</p>
+      <p className="text-center text-[11px] font-semibold">{tr("(سري للغاية)")}</p>
       <p>
         اليوم: {ctx.weekday} — التاريخ: {ctx.day} — الساعة: ………………
       </p>
       <table className="official-table">
         <tbody>
           <tr>
-            <th className="w-1/3">ملخص المشكلة</th>
+            <th className="w-1/3">{tr("ملخص المشكلة")}</th>
             <td>{ctx.violation}</td>
           </tr>
           <tr>
-            <th>أبرز الإجراءات المتخذة</th>
+            <th>{tr("أبرز الإجراءات المتخذة")}</th>
             <td>{ctx.actionSteps.join(" — ") || "………………"}</td>
           </tr>
         </tbody>
@@ -1494,21 +1495,21 @@ function ViolenceBody({ ctx }) {
 function RiskBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13px] leading-7">
-      <p className="text-center text-[11px] font-semibold">(سري للغاية)</p>
+      <p className="text-center text-[11px] font-semibold">{tr("(سري للغاية)")}</p>
       <p>وصف الحالة: {ctx.violation}</p>
       <p>
         اسم راصد الحالة: {ctx.focus?.teacherName || "………………"} تاريخ الرصد:{" "}
         {ctx.day} وقت الرصد: ………………
       </p>
-      <p className="font-semibold">الإجراءات المتخذة مع الحالة:</p>
+      <p className="font-semibold">{tr("الإجراءات المتخذة مع الحالة:")}</p>
       {[
-        "تبليغ إدارة التعليم",
-        "تبليغ الجهات الأمنية",
-        "تبليغ الحماية من العنف الأسري وحماية الطفل",
-        "تبليغ وزارة الصحة",
-        "التواصل مع الأسرة لإخطارها بوضع الحالة",
-        "عقد اجتماع طارئ للجنة التوجيه الطلابي",
-        "رفع بلاغ عن الحالة في الأنظمة التقنية الخاصة بالبلاغات",
+        tr("تبليغ إدارة التعليم"),
+        tr("تبليغ الجهات الأمنية"),
+        tr("تبليغ الحماية من العنف الأسري وحماية الطفل"),
+        tr("تبليغ وزارة الصحة"),
+        tr("التواصل مع الأسرة لإخطارها بوضع الحالة"),
+        tr("عقد اجتماع طارئ للجنة التوجيه الطلابي"),
+        tr("رفع بلاغ عن الحالة في الأنظمة التقنية الخاصة بالبلاغات"),
       ].map((item) => (
         <p>☐ {item}</p>
       ))}
@@ -1527,18 +1528,18 @@ function AbsenceExcusedBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "عدد أيام الغياب",
-              "الإجراء المتخذ",
-              "تاريخ الإجراء",
-              "توقيع الطالب",
-              "توقيع ولي الأمر",
+              tr("عدد أيام الغياب"),
+              tr("الإجراء المتخذ"),
+              tr("تاريخ الإجراء"),
+              tr("توقيع الطالب"),
+              tr("توقيع ولي الأمر"),
             ].map((h) => (
               <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {["3 أيام", "5 أيام", "10 أيام"].map((d) => (
+          {[tr("3 أيام"), tr("5 أيام"), tr("10 أيام")].map((d) => (
             <tr>
               <td>{d}</td>
               <td />
@@ -1564,19 +1565,19 @@ function AbsenceUnexcusedBody({ ctx }) {
         <thead>
           <tr>
             {[
-              "عدد أيام الغياب",
-              "الإجراء المتخذ",
-              "تاريخ الإجراء",
-              "توقيع الطالب",
-              "توقيع ولي الأمر",
-              "عدد درجات المواظبة المحسومة",
+              tr("عدد أيام الغياب"),
+              tr("الإجراء المتخذ"),
+              tr("تاريخ الإجراء"),
+              tr("توقيع الطالب"),
+              tr("توقيع ولي الأمر"),
+              tr("عدد درجات المواظبة المحسومة"),
             ].map((h) => (
               <th>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {["3 أيام", "3 أيام متصلة", "5 أيام", "10 أيام"].map((d) => (
+          {[tr("3 أيام"), tr("3 أيام متصلة"), tr("5 أيام"), tr("10 أيام")].map((d) => (
             <tr>
               <td>{d}</td>
               <td />

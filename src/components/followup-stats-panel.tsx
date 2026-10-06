@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { Eye, EyeOff, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,19 +17,19 @@ import { getFollowupStats, saveStatCounters } from "@/lib/school/api";
 import { cn } from "@/lib/utils";
 
 const SOURCES = [
-  { key: "daily-absence", label: "الغياب اليومي" },
-  { key: "daily-late", label: "التأخر الصباحي" },
-  { key: "note-absence", label: "الغياب عن الحصة" },
-  { key: "note-late", label: "التأخر عن الحصة" },
-  { key: "homework", label: "الواجبات" },
-  { key: "behavior", label: "المخالفات" },
+  { key: "daily-absence", label: tr("الغياب اليومي") },
+  { key: "daily-late", label: tr("التأخر الصباحي") },
+  { key: "note-absence", label: tr("الغياب عن الحصة") },
+  { key: "note-late", label: tr("التأخر عن الحصة") },
+  { key: "homework", label: tr("الواجبات") },
+  { key: "behavior", label: tr("المخالفات") },
 ] as const;
 
 const RANGES = [
-  { key: "today", label: "اليوم" },
-  { key: "week", label: "أسبوع" },
-  { key: "month", label: "شهر" },
-  { key: "total", label: "المجموع" },
+  { key: "today", label: tr("اليوم") },
+  { key: "week", label: tr("أسبوع") },
+  { key: "month", label: tr("شهر") },
+  { key: "total", label: tr("المجموع") },
 ] as const;
 
 const EMPTY: FollowupStats = {
@@ -75,7 +76,7 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
       void queryClient.invalidateQueries({ queryKey: ["followup-stats"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function toggleHidden(id: string) {
@@ -88,7 +89,7 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
       counters: counters.filter((c) => c.id !== id),
       hidden: hidden.filter((x) => x !== id),
     });
-    toast.success("أُزيل العداد");
+    toast.success(tr("أُزيل العداد"));
   }
 
   const add = useMutation({
@@ -102,13 +103,13 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
       });
     },
     onSuccess: () => {
-      toast.success("أُضيف العداد");
+      toast.success(tr("أُضيف العداد"));
       setTitle("");
       setAddOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["followup-stats"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const stats = query.data?.stats ?? EMPTY;
@@ -132,23 +133,23 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>إضافة عداد</DialogTitle>
+            <DialogTitle>{tr("إضافة عداد")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-fg-muted">
               مثال: الواجبات أو التأخر عن دخول الحصة. عند الضغط على العداد تنتقل لصفحة الإحصاء.
             </p>
             <div className="space-y-1.5">
-              <Label htmlFor="counter-title">اسم العداد</Label>
+              <Label htmlFor="counter-title">{tr("اسم العداد")}</Label>
               <Input
                 id="counter-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="الواجبات"
+                placeholder={tr("الواجبات")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>المصدر</Label>
+              <Label>{tr("المصدر")}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {SOURCES.map((item) => (
                   <button
@@ -161,13 +162,13 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
                         : "border-border bg-bg-elevated text-fg-muted"
                     }`}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </button>
                 ))}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>الفترة</Label>
+              <Label>{tr("الفترة")}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {RANGES.map((item) => (
                   <button
@@ -180,7 +181,7 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
                         : "border-border bg-bg-elevated text-fg-muted"
                     }`}
                   >
-                    {item.label}
+                    {tr(item.label)}
                   </button>
                 ))}
               </div>
@@ -198,22 +199,22 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
       <Dialog open={layoutOpen} onOpenChange={setLayoutOpen}>
         <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>تنسيق العدادات</DialogTitle>
+            <DialogTitle>{tr("تنسيق العدادات")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-fg-muted">أخفِ ما لا تحتاجه أو أزل عدّاداً مضافاً. العدادات المخفية تبقى في القائمة حتى تعيدها.</p>
+          <p className="text-sm text-fg-muted">{tr("أخفِ ما لا تحتاجه أو أزل عدّاداً مضافاً. العدادات المخفية تبقى في القائمة حتى تعيدها.")}</p>
           <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
             {BUILTIN_STAT_CARDS.map((item) => {
               const off = hidden.includes(item.id);
               return (
                 <li key={item.id} className="flex items-center gap-2 px-3 py-2">
-                  <span className={cn("flex-1 text-sm", off && "text-fg-muted")}>{item.label}</span>
+                  <span className={cn("flex-1 text-sm", off && "text-fg-muted")}>{tr(item.label)}</span>
                   <button
                     type="button"
                     onClick={() => toggleHidden(item.id)}
                     className="inline-flex h-9 items-center gap-1 rounded-full px-2 text-xs text-fg-muted hover:bg-muted hover:text-fg"
                   >
                     {off ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    {off ? "مخفي" : "ظاهر"}
+                    {off ? tr("مخفي") : tr("ظاهر")}
                   </button>
                 </li>
               );
@@ -229,13 +230,13 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
                     className="inline-flex h-9 items-center gap-1 rounded-full px-2 text-xs text-fg-muted hover:bg-muted hover:text-fg"
                   >
                     {off ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    {off ? "مخفي" : "ظاهر"}
+                    {off ? tr("مخفي") : tr("ظاهر")}
                   </button>
                   <button
                     type="button"
                     onClick={() => removeExtra(item.id)}
                     className="grid size-9 place-items-center rounded-[var(--radius-sm)] text-danger hover:bg-danger-soft"
-                    aria-label="حذف العداد"
+                    aria-label={tr("حذف العداد")}
                   >
                     <Trash2 className="size-4" />
                   </button>

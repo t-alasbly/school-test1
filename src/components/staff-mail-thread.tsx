@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -49,7 +50,7 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
       void queryClient.invalidateQueries({ queryKey: ["my-mail"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر إرسال الرد"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال الرد")),
   });
 
   const forward = useMutation({
@@ -68,7 +69,7 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
       void queryClient.invalidateQueries({ queryKey: ["my-mail"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التحويل"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر التحويل")),
   });
 
   return (
@@ -82,7 +83,7 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
         <span>{formatStampCalendar(mail.updatedAt || mail.createdAt, calendar)}</span>
       </div>
       {query.isPending ? (
-        <p className="text-xs text-fg-muted">جارٍ تحميل المراسلات…</p>
+        <p className="text-xs text-fg-muted">{tr("جارٍ تحميل المراسلات…")}</p>
       ) : (
         <ul className="max-h-72 space-y-2 overflow-y-auto">
           {messages.map((item) => (
@@ -95,8 +96,8 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
             >
               <p className="text-[11px] text-fg-muted">
                 {item.authorName}
-                {item.authorRole ? ` · ${ROLE_LABEL[item.authorRole as StaffRole] ?? item.authorRole}` : ""}
-                {item.kind === "forward" ? " · تحويل" : ""}
+                {item.authorRole ? ` · ${tr(ROLE_LABEL[item.authorRole as StaffRole]) ?? item.authorRole}` : ""}
+                {item.kind === "forward" ? tr(" · تحويل") : ""}
                 {` · ${formatStampCalendar(item.createdAt, calendar)}`}
               </p>
               <p className="mt-0.5 whitespace-pre-wrap">{item.body}</p>
@@ -107,7 +108,7 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
       <div className="mt-3 flex items-end gap-2">
         <Textarea
           className="min-h-16 flex-1"
-          placeholder="اكتب رداً على هذه المراسلة…"
+          placeholder={tr("اكتب رداً على هذه المراسلة…")}
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
@@ -115,14 +116,14 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
           size="icon"
           disabled={body.trim().length < 1 || reply.isPending}
           onClick={() => reply.mutate()}
-          aria-label="إرسال الرد"
+          aria-label={tr("إرسال الرد")}
         >
           <Send className="size-4" />
         </Button>
       </div>
       {canForward ? (
         <div className="mt-3 space-y-2 rounded-[var(--radius-sm)] border border-border bg-bg p-2">
-          <p className="text-xs font-medium text-fg-muted">تحويل إلى شخص آخر</p>
+          <p className="text-xs font-medium text-fg-muted">{tr("تحويل إلى شخص آخر")}</p>
           <div className="flex flex-wrap gap-1">
             {MAIL_DEST.map((item) => (
               <button
@@ -136,13 +137,13 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
                     : "border-border bg-bg text-fg-muted",
                 )}
               >
-                {item.label}
+                {tr(item.label)}
               </button>
             ))}
           </div>
           {fwdDest === "teacher" ? (
             <Select value={fwdTeacher} onChange={(e) => setFwdTeacher(e.target.value)}>
-              <option value="">اختر المعلم…</option>
+              <option value="">{tr("اختر المعلم…")}</option>
               {peers.map((row) => (
                 <option key={row.userId} value={row.userId}>
                   {row.displayName}
@@ -157,7 +158,7 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
             disabled={forward.isPending || (fwdDest === "teacher" && !fwdTeacher)}
             onClick={() => forward.mutate()}
           >
-            {forward.isPending ? "جارٍ التحويل…" : "تحويل المراسلة"}
+            {forward.isPending ? tr("جارٍ التحويل…") : tr("تحويل المراسلة")}
           </Button>
         </div>
       ) : null}

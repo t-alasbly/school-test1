@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { placeLabel, studentLabel, tr, useLocale } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -56,6 +57,7 @@ type RosterStudent = {
 };
 
 function ClassesBody() {
+  const { locale } = useLocale();
   const { stages, classes, staff } = useWorkspace();
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -100,7 +102,7 @@ function ClassesBody() {
   if (!staffCan(staff, "viewClasses")) {
     return (
       <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
-        صفحة الفصول غير ظاهرة لحسابك.
+        {tr("صفحة الفصول غير ظاهرة لحسابك.")}
       </p>
     );
   }
@@ -136,15 +138,15 @@ function ClassesBody() {
         }}
       />
       <header className="space-y-1">
-        <p className="text-sm text-fg-muted">اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب</p>
-        <h1 className="text-3xl font-semibold tracking-tight">الفصول</h1>
+        <p className="text-sm text-fg-muted">{tr("اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("الفصول")}</h1>
       </header>
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="ابحث عن طالب…"
+          placeholder={tr("ابحث عن طالب…")}
           className="pr-10"
         />
       </div>
@@ -206,8 +208,8 @@ function ClassesBody() {
                 } else setActiveStudent(student.id);
               }}
             >
-              <span className="block truncate text-base font-semibold">{student.name}</span>
-              <span className="block text-xs text-fg-muted">{student.label}</span>
+              <span className="block truncate text-base font-semibold">{studentLabel(locale, student.name)}</span>
+              <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>
             </button>
             <StudentQuickActions
               studentId={student.id}
@@ -220,12 +222,12 @@ function ClassesBody() {
           </li>
         ))}
         {roster.isFetching ? (
-          <li className="px-4 py-10 text-center text-sm text-fg-muted">جارٍ تحميل الأسماء…</li>
+          <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("جارٍ تحميل الأسماء…")}</li>
         ) : shown.length === 0 ? (
           <li className="px-4 py-10 text-center text-sm text-fg-muted">
             {stages.length === 0
-              ? "لم تُضف مراحل بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد."
-              : "لا يوجد طلاب في هذا النطاق."}
+              ? tr("لم تُضف مراحل بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.")
+              : tr("لا يوجد طلاب في هذا النطاق.")}
           </li>
         ) : null}
       </ul>
@@ -243,7 +245,7 @@ function ClassesBody() {
         onSubmitted={(result) => finishGroupPick(result.failedIds)}
       />
       <p className={cn("text-xs text-fg-muted", shown.length === 0 && "hidden")}>
-        اضغط الاسم لسجل الطالب. في المخالفة الجماعية يبقى التحديد عند تغيير المرحلة أو الفصل حتى تسجّل الجميع.
+        {tr("اضغط الاسم لسجل الطالب. في المخالفة الجماعية يبقى التحديد عند تغيير المرحلة أو الفصل حتى تسجّل الجميع.")}
       </p>
     </div>
   );

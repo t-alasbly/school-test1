@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { tr } from "@/lib/school/i18n";
 import { arSA } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker as GregorianPicker } from "react-day-picker";
@@ -41,7 +42,7 @@ export function DayField({
     <div className="inline-flex max-w-full items-center gap-0.5">
       <button
         type="button"
-        aria-label="اليوم السابق"
+        aria-label={tr("اليوم السابق")}
         onClick={() => onChange(shiftIso(value, -1))}
         className="grid size-8 shrink-0 place-items-center rounded-full text-fg-muted transition-colors hover:bg-muted hover:text-fg"
       >
@@ -82,7 +83,7 @@ export function DayField({
       </Popover>
       <button
         type="button"
-        aria-label="اليوم التالي"
+        aria-label={tr("اليوم التالي")}
         onClick={() => onChange(shiftIso(value, 1))}
         className="grid size-8 shrink-0 place-items-center rounded-full text-fg-muted transition-colors hover:bg-muted hover:text-fg"
       >
@@ -102,7 +103,7 @@ export function DayField({
             onClick={() => onCalendar("gregorian")}
             className={cn("h-7 px-2.5 transition-colors", !hijri ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted")}
           >
-            م
+            {tr("م")}
           </button>
         </div>
       ) : null}

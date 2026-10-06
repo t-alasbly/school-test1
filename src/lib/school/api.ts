@@ -33,8 +33,11 @@ import {
   parseProcedures,
   phoneToLoginEmail,
   procedureLadder,
+  proceduresFor,
+  isTeacherVerbal,
   withOccurrence,
 } from "./constants";
+import { transliterateArabicName } from "./transliterate";
 import { parsePermissions, defaultPermissions } from "./permissions";
 import { parseAppearance, parseOptionalAppearance } from "./theme";
 import type {
@@ -324,6 +327,7 @@ async function requirePerm(userId, perm) {
 }
 async function requireApproved(userId) {
 	const sql = await getSql();
+	await ensureStudentEnglish(sql);
 	const staff = await getStaff(sql, userId);
 	if (!staff || staff.role === "pending") throw new Error("لا تملك صلاحية الوصول بعد");
 	if (staff.active === false) throw new Error("تم إلغاء هذا الحساب. راجع مدير التطبيق.");
@@ -334,6 +338,23 @@ async function requireApproved(userId) {
 		staff,
 		school
 	};
+}
+let studentEnglishReady = false;
+async function ensureStudentEnglish(sql) {
+	if (studentEnglishReady) return;
+	await sql.query(`alter table students add column if not exists name_en text not null default ''`);
+	const missing = await sql`select id, name from students where coalesce(name_en, '') = '' limit 800`;
+	for (const row of missing) {
+		const english = transliterateArabicName(row.name);
+		if (!english) continue;
+		await sql`update students set name_en = ${english} where id = ${row.id} and coalesce(name_en, '') = ''`;
+	}
+	studentEnglishReady = true;
+}
+function englishName(name, given) {
+	const typed = typeof given === "string" ? given.trim() : "";
+	if (typed) return typed.slice(0, 120);
+	return transliterateArabicName(name).slice(0, 120);
 }
 async function requireAdmin(userId) {
 	const ctx = await requireApproved(userId);
@@ -755,7 +776,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
     `)[0];
 	if (!row) throw new Error("الفصل غير موجود");
 	const students = await sql`
-      select s.id, s.name, s.parent_phone, coalesce(s.health_note, '') as health_note,
+      select s.id, s.name, coalesce(s.name_en, '') as name_en, s.parent_phone, coalesce(s.health_note, '') as health_note,
              a.kind as daily_kind, a.arrived_at::text as arrived_at
       from students s
       left join daily_attendance a
@@ -809,6 +830,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
 	const studentRows = students.map((s) => ({
 		id: s.id,
 		name: s.name,
+		nameEn: s.name_en ?? "",
 		parentPhone: revealPhone(staff, school, s.parent_phone),
 		classId: row.id,
 		healthNote: s.health_note ?? "",
@@ -834,6 +856,20 @@ var noteTypeSchema = z.enum([
 	"homework",
 	"behavior"
 ]);
+export const previewBehaviorOccurrence = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
+	studentId: z.number(),
+	behaviorTypeId: z.number()
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const count = (await sql`
+      select count(*)::int as count from notes
+      where school_id = ${staff.school_id}
+        and student_id = ${data.studentId}
+        and type = 'behavior'
+        and behavior_type_id = ${data.behaviorTypeId}
+    `)[0]?.count ?? 0;
+	return { next: count + 1 };
+});
 export const createNote = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	studentId: z.number(),
 	type: noteTypeSchema,
@@ -893,13 +929,35 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
           and type = 'behavior'
           and behavior_type_id = ${behaviorTypeId}
       `)[0]?.count ?? 1;
+	let handled = "vp";
+	if (isTeacherVerbal(behaviorDegree, occurrence)) {
+		const stored = behaviorTypeId ? (await sql`
+        select procedures from behavior_types where id = ${behaviorTypeId} and school_id = ${staff.school_id}
+      `)[0]?.procedures : null;
+		const actionTaken = proceduresFor(behaviorDegree, occurrence, parseProcedures(stored, behaviorDegree)).join(" — ");
+		if (actionTaken.trim().length >= 2) {
+			await sql`
+          update notes
+          set status = 'closed',
+              action_taken = ${actionTaken.trim()},
+              closed_at = now(),
+              closed_by = ${staff.user_id}
+          where id = ${noteId} and school_id = ${staff.school_id}
+        `;
+			handled = "verbal";
+		}
+	}
 	const title = occurrence > 1 ? `تكرار مخالفة — ${occurrenceLabel(occurrence)}` : `تم تسجيل ${meta.label}`;
 	const actor = ROLE_LABEL[staff.role] || "الموظف";
-	const body = occurrence > 1 ? `تكررت مخالفة (${behaviorName}) على الطالب ${student.name} ${occurrenceLabel(occurrence)}. سجّلها ${actor} ${staff.display_name}. يُرجى إشعار وكيل الشؤون الفنية${school.technical_vp_name ? ` (${school.technical_vp_name})` : ""} واتخاذ إجراء المرحلة المناسبة.` : `تم تسجيل ${label} للطالب ${student.name} بواسطة ${actor} ${staff.display_name}`;
+	const body = behaviorDegree === 1 && occurrence >= 3
+		? `تكررت مخالفة الدرجة الأولى (${behaviorName}) على الطالب ${student.name} ${occurrenceLabel(occurrence)}. سجّلها ${actor} ${staff.display_name}. تُحال إلى وكيل شؤون الطلاب لاتخاذ إجراء هذه المرحلة.`
+		: occurrence > 1
+			? `تكررت مخالفة (${behaviorName}) على الطالب ${student.name} ${occurrenceLabel(occurrence)}. سجّلها ${actor} ${staff.display_name}. يُرجى إشعار وكيل الشؤون الفنية${school.technical_vp_name ? ` (${school.technical_vp_name})` : ""} واتخاذ إجراء المرحلة المناسبة.`
+			: `تم تسجيل ${label} للطالب ${student.name} بواسطة ${actor} ${staff.display_name}`;
 	const tone = occurrence > 1 ? "danger" : meta.tone;
 	if (data.type === "absence" || data.type === "late") {
 		await upsertAttendanceDigest(sql, staff, school);
-	} else {
+	} else if (handled !== "verbal") {
 		const recipients = await sql`
       select user_id, role, coalesce(permissions::text, '{}') as permissions from staff
       where school_id = ${staff.school_id}
@@ -928,14 +986,15 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 		type: data.type,
 		label,
 		occurrence,
-		referCounselor: refer
+		referCounselor: refer,
+		handled
 	};
 });
 export const getStudentNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({ studentId: z.number() })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
 	await ensureNoteThread(sql);
 	const student = (await sql`
-      select s.id, s.name, s.parent_phone, s.class_id, c.name as class_name,
+      select s.id, s.name, coalesce(s.name_en, '') as name_en, s.parent_phone, s.class_id, c.name as class_name,
              st.short_name, st.name as stage_name,
              coalesce(s.health_note, '') as health_note
       from students s
@@ -970,6 +1029,7 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
 		student: {
 			id: student.id,
 			name: student.name,
+			nameEn: student.name_en ?? "",
 			parentPhone: revealPhone(staff, school, student.parent_phone),
 			classId: student.class_id,
 			className: student.class_name,
@@ -1561,8 +1621,8 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 			updated += 1;
 		} else {
 			await sql`
-          insert into students (school_id, class_id, name, parent_phone)
-          values (${staff.school_id}, ${cls.id}, ${name}, ${phone})
+          insert into students (school_id, class_id, name, name_en, parent_phone)
+          values (${staff.school_id}, ${cls.id}, ${name}, ${englishName(name)}, ${phone})
         `;
 			inserted += 1;
 		}
@@ -2153,7 +2213,8 @@ export const updateActionType = createServerFn({ method: "POST" }).middleware([a
 export const createStudent = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	classId: z.number(),
 	name: z.string().min(2).max(80),
-	parentPhone: z.string().max(20).optional()
+	parentPhone: z.string().max(20).optional(),
+	nameEn: z.string().max(120).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editStudents");
 	if (!(await sql`
@@ -2161,9 +2222,10 @@ export const createStudent = createServerFn({ method: "POST" }).middleware([auth
     `)[0]) throw new Error("الفصل غير موجود");
 	const name = data.name.trim();
 	const phone = data.parentPhone ? normalizeSaudiPhone(data.parentPhone) : "";
+	const nameEn = englishName(name, data.nameEn);
 	return { id: (await sql`
-      insert into students (school_id, class_id, name, parent_phone)
-      values (${staff.school_id}, ${data.classId}, ${name}, ${phone})
+      insert into students (school_id, class_id, name, name_en, parent_phone)
+      values (${staff.school_id}, ${data.classId}, ${name}, ${nameEn}, ${phone})
       returning id
     `)[0].id };
 });
@@ -2171,7 +2233,8 @@ export const updateStudent = createServerFn({ method: "POST" }).middleware([auth
 	studentId: z.number(),
 	name: z.string().min(2).max(80),
 	parentPhone: z.string().max(20).optional(),
-	classId: z.number()
+	classId: z.number(),
+	nameEn: z.string().max(120).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requirePerm(context.userId, "editStudents");
 	if (!(await sql`
@@ -2181,9 +2244,11 @@ export const updateStudent = createServerFn({ method: "POST" }).middleware([auth
 	if (!(await sql`
       select id from classes where id = ${data.classId} and school_id = ${staff.school_id}
     `)[0]) throw new Error("الفصل غير موجود");
+	const name = data.name.trim();
+	const nameEn = englishName(name, data.nameEn);
 	await sql`
       update students
-      set name = ${data.name.trim()}, parent_phone = ${data.parentPhone ? normalizeSaudiPhone(data.parentPhone) : ""}, class_id = ${data.classId}
+      set name = ${name}, name_en = ${nameEn}, parent_phone = ${data.parentPhone ? normalizeSaudiPhone(data.parentPhone) : ""}, class_id = ${data.classId}
       where id = ${data.studentId} and school_id = ${staff.school_id}
     `;
 	return {
@@ -2708,7 +2773,7 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 	const dayIdx = params.length;
 	return {
 		day,
-		students: (await sql.query(`select s.id, s.name, s.class_id, c.name as class_name, st.short_name, st.name as stage_name,
+		students: (await sql.query(`select s.id, s.name, coalesce(s.name_en, '') as name_en, s.class_id, c.name as class_name, st.short_name, st.name as stage_name,
               a.kind, coalesce(a.excused, false) as excused, coalesce(a.details, '') as details,
               a.arrived_at::text as arrived_at
        from students s
@@ -2720,6 +2785,7 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
        order by st.sort_order, c.sort_order, s.name`, params)).map((r) => ({
 			studentId: r.id,
 			studentName: r.name,
+			nameEn: r.name_en ?? "",
 			classId: r.class_id,
 			classLabel: classLabel(r.short_name, r.class_name),
 			kind: r.kind ?? null,

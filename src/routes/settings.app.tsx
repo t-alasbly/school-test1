@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -41,10 +42,10 @@ function AppIconSettings() {
         },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ شعار المدرسة وشعار الرؤية والعبارة");
+      toast.success(tr("تم حفظ شعار المدرسة وشعار الرؤية والعبارة"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   async function onLogoFile(
@@ -53,15 +54,15 @@ function AppIconSettings() {
   ) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("اختر صورة للشعار (PNG أو JPG)");
+      toast.error(tr("اختر صورة للشعار (PNG أو JPG)"));
       return;
     }
     setLogoBusy(true);
     try {
       setter(await resizeLogo(file));
-      toast.success("تم تجهيز الشعار — اضغط حفظ");
+      toast.success(tr("تم تجهيز الشعار — اضغط حفظ"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر قراءة الشعار");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر قراءة الشعار"));
     } finally {
       setLogoBusy(false);
     }
@@ -71,7 +72,7 @@ function AppIconSettings() {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">شعارات التطبيق متاحة لمدير التطبيق.</p>
+        <p className="text-fg-muted">{tr("شعارات التطبيق متاحة لمدير التطبيق.")}</p>
       </div>
     );
   }
@@ -80,14 +81,14 @@ function AppIconSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">أيقونة التطبيق والشعارات</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("أيقونة التطبيق والشعارات")}</h1>
         <p className="text-sm text-fg-muted">
           أيقونة البرنامج ثابتة. شعار المدرسة يظهر عند التشغيل وفي رأس الصفحة، وشعار الرؤية أو المئة عام بجانب الوزارة في الخطابات.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>أيقونة البرنامج</CardTitle>
+          <CardTitle>{tr("أيقونة البرنامج")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-3">
@@ -97,14 +98,14 @@ function AppIconSettings() {
             <span className="min-w-0">
               <span className="block font-semibold">{APP_NAME}</span>
               <span className="block text-sm text-fg-muted">{tagline.trim() || DEFAULT_APP_PHRASE}</span>
-              <span className="block text-xs text-fg-subtle">هذه أيقونة البرنامج الخارجية — لا تُخلط بشعار المدرسة</span>
+              <span className="block text-xs text-fg-subtle">{tr("هذه أيقونة البرنامج الخارجية — لا تُخلط بشعار المدرسة")}</span>
             </span>
           </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>شعار المدرسة</CardTitle>
+          <CardTitle>{tr("شعار المدرسة")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-fg-muted">
@@ -115,11 +116,11 @@ function AppIconSettings() {
               {logoUrl ? (
                 <img src={logoUrl} alt="" className="size-full object-contain" />
               ) : (
-                <span className="text-[11px] text-fg-subtle">فارغ</span>
+                <span className="text-[11px] text-fg-subtle">{tr("فارغ")}</span>
               )}
             </div>
             <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="logo">رفع شعار المدرسة</Label>
+              <Label htmlFor="logo">{tr("رفع شعار المدرسة")}</Label>
               <Input
                 id="logo"
                 type="file"
@@ -150,7 +151,7 @@ function AppIconSettings() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>شعار الرؤية / المئة عام</CardTitle>
+          <CardTitle>{tr("شعار الرؤية / المئة عام")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-fg-muted">
@@ -162,7 +163,7 @@ function AppIconSettings() {
               {extraLogoUrl ? <img src={extraLogoUrl} alt="" className="h-12 w-auto object-contain" /> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="extra-logo">رفع شعار الرؤية</Label>
+              <Label htmlFor="extra-logo">{tr("رفع شعار الرؤية")}</Label>
               <Input
                 id="extra-logo"
                 type="file"
@@ -179,11 +180,11 @@ function AppIconSettings() {
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>عبارة التطبيق</CardTitle>
+          <CardTitle>{tr("عبارة التطبيق")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="tagline">العبارة تحت الاسم</Label>
+            <Label htmlFor="tagline">{tr("العبارة تحت الاسم")}</Label>
             <Input
               id="tagline"
               value={tagline}
@@ -214,7 +215,7 @@ function resizeLogo(file: File): Promise<string> {
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         URL.revokeObjectURL(url);
-        reject(new Error("تعذر معالجة الشعار"));
+        reject(new Error(tr("تعذر معالجة الشعار")));
         return;
       }
       ctx.fillStyle = "#ffffff";
@@ -227,7 +228,7 @@ function resizeLogo(file: File): Promise<string> {
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("تعذر قراءة الصورة"));
+      reject(new Error(tr("تعذر قراءة الصورة")));
     };
     img.src = url;
   });

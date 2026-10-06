@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -36,31 +37,31 @@ function ImproveSettings() {
   const createMutation = useMutation({
     mutationFn: () => createImprovementOption({ data: { name: newName } }),
     onSuccess: (res) => {
-      toast.success(res.existed ? "هذا الخيار موجود مسبقاً" : "تمت الإضافة إلى القائمة");
+      toast.success(res.existed ? tr("هذا الخيار موجود مسبقاً") : tr("تمت الإضافة إلى القائمة"));
       setNewName("");
       void queryClient.invalidateQueries({ queryKey: ["improvement-options"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const updateMutation = useMutation({
     mutationFn: (input: { id: number; name?: string; active?: boolean }) =>
       updateImprovementOption({ data: input }),
     onSuccess: () => {
-      toast.success("تم الحفظ");
+      toast.success(tr("تم الحفظ"));
       setEditingId(null);
       void queryClient.invalidateQueries({ queryKey: ["improvement-options"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   if (!allowed) {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">إدارة خيارات تحسين السلوك لمدير التطبيق والمرشد الطلابي ووكيل شؤون الطلاب.</p>
+        <p className="text-fg-muted">{tr("إدارة خيارات تحسين السلوك لمدير التطبيق والمرشد الطلابي ووكيل شؤون الطلاب.")}</p>
       </div>
     );
   }
@@ -69,14 +70,14 @@ function ImproveSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">خيارات تحسين السلوك</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("خيارات تحسين السلوك")}</h1>
         <p className="text-sm text-fg-muted">
           تظهر للمعلم عند الضغط على تحسين سلوك الطالب. أضف السلوكيات المتكررة هنا — المرشد الطلابي يمكنه الإضافة أيضاً.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>القائمة المحفوظة</CardTitle>
+          <CardTitle>{tr("القائمة المحفوظة")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <form
@@ -89,11 +90,11 @@ function ImproveSettings() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="سلوك تريد تحسينه…"
+              placeholder={tr("سلوك تريد تحسينه…")}
               className="min-w-48 flex-1"
             />
             <Button type="submit" disabled={createMutation.isPending || newName.trim().length < 2}>
-              إضافة
+              {tr("إضافة")}
             </Button>
           </form>
           <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
@@ -107,12 +108,12 @@ function ImproveSettings() {
                   />
                 ) : (
                   <span className="min-w-0 flex-1 font-medium">
-                    {item.name} {item.active ? null : <Badge tone="default">موقوف</Badge>}
+                    {tr(item.name)} {item.active ? null : <Badge tone="default">{tr("موقوف")}</Badge>}
                   </span>
                 )}
                 {editingId === item.id ? (
                   <Button size="sm" onClick={() => updateMutation.mutate({ id: item.id, name: editingName.trim() })}>
-                    حفظ
+                    {tr("حفظ")}
                   </Button>
                 ) : (
                   <Button
@@ -123,7 +124,7 @@ function ImproveSettings() {
                       setEditingName(item.name);
                     }}
                   >
-                    تعديل
+                    {tr("تعديل")}
                   </Button>
                 )}
                 <Button
@@ -131,7 +132,7 @@ function ImproveSettings() {
                   variant="secondary"
                   onClick={() => updateMutation.mutate({ id: item.id, active: !item.active })}
                 >
-                  {item.active ? "إيقاف" : "تفعيل"}
+                  {item.active ? tr("إيقاف") : tr("تفعيل")}
                 </Button>
               </li>
             ))}

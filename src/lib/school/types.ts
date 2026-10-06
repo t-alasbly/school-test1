@@ -169,6 +169,7 @@ export type TodayNote = {
 export type StudentRow = {
   id: number;
   name: string;
+  nameEn?: string;
   parentPhone: string;
   classId: number;
   healthNote: string;
@@ -221,6 +222,7 @@ export type NoteMessage = {
 export type DailyAttendanceRow = {
   studentId: number;
   studentName: string;
+  nameEn?: string;
   classId: number;
   classLabel: string;
   kind: DailyKind | null;

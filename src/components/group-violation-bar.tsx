@@ -1,4 +1,5 @@
 import { Check, ListChecks } from "lucide-react";
+import { tr } from "@/lib/school/i18n";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -25,26 +26,26 @@ export function GroupViolationBar({
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" size="sm" variant={picking ? "default" : "secondary"} onClick={onTogglePicking}>
         <ListChecks className="size-4" />
-        مخالفة جماعية
+        {tr("مخالفة جماعية")}
       </Button>
       {picking ? (
         <>
           <Button type="button" size="sm" variant="secondary" onClick={onSelectShown} disabled={shownCount === 0}>
-            تحديد الظاهر ({shownCount})
+            {tr("تحديد الظاهر")} ({shownCount})
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={selected === 0}>
-            مسح
+            {tr("مسح")}
           </Button>
           <Button type="button" size="sm" onClick={onApply} disabled={selected === 0}>
-            تسجيل على {selected}
+            {tr("تسجيل على")} {selected}
           </Button>
           <p className="w-full text-xs text-fg-muted">
-            التحديد يبقى عند الانتقال بين المراحل والفصول حتى التسجيل أو المسح.
+            {tr("التحديد يبقى عند الانتقال بين المراحل والفصول حتى التسجيل أو المسح.")}
             {elsewhere ? ` ${elsewhere}` : ""}
           </p>
         </>
       ) : (
-        <p className="text-xs text-fg-muted">حدد طلاباً من أكثر من مرحلة أو فصل، ثم سجّل عليهم مخالفة واحدة.</p>
+        <p className="text-xs text-fg-muted">{tr("حدد طلاباً من أكثر من مرحلة أو فصل، ثم سجّل عليهم مخالفة واحدة.")}</p>
       )}
     </div>
   );

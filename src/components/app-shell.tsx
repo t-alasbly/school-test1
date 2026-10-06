@@ -13,6 +13,7 @@ import { useState } from "react";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { ROLE_LABEL, schoolLogoSrc } from "@/lib/school/constants";
+import { useLocale, tr } from "@/lib/school/i18n";
 import { formatToday } from "@/lib/school/calendar";
 import { canFollowup, staffCan } from "@/lib/school/permissions";
 import { useCalendar } from "@/lib/school/use-calendar";
@@ -27,18 +28,18 @@ const NAV: {
   counselorLabel?: string;
   icon: typeof BookOpen;
 }[] = [
-  { to: "/classes", label: "الفصول", icon: BookOpen },
+  { to: "/classes", label: tr("الفصول"), icon: BookOpen },
   {
     to: "/admin",
-    label: "الإدارة",
-    counselorLabel: "شؤون الطلاب",
+    label: tr("الإدارة"),
+    counselorLabel: tr("شؤون الطلاب"),
     icon: LayoutDashboard,
   },
-  { to: "/attendance", label: "الغياب اليومي", icon: ClipboardCheck },
-  { to: "/messages", label: "الرسائل", icon: MessageCircle },
-  { to: "/counseling", label: "الإرشاد", icon: HeartHandshake },
-  { to: "/print", label: "الطباعة", icon: Printer },
-  { to: "/settings", label: "الإعدادات", icon: Settings },
+  { to: "/attendance", label: tr("الغياب اليومي"), icon: ClipboardCheck },
+  { to: "/messages", label: tr("الرسائل"), icon: MessageCircle },
+  { to: "/counseling", label: tr("الإرشاد"), icon: HeartHandshake },
+  { to: "/print", label: tr("الطباعة"), icon: Printer },
+  { to: "/settings", label: tr("الإعدادات"), icon: Settings },
 ];
 
 function navActive(pathname: string, to: string) {
@@ -53,6 +54,7 @@ function navActive(pathname: string, to: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { school, staff } = useWorkspace();
+  const { t, locale, setLocale } = useLocale();
   const calendar = useCalendar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const user = useCurrentUser();
@@ -77,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
               <span className="block truncate text-xs text-fg-muted">
-                {school.tagline?.trim() || "متابعة الطلاب الشاملة"}
+                {school.tagline?.trim() || t("متابعة الطلاب الشاملة")}
               </span>
             </span>
           </Link>
@@ -85,10 +87,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {items.map((item) => {
               const active = navActive(pathname, item.to);
               const Icon = item.icon;
-              const label =
-                staff.role === "counselor" && item.counselorLabel
-                  ? item.counselorLabel
-                  : item.label;
+              const label = t(
+                staff.role === "counselor" && item.counselorLabel ? item.counselorLabel : item.label,
+              );
               return (
                 <Link
                   key={item.to}
@@ -108,13 +109,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="ms-auto flex items-center gap-1">
             <p className="hidden text-xs text-fg-muted lg:block">{formatToday(calendar)}</p>
+            <button
+              type="button"
+              className="h-9 rounded-full border border-border px-2.5 text-xs font-semibold"
+              onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
+              aria-label={locale === "ar" ? "English" : tr("العربية")}
+            >
+              {locale === "ar" ? "English" : tr("العربية")}
+            </button>
             <NotificationBell />
             <div className="hidden min-w-0 items-center gap-2 pe-1 sm:flex">
               <span className="max-w-28 truncate text-sm font-medium">
                 {staff.displayName}
               </span>
               <span className="hidden text-xs text-fg-subtle lg:inline">
-                · {ROLE_LABEL[staff.role]}
+                · {t(tr(ROLE_LABEL[staff.role]))}
               </span>
             </div>
             {user && !user.isDevFallback ? (
@@ -126,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   void signOut().catch(() => setSigningOut(false));
                 }}
                 className="grid size-11 place-items-center rounded-[var(--radius-sm)] text-fg-muted hover:bg-muted hover:text-fg"
-                aria-label="تسجيل الخروج"
+                aria-label={t("تسجيل الخروج")}
               >
                 <LogOut className="size-4" />
               </button>
@@ -141,10 +150,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {items.map((item) => {
             const active = navActive(pathname, item.to);
             const Icon = item.icon;
-            const label =
-              staff.role === "counselor" && item.counselorLabel
-                ? item.counselorLabel
-                : item.label;
+            const label = t(
+              staff.role === "counselor" && item.counselorLabel ? item.counselorLabel : item.label,
+            );
             return (
               <Link
                 key={item.to}

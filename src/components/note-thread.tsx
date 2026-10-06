@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { MessageSquare, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -45,7 +46,7 @@ export function NoteThread({
       void queryClient.invalidateQueries({ queryKey: ["student"] });
       void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر إرسال المراسلة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال المراسلة")),
   });
   const teacherSide = !staffCan(staff, "takeActions") && !staffCan(staff, "counseling");
 
@@ -65,13 +66,13 @@ export function NoteThread({
           مراسلة الملاحظة
         </span>
         <span className="text-xs text-fg-muted">
-          {open ? (query.isPending ? "…" : `${messages.length} رسالة`) : "فتح الدردشة"}
+          {open ? (query.isPending ? "…" : `${messages.length} رسالة`) : tr("فتح الدردشة")}
         </span>
       </button>
       {open ? (
         <div className="mt-3 space-y-3">
           {query.isPending ? (
-            <p className="text-xs text-fg-muted">جارٍ تحميل المراسلات…</p>
+            <p className="text-xs text-fg-muted">{tr("جارٍ تحميل المراسلات…")}</p>
           ) : messages.length === 0 ? (
             <p className="text-xs text-fg-muted">
               ابدأ المحادثة على هذه الملاحظة مع {NOTE_DEST_LABEL[dest ?? "vp"]} — الردود تبقى هنا ولا تُنشئ مخالفة جديدة.
@@ -88,7 +89,7 @@ export function NoteThread({
                 >
                   <p className="text-[11px] text-fg-muted">
                     {item.authorName}
-                    {item.authorRole ? ` · ${ROLE_LABEL[item.authorRole as StaffRole] ?? item.authorRole}` : ""}
+                    {item.authorRole ? ` · ${tr(ROLE_LABEL[item.authorRole as StaffRole]) ?? item.authorRole}` : ""}
                     {` → ${NOTE_DEST_LABEL[item.toKind] ?? item.toKind}`}
                     {` · ${formatStampCalendar(item.createdAt, calendar)}`}
                   </p>
@@ -111,17 +112,17 @@ export function NoteThread({
                       : "border-border bg-bg text-fg-muted",
                   )}
                 >
-                  إلى {item.label}
+                  إلى {tr(item.label)}
                 </button>
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-fg-muted">الرد يصل إلى المعلم الذي حرّر الملاحظة.</p>
+            <p className="text-[11px] text-fg-muted">{tr("الرد يصل إلى المعلم الذي حرّر الملاحظة.")}</p>
           )}
           <div className="flex items-end gap-2">
             <Textarea
               className="min-h-16 flex-1"
-              placeholder={teacherSide ? "اكتب للمختص على هذه الملاحظة…" : "اكتب توجيهاً أو رداً للمعلم…"}
+              placeholder={teacherSide ? tr("اكتب للمختص على هذه الملاحظة…") : tr("اكتب توجيهاً أو رداً للمعلم…")}
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />
@@ -129,7 +130,7 @@ export function NoteThread({
               size="icon"
               disabled={body.trim().length < 1 || mutation.isPending}
               onClick={() => mutation.mutate()}
-              aria-label="إرسال المراسلة"
+              aria-label={tr("إرسال المراسلة")}
             >
               <Send className="size-4" />
             </Button>

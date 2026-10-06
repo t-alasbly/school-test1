@@ -342,3 +342,10 @@
     color: #00857c !important;
   }
 }
+
+html[dir="ltr"] .text-right {
+  text-align: start;
+}
+html[dir="ltr"] body {
+  font-family: "IBM Plex Sans", "Segoe UI", "IBM Plex Sans Arabic", system-ui, sans-serif;
+}

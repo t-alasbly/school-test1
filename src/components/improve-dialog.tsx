@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { studentLabel, tr, useLocale } from "@/lib/school/i18n";
 import { Sprout } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,6 +28,8 @@ export function ImproveDialog({
   studentName: string;
   classId?: number;
 }) {
+  const { locale } = useLocale();
+  const shownName = studentLabel(locale, studentName);
   const { improvementOptions = [] } = useWorkspace();
   const options =
     improvementOptions.length > 0 ? improvementOptions.map((o) => o.name) : IMPROVE_OPTIONS;
@@ -57,7 +60,7 @@ export function ImproveDialog({
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       if (classId) void queryClient.invalidateQueries({ queryKey: ["class", classId] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ الخطة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الخطة")),
   });
 
   const ready =
@@ -83,14 +86,14 @@ export function ImproveDialog({
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>تحسين سلوك الطالب</DialogTitle>
+          <DialogTitle>{tr("تحسين سلوك الطالب")}</DialogTitle>
           <DialogDescription>
-            {studentName} — اختر السلوك المراد تحسينه ثم أرسل الخطة إلى المرشد الطلابي.
+            {shownName} — {tr("اختر السلوك المراد تحسينه ثم أرسل الخطة إلى المرشد الطلابي.")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>السلوك الذي تريد تحسينه</Label>
+            <Label>{tr("السلوك الذي تريد تحسينه")}</Label>
             <OptionChips
               items={options}
               selected={picked}
@@ -101,21 +104,21 @@ export function ImproveDialog({
               }
               otherValue={other}
               onOtherChange={setOther}
-              otherPlaceholder="صف السلوك يدوياً…"
+              otherPlaceholder={tr("صف السلوك يدوياً…")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`plan-${studentId}`}>إجراء التحسين الذي ستطبقه (اختياري)</Label>
+            <Label htmlFor={`plan-${studentId}`}>{tr("إجراء التحسين الذي ستطبقه (اختياري)")}</Label>
             <Textarea
               id={`plan-${studentId}`}
               className="min-h-24"
-              placeholder="مثال: تعزيز إيجابي عند الالتزام، جلوس في المقدمة، متابعة الواجب يومياً…"
+              placeholder={tr("مثال: تعزيز إيجابي عند الالتزام، جلوس في المقدمة، متابعة الواجب يومياً…")}
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
             />
           </div>
           <Button className="w-full" disabled={mutation.isPending || !ready} onClick={() => mutation.mutate()}>
-            إرسال للمرشد الطلابي
+            {mutation.isPending ? tr("جارٍ الإرسال…") : tr("إرسال للمرشد الطلابي")}
           </Button>
         </div>
       </DialogContent>

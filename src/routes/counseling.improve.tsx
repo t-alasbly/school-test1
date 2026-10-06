@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from '@tanstack/react-router'
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ImprovementRecordTools } from "@/components/record-actions";
@@ -19,8 +20,8 @@ function ImprovePage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">الخطط المفتوحة المرسلة من المعلمين</p>
-        <h1 className="text-3xl font-semibold tracking-tight">خطط تحسين السلوك</h1>
+        <p className="text-sm text-fg-muted">{tr("الخطط المفتوحة المرسلة من المعلمين")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("خطط تحسين السلوك")}</h1>
       </header>
       <ul className="space-y-2">
         {(improvements.data ?? []).map((item: any) => (

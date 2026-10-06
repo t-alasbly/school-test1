@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -68,30 +69,30 @@ function ClassesSettings() {
   const standardMutation = useMutation({
     mutationFn: () => applyStandardStages(),
     onSuccess: (res) => {
-      toast.success("طُبّقت مسميات الصفوف القياسية وأقسامها");
+      toast.success(tr("طُبّقت مسميات الصفوف القياسية وأقسامها"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التطبيق"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر التطبيق")),
   });
 
   const pruneMutation = useMutation({
     mutationFn: () => pruneEmptyDivisionsFn(),
     onSuccess: (res) => {
       const n = (res.removedClasses ?? 0) + (res.removedStages ?? 0);
-      toast.success(n ? `حُذف ${res.removedClasses ?? 0} قسماً فارغاً` : "لا توجد أقسام فارغة");
+      toast.success(n ? `حُذف ${res.removedClasses ?? 0} قسماً فارغاً` : tr("لا توجد أقسام فارغة"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   const mergeMutation = useMutation({
     mutationFn: () => repairClassStructureFn(),
     onSuccess: (res) => {
       const n = (res.stagesMerged ?? 0) + (res.classesMerged ?? 0);
-      toast.success(n ? `دُمج ${n} صف أو فصل مكرر` : "لا توجد فصول مكررة");
+      toast.success(n ? `دُمج ${n} صف أو فصل مكرر` : tr("لا توجد فصول مكررة"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الدمج"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الدمج")),
   });
 
   const createStageMutation = useMutation({
@@ -100,67 +101,67 @@ function ClassesSettings() {
         data: { name: stageName, shortName: stageShort, sections: sectionCount },
       }),
     onSuccess: (res) => {
-      toast.success("أُضيف الصف");
+      toast.success(tr("أُضيف الصف"));
       setStageName("");
       setStageShort("");
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const updateStageMutation = useMutation({
     mutationFn: (input: { id: number; name: string; shortName: string }) =>
       updateStage({ data: input }),
     onSuccess: (res) => {
-      toast.success("حُفظت تسمية الصف");
+      toast.success(tr("حُفظت تسمية الصف"));
       setEditingStage(null);
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   const deleteStageMutation = useMutation({
     mutationFn: (input: { id: number; withStudents?: boolean }) =>
       deleteStage({ data: input }),
     onSuccess: (res) => {
-      toast.success("حُذف الصف");
+      toast.success(tr("حُذف الصف"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   const addClassMutation = useMutation({
     mutationFn: (stageId: number) => createClassInStage({ data: { stageId } }),
     onSuccess: (res) => {
-      toast.success("أُضيف قسم");
+      toast.success(tr("أُضيف قسم"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const renameClassMutation = useMutation({
     mutationFn: (input: { id: number; name: string }) => updateClassRow({ data: input }),
     onSuccess: (res) => {
-      toast.success("حُفظ اسم القسم");
+      toast.success(tr("حُفظ اسم القسم"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   const deleteClassMutation = useMutation({
     mutationFn: (id: number) => deleteClassRow({ data: { id } }),
     onSuccess: (res) => {
-      toast.success("حُذف القسم");
+      toast.success(tr("حُذف القسم"));
       onSaved(res.stages);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   if (!allowed) {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">تنسيق الصفوف يحتاج تصريح وصول من مدير التطبيق.</p>
+        <p className="text-fg-muted">{tr("تنسيق الصفوف يحتاج تصريح وصول من مدير التطبيق.")}</p>
       </div>
     );
   }
@@ -171,7 +172,7 @@ function ClassesSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">تنسيق الصفوف والفصول</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("تنسيق الصفوف والفصول")}</h1>
         <p className="text-sm text-fg-muted">
           التقسيم يظهر كما في ملف الطلاب: الصف ثم الفصل. الأقسام الفارغة من التقسيم القديم لا تظهر في الفصول والغياب بعد رفع الملف.
         </p>
@@ -197,7 +198,7 @@ function ClassesSettings() {
           type="button"
           variant="secondary"
           onClick={() => {
-            if (window.confirm("حذف كل الأقسام والصفوف التي لا طلاب فيها؟ التقسيم يبقى كما في أسماء الطلاب الحالية.")) {
+            if (window.confirm(tr("حذف كل الأقسام والصفوف التي لا طلاب فيها؟ التقسيم يبقى كما في أسماء الطلاب الحالية."))) {
               pruneMutation.mutate();
             }
           }}
@@ -263,18 +264,18 @@ function ClassesSettings() {
                 }}
               >
                 <div className="min-w-40 flex-1 space-y-1.5">
-                  <Label>اسم الصف</Label>
+                  <Label>{tr("اسم الصف")}</Label>
                   <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
                 </div>
                 <div className="w-24 space-y-1.5">
-                  <Label>الرمز</Label>
+                  <Label>{tr("الرمز")}</Label>
                   <Input value={draftShort} onChange={(e) => setDraftShort(e.target.value)} />
                 </div>
                 <Button type="submit" size="sm" disabled={updateStageMutation.isPending}>
-                  حفظ
+                  {tr("حفظ")}
                 </Button>
                 <Button type="button" size="sm" variant="secondary" onClick={() => setEditingStage(null)}>
-                  إلغاء
+                  {tr("إلغاء")}
                 </Button>
               </form>
             ) : null}
@@ -282,9 +283,9 @@ function ClassesSettings() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-right text-fg-muted">
-                    <th className="py-2 pe-3 font-medium">القسم</th>
-                    <th className="py-2 pe-3 font-medium">يظهر باسم</th>
-                    <th className="py-2 pe-3 font-medium">الطلاب</th>
+                    <th className="py-2 pe-3 font-medium">{tr("القسم")}</th>
+                    <th className="py-2 pe-3 font-medium">{tr("يظهر باسم")}</th>
+                    <th className="py-2 pe-3 font-medium">{tr("الطلاب")}</th>
                     <th className="py-2 font-medium" />
                   </tr>
                 </thead>
@@ -313,7 +314,7 @@ function ClassesSettings() {
                           disabled={cls.studentCount > 0}
                           onClick={() => deleteClassMutation.mutate(cls.id)}
                         >
-                          حذف
+                          {tr("حذف")}
                         </Button>
                       </td>
                     </tr>
@@ -337,7 +338,7 @@ function ClassesSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>إضافة صف جديد</CardTitle>
+          <CardTitle>{tr("إضافة صف جديد")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -348,17 +349,17 @@ function ClassesSettings() {
             }}
           >
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="stage-name">المسمى الرئيسي</Label>
+              <Label htmlFor="stage-name">{tr("المسمى الرئيسي")}</Label>
               <Input
                 id="stage-name"
                 value={stageName}
                 onChange={(e) => setStageName(e.target.value)}
-                placeholder="الصف الثاني متوسط"
+                placeholder={tr("الصف الثاني متوسط")}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="stage-short">الرمز (مثل 1 أو أ)</Label>
+              <Label htmlFor="stage-short">{tr("الرمز (مثل 1 أو أ)")}</Label>
               <Input
                 id="stage-short"
                 value={stageShort}
@@ -368,7 +369,7 @@ function ClassesSettings() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="sections">عدد الأقسام</Label>
+              <Label htmlFor="sections">{tr("عدد الأقسام")}</Label>
               <Input
                 id="sections"
                 type="number"

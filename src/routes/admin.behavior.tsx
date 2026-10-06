@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Printer } from "lucide-react";
@@ -55,8 +56,8 @@ function noteDay(iso: string) {
 }
 
 function dayCountLabel(n: number) {
-  if (n === 1) return "1 يوم";
-  if (n === 2) return "2 يومين";
+  if (n === 1) return tr("1 يوم");
+  if (n === 2) return tr("2 يومين");
   if (n >= 3 && n <= 10) return `${n} أيام`;
   return `${n} يوماً`;
 }
@@ -107,13 +108,13 @@ function AdminBody() {
   const improvements = typeParam ? [] : (query.data?.improvements ?? []);
   const typeLabel =
     typeParam === "behavior"
-      ? "المخالفات"
+      ? tr("المخالفات")
       : typeParam === "homework"
-        ? "الواجبات"
+        ? tr("الواجبات")
         : typeParam === "absence"
-          ? "الغياب عن الحصة"
+          ? tr("الغياب عن الحصة")
           : typeParam === "late"
-            ? "التأخر عن الحصة"
+            ? tr("التأخر عن الحصة")
             : null;
   const periodMode = typeParam === "absence" || typeParam === "late";
   const periodGroups = useMemo(() => {
@@ -138,15 +139,15 @@ function AdminBody() {
       .map((group) => {
         const days = [...group.days.entries()]
           .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([day, bits]) => ({ day, extra: bits.join("، ") }));
+          .map(([day, bits]) => ({ day, extra: bits.join(tr("، ")) }));
         return { ...group, days, count: group.days.size };
       })
       .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
   }, [feed, periodMode, school.season, school.schedules]);
 
-  if (typeParam && filtered.isPending) return <p className="text-fg-muted">جارٍ تحميل الكشف…</p>;
-  if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">جارٍ تحميل اللوحة…</p>;
-  if (!typeParam && allowed && (query.isError || !query.data)) return <p className="text-danger">تعذر تحميل البيانات.</p>;
+  if (typeParam && filtered.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل الكشف…")}</p>;
+  if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل اللوحة…")}</p>;
+  if (!typeParam && allowed && (query.isError || !query.data)) return <p className="text-danger">{tr("تعذر تحميل البيانات.")}</p>;
 
   return (
     <div className="space-y-6">
@@ -154,31 +155,31 @@ function AdminBody() {
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">{typeLabel ?? "المخالفات الواردة من المعلمين"}</h2>
+            <h2 className="text-lg font-semibold">{typeLabel ?? tr("المخالفات الواردة من المعلمين")}</h2>
             <p className="text-xs text-fg-muted">
               غياب الحصة وتأخرها هنا مع المخالفات السلوكية، وليس في الغياب اليومي.
             </p>
             {periodMode ? (
               <p className="text-xs text-fg-muted">
-                {bounds.label}: كل طالب مرة واحدة مع عدد أيام {typeParam === "absence" ? "غيابه عن الحصة" : "تأخره عن الحصة"}.
+                {bounds.label}: كل طالب مرة واحدة مع عدد أيام {typeParam === "absence" ? tr("غيابه عن الحصة") : tr("تأخره عن الحصة")}.
               </p>
             ) : null}
           </div>
           {periodMode ? (
             <Button type="button" variant="secondary" onClick={() => sheetRef.current && printElement(sheetRef.current)}>
               <Printer className="size-4" />
-              طباعة الكشف
+              {tr("طباعة الكشف")}
             </Button>
           ) : null}
         </div>
         <div className="no-print flex flex-wrap gap-1.5">
           {(
             [
-              ["", "الكل"],
-              ["behavior", "مخالفات سلوكية"],
-              ["absence", "غياب عن الحصة"],
-              ["late", "تأخر عن الحصة"],
-              ["homework", "واجبات"],
+              ["", tr("الكل")],
+              ["behavior", tr("مخالفات سلوكية")],
+              ["absence", tr("غياب عن الحصة")],
+              ["late", tr("تأخر عن الحصة")],
+              ["homework", tr("واجبات")],
             ] as const
           ).map(([key, label]) => {
             const active = (typeParam ?? "") === key;
@@ -211,10 +212,10 @@ function AdminBody() {
           <div className="no-print flex flex-wrap gap-1.5">
             {(
               [
-                ["today", "اليوم"],
-                ["week", "أسبوع"],
-                ["month", "شهر"],
-                ["all", "الكل"],
+                ["today", tr("اليوم")],
+                ["week", tr("أسبوع")],
+                ["month", tr("شهر")],
+                ["all", tr("الكل")],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -262,17 +263,17 @@ function AdminBody() {
               </li>
             ))}
             {periodGroups.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-fg-muted">لا توجد سجلات في هذا النطاق.</li>
+              <li className="px-4 py-8 text-center text-sm text-fg-muted">{tr("لا توجد سجلات في هذا النطاق.")}</li>
             ) : null}
           </ul>
         ) : null}
         {feed.length === 0 && !periodMode ? (
           <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
-            {typeParam ? "لا توجد سجلات في هذا النطاق." : "لا توجد ملاحظات بعد. سيظهر هنا كل ما يسجّله المعلمون فورًا."}
+            {typeParam ? tr("لا توجد سجلات في هذا النطاق.") : tr("لا توجد ملاحظات بعد. سيظهر هنا كل ما يسجّله المعلمون فورًا.")}
           </p>
         ) : feed.length > 0 ? (
           <>
-            {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">تفاصيل كل حصة</h3> : null}
+            {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">{tr("تفاصيل كل حصة")}</h3> : null}
             <ul className="space-y-2">
               {feed.map((note: any) => (
                 <AdminNoteCard
@@ -294,9 +295,9 @@ function AdminBody() {
             <table className="official-table mb-3">
               <thead>
                 <tr>
-                  <th>الفترة</th>
-                  <th>الطلاب</th>
-                  <th>عدد الأيام</th>
+                  <th>{tr("الفترة")}</th>
+                  <th>{tr("الطلاب")}</th>
+                  <th>{tr("عدد الأيام")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,17 +314,17 @@ function AdminBody() {
             <table className="official-table">
               <thead>
                 <tr>
-                  <th className="w-10">م</th>
-                  <th>اسم الطالب</th>
-                  <th>الصف</th>
-                  <th className="w-16">عدد الأيام</th>
-                  <th>الأيام والحصص</th>
+                  <th className="w-10">{tr("م")}</th>
+                  <th>{tr("اسم الطالب")}</th>
+                  <th>{tr("الصف")}</th>
+                  <th className="w-16">{tr("عدد الأيام")}</th>
+                  <th>{tr("الأيام والحصص")}</th>
                 </tr>
               </thead>
               <tbody>
                 {periodGroups.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8">لا توجد سجلات في هذا النطاق.</td>
+                    <td colSpan={5} className="py-8">{tr("لا توجد سجلات في هذا النطاق.")}</td>
                   </tr>
                 ) : (
                   periodGroups.map((group, index) => (
@@ -347,7 +348,7 @@ function AdminBody() {
       ) : null}
       {canImprove && !typeParam ? (
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">متابعة تحسين السلوك</h2>
+        <h2 className="text-lg font-semibold">{tr("متابعة تحسين السلوك")}</h2>
         {improvements.length === 0 ? (
           <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
             لا توجد خطط تحسين مفتوحة. يرسلها المعلمون من قائمة الفصل.
@@ -453,7 +454,7 @@ function AdminNoteCard({
       });
     },
     onSuccess: () => {
-      toast.success("تم حفظ الإجراء وإشعار المعلم");
+      toast.success(tr("تم حفظ الإجراء وإشعار المعلم"));
       setOpen(false);
       setStep(1);
       setActionNote("");
@@ -466,7 +467,7 @@ function AdminNoteCard({
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
   const referMutation = useMutation({
     mutationFn: () => referToCounselor({ data: { noteId: note.id } }),
@@ -477,12 +478,12 @@ function AdminNoteCard({
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التحويل"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر التحويل")),
   });
   const tone = noteTone(note.type, note.status);
   const details =
     note.behaviorTypeName && note.details
-      ? `${note.behaviorTypeName} — ${note.details}`
+      ? `${tr(note.behaviorTypeName || "")} — ${note.details}`
       : note.behaviorTypeName || note.details;
   const actionText = composedAction();
 
@@ -495,17 +496,17 @@ function AdminNoteCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={tone}>{NOTE_META[note.type].label}</Badge>
+            <Badge tone={tone}>{tr(NOTE_META[note.type].label)}</Badge>
             {note.behaviorTypeName ? (
-              <Badge tone="danger">{note.behaviorTypeName}</Badge>
+              <Badge tone="danger">{tr(note.behaviorTypeName || "")}</Badge>
             ) : null}
             {note.type === "behavior" ? (
               <Badge tone={note.occurrence > 1 ? "danger" : "default"}>
                 {occurrenceLabel(note.occurrence)}
               </Badge>
             ) : null}
-            {note.status === "closed" ? <Badge tone="ok">أُغلقت</Badge> : null}
-            {note.referCounselor ? <Badge tone="warn">محال للإرشاد</Badge> : null}
+            {note.status === "closed" ? <Badge tone="ok">{tr("أُغلقت")}</Badge> : null}
+            {note.referCounselor ? <Badge tone="warn">{tr("محال للإرشاد")}</Badge> : null}
             {note.periodKey ? (
               <Badge tone="default">{periodShort(note.periodKey, school.season, school.schedules)}</Badge>
             ) : null}
@@ -563,7 +564,7 @@ function AdminNoteCard({
               ]}
               studentId={note.studentId}
               defaultKind={note.type === "absence" ? "attendance" : "pledge"}
-              label="طباعة تعهد"
+              label={tr("طباعة تعهد")}
             />
           ) : (
             <PrintFormsButton
@@ -591,7 +592,7 @@ function AdminNoteCard({
               ]}
               studentId={note.studentId}
               defaultKind="pledge"
-              label="طباعة نموذج"
+              label={tr("طباعة نموذج")}
             />
           )}
           <WhatsAppDialog
@@ -649,19 +650,19 @@ function AdminNoteCard({
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {step === 1 ? "سجل المخالفة — المرحلة الأولى" : "اختيار الإجراء — المرحلة الثانية"}
+              {step === 1 ? tr("سجل المخالفة — المرحلة الأولى") : tr("اختيار الإجراء — المرحلة الثانية")}
             </DialogTitle>
           </DialogHeader>
           {step === 1 ? (
             <div className="space-y-4">
               <p className="text-sm text-fg-muted">
                 {note.studentName}
-                {note.behaviorTypeName ? ` · ${note.behaviorTypeName}` : ""} ·{" "}
+                {note.behaviorTypeName ? ` · ${tr(note.behaviorTypeName)}` : ""} ·{" "}
                 {occurrenceLabel(occurrence)}
                 {note.behaviorDegree ? ` · الدرجة ${note.behaviorDegree}` : ""}
               </p>
               {history.isPending ? (
-                <p className="text-sm text-fg-muted">جارٍ تحميل سجل الطالب…</p>
+                <p className="text-sm text-fg-muted">{tr("جارٍ تحميل سجل الطالب…")}</p>
               ) : (
                 <ul className="space-y-2">
                   {stacked.map((item) => (
@@ -677,14 +678,14 @@ function AdminNoteCard({
                           <Badge tone={item.occurrence > 1 ? "danger" : "default"}>
                             {occurrenceLabel(item.occurrence)}
                           </Badge>
-                          {item.status === "closed" ? <Badge tone="ok">أُغلقت</Badge> : null}
+                          {item.status === "closed" ? <Badge tone="ok">{tr("أُغلقت")}</Badge> : null}
                           <span className="text-xs text-fg-subtle">{formatStamp(item.createdAt)}</span>
                         </div>
                         <p className="mt-1 font-medium">
-                          {item.behaviorTypeName || item.details || "مخالفة سلوكية"}
+                          {tr(item.behaviorTypeName || item.details || "مخالفة سلوكية")}
                         </p>
                         <p className="text-xs text-fg-muted">
-                          المعلم {item.teacherName}
+                          {tr("المعلم")} {item.teacherName}
                         </p>
                         <NoteSession
                           periodKey={item.periodKey}
@@ -701,7 +702,7 @@ function AdminNoteCard({
               {occurrence > 1 ? (
                 <p className="rounded-[var(--radius-md)] border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger">
                   تكررت هذه المخالفة {occurrenceLabel(occurrence)}. يُرجى اتخاذ إجراء المرحلة المناسبة
-                  {school.technicalVpName ? ` وإشعار وكيل الشؤون الفنية (${school.technicalVpName})` : " وإشعار وكيل الشؤون الفنية"}.
+                  {school.technicalVpName ? ` وإشعار وكيل الشؤون الفنية (${school.technicalVpName})` : tr(" وإشعار وكيل الشؤون الفنية")}.
                 </p>
               ) : null}
               <Button
@@ -719,7 +720,7 @@ function AdminNoteCard({
             <div className="space-y-4">
               <p className="text-sm text-fg-muted">
                 اختر الإجراء المناسب لهذه المرة ({occurrenceLabel(occurrence)}
-                {note.behaviorDegree ? ` — الدرجة ${degreeLabel(note.behaviorDegree)}` : ""}). بعد آخر إجراء يُعاد الأخير.
+                {note.behaviorDegree ? ` — ${degreeLabel(note.behaviorDegree)}` : ""}). بعد آخر إجراء يُعاد الأخير.
               </p>
               <div className="space-y-2">
                 {ladder.map((items, i) => (
@@ -738,9 +739,9 @@ function AdminNoteCard({
                   >
                     <p className="text-sm font-semibold">
                       {procedureStageLabel(i + 1)}
-                      {i === recommended ? " — المناسب لهذه المرة" : ""}
+                      {i === recommended ? tr(" — المناسب لهذه المرة") : ""}
                       {i === ladder.length - 1 && ladder.length > 1
-                        ? " — ويستمر عند التكرار"
+                        ? tr(" — ويستمر عند التكرار")
                         : ""}
                     </p>
                     <ul className="mt-1 list-disc pr-5 text-xs text-fg-muted">
@@ -776,7 +777,7 @@ function AdminNoteCard({
               </div>
               {actionTypes.filter((a) => a.active && !official.includes(a.name)).length > 0 ? (
                 <div className="space-y-1.5">
-                  <Label>خيارات إضافية</Label>
+                  <Label>{tr("خيارات إضافية")}</Label>
                   <div className="space-y-1">
                     {actionTypes
                       .filter((a) => a.active && !official.includes(a.name))
@@ -795,7 +796,7 @@ function AdminNoteCard({
                             checked={picked.includes(item.name)}
                             onChange={() => toggle(item.name)}
                           />
-                          <span>{item.name}</span>
+                          <span>{tr(item.name)}</span>
                         </label>
                       ))}
                   </div>
@@ -803,17 +804,17 @@ function AdminNoteCard({
               ) : null}
               {picked.some(isOtherChoice) ? (
                 <div className="space-y-1.5">
-                  <Label htmlFor={`action-other-${note.id}`}>اكتب الإجراء يدوياً</Label>
+                  <Label htmlFor={`action-other-${note.id}`}>{tr("اكتب الإجراء يدوياً")}</Label>
                   <Input
                     id={`action-other-${note.id}`}
                     value={actionOther}
                     onChange={(e) => setActionOther(e.target.value)}
-                    placeholder="صف الإجراء الآخر…"
+                    placeholder={tr("صف الإجراء الآخر…")}
                   />
                 </div>
               ) : null}
               <div className="space-y-1.5">
-                <Label>فرص تعويض درجات السلوك</Label>
+                <Label>{tr("فرص تعويض درجات السلوك")}</Label>
                 <OptionChips
                   items={compOptions}
                   selected={pickedComp}
@@ -824,21 +825,21 @@ function AdminNoteCard({
                   }
                   otherValue={compOther}
                   onOtherChange={setCompOther}
-                  otherPlaceholder="اكتب فرصة التعويض يدوياً…"
+                  otherPlaceholder={tr("اكتب فرصة التعويض يدوياً…")}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`note-${note.id}`}>ملاحظة على الإجراء (اختياري)</Label>
+                <Label htmlFor={`note-${note.id}`}>{tr("ملاحظة على الإجراء (اختياري)")}</Label>
                 <Textarea
                   id={`note-${note.id}`}
                   value={actionNote}
                   onChange={(e) => setActionNote(e.target.value)}
-                  placeholder="تُحفظ مع الإجراء وتظهر في الورقة المطبوعة وفي تنبيه المعلم…"
+                  placeholder={tr("تُحفظ مع الإجراء وتظهر في الورقة المطبوعة وفي تنبيه المعلم…")}
                 />
               </div>
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setStep(1)}>
-                  رجوع
+                  {tr("رجوع")}
                 </Button>
                 <Button
                   className="flex-1"
@@ -874,11 +875,11 @@ function CounselorImproveCard({
     mutationFn: (status: ImprovementStatus) =>
       followImprovement({ data: { id: item.id, counselorNote: note, status } }),
     onSuccess: () => {
-      toast.success("تم حفظ متابعة المرشد");
+      toast.success(tr("تم حفظ متابعة المرشد"));
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
       void queryClient.invalidateQueries({ queryKey: ["improvements"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
   const tone =
     item.status === "closed" ? "ok" : item.status === "following" ? "primary" : "warn";
@@ -905,7 +906,7 @@ function CounselorImproveCard({
       ) : null}
       <Textarea
         className="mt-3 min-h-16"
-        placeholder="ملاحظة المرشد الطلابي…"
+        placeholder={tr("ملاحظة المرشد الطلابي…")}
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />

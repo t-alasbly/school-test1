@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { CaseRecordTools } from "@/components/record-actions";
@@ -25,8 +26,8 @@ function MessagesPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">حالة صحية أو نفسية أو صعوبات تعلم يرسلها المعلم من سجل الطالب</p>
-        <h1 className="text-3xl font-semibold tracking-tight">مراسلات المعلمين</h1>
+        <p className="text-sm text-fg-muted">{tr("حالة صحية أو نفسية أو صعوبات تعلم يرسلها المعلم من سجل الطالب")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("مراسلات المعلمين")}</h1>
       </header>
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {cases.map((item) => (

@@ -1,4 +1,5 @@
 import { BookOpen, Clock } from "lucide-react";
+import { tr } from "@/lib/school/i18n";
 import { periodShort } from "@/lib/school/constants";
 import type { Season } from "@/lib/school/types";
 
@@ -19,7 +20,7 @@ export function NoteSession({
       {period ? (
         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-elevated px-2 py-0.5">
           <Clock className="size-3" />
-          {period}
+          {tr(period)}
         </span>
       ) : null}
       {sub ? (

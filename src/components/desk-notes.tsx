@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { NoteThread } from "@/components/note-thread";
@@ -29,10 +30,10 @@ export function DeskNotesList({
   const notes = ((query.data as { notes?: NoteRecord[] } | undefined)?.notes ?? []) as NoteRecord[];
 
   if (query.isPending) {
-    return <p className="text-sm text-fg-muted">جارٍ تحميل ملاحظاتك…</p>;
+    return <p className="text-sm text-fg-muted">{tr("جارٍ تحميل ملاحظاتك…")}</p>;
   }
   if (query.isError) {
-    return <p className="text-sm text-danger">تعذر تحميل الملاحظات.</p>;
+    return <p className="text-sm text-danger">{tr("تعذر تحميل الملاحظات.")}</p>;
   }
   if (notes.length === 0) {
     return (
@@ -48,8 +49,8 @@ export function DeskNotesList({
         {notes.map((note) => {
           const meta = NOTE_META[note.type];
           const statusLabel: Record<NoteStatus, string> = {
-            open: referred ? "بانتظار المرشد" : "تنتظر الرد",
-            closed: referred ? "اتخذ المرشد إجراءً" : "رُد عليها",
+            open: referred ? tr("بانتظار المرشد") : tr("تنتظر الرد"),
+            closed: referred ? tr("اتخذ المرشد إجراءً") : tr("رُد عليها"),
           };
           return (
             <li
@@ -60,7 +61,7 @@ export function DeskNotesList({
                 <button type="button" className="min-w-0 flex-1 text-right" onClick={() => setStudentId(note.studentId)}>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={meta.tone}>{meta.label}</Badge>
-                    {note.behaviorTypeName ? <Badge tone="danger">{note.behaviorTypeName}</Badge> : null}
+                    {note.behaviorTypeName ? <Badge tone="danger">{tr(note.behaviorTypeName)}</Badge> : null}
                     <Badge tone={note.status === "closed" ? "ok" : "warn"}>{statusLabel[note.status]}</Badge>
                     {note.occurrence > 1 ? <Badge tone="danger">{occurrenceLabel(note.occurrence)}</Badge> : null}
                   </div>
@@ -76,7 +77,7 @@ export function DeskNotesList({
                   ) : null}
                   {note.status === "closed" && note.actionTaken ? (
                     <p className="mt-2 rounded-[var(--radius-sm)] bg-ok-soft px-3 py-2 text-sm text-ok">
-                      {referred ? "إجراء المرشد: " : "الإجراء: "}
+                      {referred ? tr("إجراء المرشد: ") : tr("الإجراء: ")}
                       {note.actionTaken}
                     </p>
                   ) : referred && note.status === "open" ? (

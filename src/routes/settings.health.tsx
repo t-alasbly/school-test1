@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,31 +32,31 @@ function HealthSettings() {
   const createMutation = useMutation({
     mutationFn: () => createHealthCondition({ data: { name: newName } }),
     onSuccess: (res) => {
-      toast.success(res.existed ? "هذا المرض موجود مسبقاً" : "تمت الإضافة إلى القائمة");
+      toast.success(res.existed ? tr("هذا المرض موجود مسبقاً") : tr("تمت الإضافة إلى القائمة"));
       setNewName("");
       void queryClient.invalidateQueries({ queryKey: ["health-conditions"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const updateMutation = useMutation({
     mutationFn: (input: { id: number; name?: string; active?: boolean }) =>
       updateHealthCondition({ data: input }),
     onSuccess: () => {
-      toast.success("تم الحفظ");
+      toast.success(tr("تم الحفظ"));
       setEditingId(null);
       void queryClient.invalidateQueries({ queryKey: ["health-conditions"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   if (staff.role !== "admin") {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">إدارة قائمة الأمراض للمدير فقط. المرشد يختار منها ويضيف ما ينقص.</p>
+        <p className="text-fg-muted">{tr("إدارة قائمة الأمراض للمدير فقط. المرشد يختار منها ويضيف ما ينقص.")}</p>
       </div>
     );
   }
@@ -64,14 +65,14 @@ function HealthSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">الأمراض والحالات الصحية</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("الأمراض والحالات الصحية")}</h1>
         <p className="text-sm text-fg-muted">
           قائمة يعتمدها المرشد عند تسجيل الملاحظة الصحية. إن اختار حالة غير موجودة تُضاف هنا تلقائياً.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>القائمة المحفوظة</CardTitle>
+          <CardTitle>{tr("القائمة المحفوظة")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <form
@@ -84,11 +85,11 @@ function HealthSettings() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="مرض أو حالة جديدة…"
+              placeholder={tr("مرض أو حالة جديدة…")}
               className="min-w-48 flex-1"
             />
             <Button type="submit" disabled={createMutation.isPending || newName.trim().length < 2}>
-              إضافة
+              {tr("إضافة")}
             </Button>
           </form>
           <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
@@ -103,7 +104,7 @@ function HealthSettings() {
                 ) : (
                   <span className="min-w-0 flex-1 font-medium">
                     {item.name}{" "}
-                    {item.active ? null : <Badge tone="default">موقوف</Badge>}
+                    {item.active ? null : <Badge tone="default">{tr("موقوف")}</Badge>}
                   </span>
                 )}
                 {editingId === item.id ? (
@@ -113,7 +114,7 @@ function HealthSettings() {
                       updateMutation.mutate({ id: item.id, name: editingName.trim() })
                     }
                   >
-                    حفظ
+                    {tr("حفظ")}
                   </Button>
                 ) : (
                   <Button
@@ -124,7 +125,7 @@ function HealthSettings() {
                       setEditingName(item.name);
                     }}
                   >
-                    تعديل
+                    {tr("تعديل")}
                   </Button>
                 )}
                 <Button
@@ -134,7 +135,7 @@ function HealthSettings() {
                     updateMutation.mutate({ id: item.id, active: !item.active })
                   }
                 >
-                  {item.active ? "إيقاف" : "تفعيل"}
+                  {item.active ? tr("إيقاف") : tr("تفعيل")}
                 </Button>
               </li>
             ))}

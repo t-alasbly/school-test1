@@ -1,4 +1,5 @@
 import { MessageCircle } from "lucide-react";
+import { tr } from "@/lib/school/i18n";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -143,12 +144,12 @@ export function WhatsAppDialog({
         },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر حفظ الرسالة");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الرسالة"));
       return;
     }
     const url = `https://wa.me/${number}?text=${encodeURIComponent(draft)}`;
     window.open(url, "_blank", "noopener,noreferrer");
-    toast.success("فُتحت واتساب وحُفظت الرسالة في السجل");
+    toast.success(tr("فُتحت واتساب وحُفظت الرسالة في السجل"));
     setOpen(false);
   }
 
@@ -170,12 +171,12 @@ export function WhatsAppDialog({
         <DialogHeader>
           <DialogTitle>رسالة واتساب — {studentName}</DialogTitle>
           <DialogDescription>
-            {number ? `جوال ولي الأمر: ${parentPhone}` : "لا يوجد رقم جوال محفوظ"}
+            {number ? `جوال ولي الأمر: ${parentPhone}` : tr("لا يوجد رقم جوال محفوظ")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="tpl">نوع الرسالة</Label>
+            <Label htmlFor="tpl">{tr("نوع الرسالة")}</Label>
             <Select
               id="tpl"
               value={picker}
@@ -184,8 +185,8 @@ export function WhatsAppDialog({
               {KEYS.map((key) => (
                 <option key={key} value={key}>
                   {key === "general"
-                    ? (school.messageTemplates.general?.title ?? "رسالة عامة")
-                    : NOTE_META[key].label}
+                    ? (school.messageTemplates.general?.title ?? tr("رسالة عامة"))
+                    : tr(NOTE_META[key].label)}
                 </option>
               ))}
               {custom.map((item) => (
@@ -196,7 +197,7 @@ export function WhatsAppDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="msg">نص الرسالة</Label>
+            <Label htmlFor="msg">{tr("نص الرسالة")}</Label>
             <Textarea
               id="msg"
               className="min-h-40"
@@ -219,7 +220,7 @@ export function WhatsAppDialog({
                 }}
               />
               <span>
-                <span className="block font-semibold">إضافة أسماء المشاركين في الرسالة</span>
+                <span className="block font-semibold">{tr("إضافة أسماء المشاركين في الرسالة")}</span>
                 <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
                   تُذكر أسماء من اشتركوا في المخالفة الجماعية داخل نص الرسالة. ألغِ الخيار لإرسال الرسالة عن الطالب وحده.
                 </span>

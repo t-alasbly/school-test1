@@ -1,4 +1,5 @@
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useEffect, useState } from "react";
 import { SchoolMark } from "@/components/school-mark";
 import { Button } from "@/components/ui/button";
@@ -59,10 +60,10 @@ function LoginForm() {
         password,
         callbackURL: "/",
       });
-      if (res.error) throw new Error(res.error.message || "بيانات الدخول غير صحيحة");
+      if (res.error) throw new Error(res.error.message || tr("بيانات الدخول غير صحيحة"));
       await navigate({ to: "/" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "حدث خطأ غير متوقع");
+      setError(err instanceof Error ? tr(err.message) : tr("حدث خطأ غير متوقع"));
     } finally {
       setBusy(false);
     }
@@ -84,13 +85,13 @@ function LoginForm() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">تسجيل الدخول برقم الجوال</CardTitle>
+            <CardTitle className="text-base">{tr("تسجيل الدخول برقم الجوال")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {authEnabled ? (
               <form className="space-y-3" onSubmit={onSubmit}>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">رقم الجوال</Label>
+                  <Label htmlFor="email">{tr("رقم الجوال")}</Label>
                   <Input
                     id="email"
                     type="tel"
@@ -104,7 +105,7 @@ function LoginForm() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="password">كلمة المرور</Label>
+                  <Label htmlFor="password">{tr("كلمة المرور")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -118,11 +119,11 @@ function LoginForm() {
                 </div>
                 {error ? <p className="text-sm text-danger">{error}</p> : null}
                 <Button type="submit" className="w-full" disabled={busy}>
-                  {busy ? "جارٍ التنفيذ…" : "دخول"}
+                  {busy ? tr("جارٍ التنفيذ…") : tr("دخول")}
                 </Button>
               </form>
             ) : (
-              <p className="text-sm text-fg-muted">تسجيل الدخول غير مفعّل.</p>
+              <p className="text-sm text-fg-muted">{tr("تسجيل الدخول غير مفعّل.")}</p>
             )}
           </CardContent>
         </Card>

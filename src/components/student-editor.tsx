@@ -13,18 +13,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { createStudent, deleteStudent, updateStudent } from "@/lib/school/api";
+import { useLocale, tr } from "@/lib/school/i18n";
 import { staffCan } from "@/lib/school/permissions";
+import { transliterateArabicName } from "@/lib/school/transliterate";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export function AddStudentButton({ classId }: { classId: number }) {
   const { staff } = useWorkspace();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   if (!staffCan(staff, "editStudents")) return null;
   return (
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
         <Plus className="size-4" />
-        إضافة طالب
+        {t("إضافة طالب")}
       </Button>
       <StudentEditorDialog
         open={open}
@@ -40,7 +43,7 @@ export function EditStudentButton({
   student,
   showLabel = false,
 }: {
-  student: { id: number; name: string; parentPhone: string; classId: number };
+  student: { id: number; name: string; nameEn?: string; parentPhone: string; classId: number };
   showLabel?: boolean;
 }) {
   const { staff } = useWorkspace();
@@ -55,7 +58,7 @@ export function EditStudentButton({
         onClick={() => setOpen(true)}
       >
         <Pencil className="size-4" />
-        {showLabel ? "تعديل" : null}
+        {showLabel ? tr("تعديل") : null}
       </Button>
       <StudentEditorDialog
         open={open}
@@ -87,7 +90,7 @@ export function DeleteStudentButton({
       void queryClient.invalidateQueries({ queryKey: ["roster"] });
       setOpen(false);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
   if (!staffCan(staff, "editStudents")) return null;
   return (
@@ -100,12 +103,12 @@ export function DeleteStudentButton({
         onClick={() => setOpen(true)}
       >
         <Trash2 className="size-4" />
-        حذف
+        {tr("حذف")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>حذف الطالب</DialogTitle>
+            <DialogTitle>{tr("حذف الطالب")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-danger">
             سيُحذف {student.name} وجميع ملاحظاته. لا يمكن التراجع.
@@ -118,10 +121,10 @@ export function DeleteStudentButton({
               onClick={() => mutation.mutate()}
             >
               <Trash2 className="size-4" />
-              تأكيد الحذف
+              {tr("تأكيد الحذف")}
             </Button>
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              إلغاء
+              {tr("إلغاء")}
             </Button>
           </div>
         </DialogContent>
@@ -141,11 +144,14 @@ function StudentEditorDialog({
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   classId: number;
-  student?: { id: number; name: string; parentPhone: string; classId: number };
+  student?: { id: number; name: string; nameEn?: string; parentPhone: string; classId: number };
 }) {
   const { classes } = useWorkspace();
+  const { t } = useLocale();
   const queryClient = useQueryClient();
   const [name, setName] = useState(student?.name ?? "");
+  const [nameEn, setNameEn] = useState(student?.nameEn ?? "");
+  const [enTouched, setEnTouched] = useState(false);
   const [phone, setPhone] = useState(student?.parentPhone ?? "");
   const [targetClass, setTargetClass] = useState(String(student?.classId ?? classId));
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -153,6 +159,8 @@ function StudentEditorDialog({
   useEffect(() => {
     if (!open) return;
     setName(student?.name ?? "");
+    setNameEn(student?.nameEn?.trim() || transliterateArabicName(student?.name ?? ""));
+    setEnTouched(Boolean(student?.nameEn?.trim()));
     setPhone(student?.parentPhone ?? "");
     setTargetClass(String(student?.classId ?? classId));
     setConfirmDelete(false);
@@ -177,6 +185,7 @@ function StudentEditorDialog({
           data: {
             classId,
             name,
+            nameEn,
             parentPhone: phone,
           },
         });
@@ -185,34 +194,35 @@ function StudentEditorDialog({
         data: {
           studentId: student!.id,
           name,
+          nameEn,
           parentPhone: phone,
           classId: Number(targetClass),
         },
       });
     },
     onSuccess: () => {
-      toast.success(mode === "create" ? "تمت إضافة الطالب" : "تم حفظ بيانات الطالب");
+      toast.success(mode === "create" ? t("تمت إضافة الطالب") : t("تم حفظ بيانات الطالب"));
       invalidate(Number(targetClass));
       onOpenChange(false);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : t("تعذر الحفظ")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteStudent({ data: { studentId: student!.id } }),
     onSuccess: () => {
-      toast.success("تم حذف الطالب");
+      toast.success(tr("تم حذف الطالب"));
       invalidate();
       onOpenChange(false);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "إضافة طالب" : "تعديل بيانات الطالب"}</DialogTitle>
+          <DialogTitle>{mode === "create" ? t("إضافة طالب") : t("تعديل بيانات الطالب")}</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -222,17 +232,34 @@ function StudentEditorDialog({
           }}
         >
           <div className="space-y-1.5">
-            <Label htmlFor="st-name">اسم الطالب</Label>
+            <Label htmlFor="st-name">{t("اسم الطالب")}</Label>
             <Input
               id="st-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setName(next);
+                if (!enTouched) setNameEn(transliterateArabicName(next));
+              }}
               required
               minLength={2}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="st-phone">جوال ولي الأمر</Label>
+            <Label htmlFor="st-name-en">{t("الاسم بالإنجليزية")}</Label>
+            <Input
+              id="st-name-en"
+              value={nameEn}
+              dir="ltr"
+              className="text-left"
+              onChange={(e) => {
+                setEnTouched(true);
+                setNameEn(e.target.value);
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="st-phone">{t("جوال ولي الأمر")}</Label>
             <Input
               id="st-phone"
               value={phone}
@@ -243,7 +270,7 @@ function StudentEditorDialog({
           </div>
           {mode === "edit" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="st-class">الفصل (للنقل)</Label>
+              <Label htmlFor="st-class">{t("الفصل (للنقل)")}</Label>
               <Select
                 id="st-class"
                 value={targetClass}
@@ -262,7 +289,7 @@ function StudentEditorDialog({
             className="w-full"
             disabled={saveMutation.isPending || name.trim().length < 2}
           >
-            {mode === "create" ? "إضافة" : "حفظ التعديلات"}
+            {mode === "create" ? tr("إضافة") : tr("حفظ التعديلات")}
           </Button>
         </form>
         {mode === "edit" ? (
@@ -280,17 +307,17 @@ function StudentEditorDialog({
                     onClick={() => deleteMutation.mutate()}
                   >
                     <Trash2 className="size-4" />
-                    تأكيد الحذف
+                    {tr("تأكيد الحذف")}
                   </Button>
                   <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                    إلغاء
+                    {tr("إلغاء")}
                   </Button>
                 </div>
               </div>
             ) : (
               <Button variant="ghost" className="text-danger" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="size-4" />
-                حذف الطالب
+                {tr("حذف الطالب")}
               </Button>
             )}
           </div>

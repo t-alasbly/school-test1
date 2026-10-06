@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,31 +34,31 @@ function CompensationSettings() {
   const createMutation = useMutation({
     mutationFn: () => createCompensationOption({ data: { name: newName } }),
     onSuccess: (res) => {
-      toast.success(res.existed ? "هذا الخيار موجود مسبقاً" : "تمت الإضافة إلى القائمة");
+      toast.success(res.existed ? tr("هذا الخيار موجود مسبقاً") : tr("تمت الإضافة إلى القائمة"));
       setNewName("");
       void queryClient.invalidateQueries({ queryKey: ["compensation-options"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const updateMutation = useMutation({
     mutationFn: (input: { id: number; name?: string; active?: boolean }) =>
       updateCompensationOption({ data: input }),
     onSuccess: () => {
-      toast.success("تم الحفظ");
+      toast.success(tr("تم الحفظ"));
       setEditingId(null);
       void queryClient.invalidateQueries({ queryKey: ["compensation-options"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   if (staff.role !== "admin") {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">إدارة فرص التعويض للمدير فقط. تظهر للوكيل والمرشد عند اتخاذ الإجراء.</p>
+        <p className="text-fg-muted">{tr("إدارة فرص التعويض للمدير فقط. تظهر للوكيل والمرشد عند اتخاذ الإجراء.")}</p>
       </div>
     );
   }
@@ -66,14 +67,14 @@ function CompensationSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">فرص تعويض درجات السلوك</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("فرص تعويض درجات السلوك")}</h1>
         <p className="text-sm text-fg-muted">
           تظهر لوكيل شؤون الطلاب عند اتخاذ الإجراء، وللمرشد الطلابي في الإحالات. إن اختير «أخرى» يُكتب الخيار يدوياً ويُضاف هنا.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>القائمة المحفوظة</CardTitle>
+          <CardTitle>{tr("القائمة المحفوظة")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <form
@@ -86,11 +87,11 @@ function CompensationSettings() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="فرصة تعويض جديدة…"
+              placeholder={tr("فرصة تعويض جديدة…")}
               className="min-w-48 flex-1"
             />
             <Button type="submit" disabled={createMutation.isPending || newName.trim().length < 2}>
-              إضافة
+              {tr("إضافة")}
             </Button>
           </form>
           <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border">
@@ -104,8 +105,8 @@ function CompensationSettings() {
                   />
                 ) : (
                   <span className="min-w-0 flex-1 font-medium">
-                    {item.name}{" "}
-                    {item.active ? null : <Badge tone="default">موقوف</Badge>}
+                    {tr(item.name)}{" "}
+                    {item.active ? null : <Badge tone="default">{tr("موقوف")}</Badge>}
                   </span>
                 )}
                 {editingId === item.id ? (
@@ -115,7 +116,7 @@ function CompensationSettings() {
                       updateMutation.mutate({ id: item.id, name: editingName.trim() })
                     }
                   >
-                    حفظ
+                    {tr("حفظ")}
                   </Button>
                 ) : (
                   <Button
@@ -126,7 +127,7 @@ function CompensationSettings() {
                       setEditingName(item.name);
                     }}
                   >
-                    تعديل
+                    {tr("تعديل")}
                   </Button>
                 )}
                 <Button
@@ -136,7 +137,7 @@ function CompensationSettings() {
                     updateMutation.mutate({ id: item.id, active: !item.active })
                   }
                 >
-                  {item.active ? "إيقاف" : "تفعيل"}
+                  {item.active ? tr("إيقاف") : tr("تفعيل")}
                 </Button>
               </li>
             ))}

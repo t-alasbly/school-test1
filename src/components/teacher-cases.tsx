@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { NoteThread } from "@/components/note-thread";
@@ -22,15 +23,15 @@ function destOf(note: NoteRecord): "counseling" | "health" | "vp" {
 }
 
 function destLabel(dest: "counseling" | "health" | "vp") {
-  if (dest === "counseling") return "محالة للمرشد الطلابي";
-  if (dest === "health") return "محالة للمرشد الصحي";
-  return "لوكيل شؤون الطلاب";
+  if (dest === "counseling") return tr("محالة للمرشد الطلابي");
+  if (dest === "health") return tr("محالة للمرشد الصحي");
+  return tr("لوكيل شؤون الطلاب");
 }
 
 function destWait(dest: "counseling" | "health" | "vp") {
-  if (dest === "counseling") return "بانتظار المرشد الطلابي";
-  if (dest === "health") return "بانتظار المرشد الصحي";
-  return "تنتظر إجراء الوكيل";
+  if (dest === "counseling") return tr("بانتظار المرشد الطلابي");
+  if (dest === "health") return tr("بانتظار المرشد الصحي");
+  return tr("تنتظر إجراء الوكيل");
 }
 
 export function TeacherCases() {
@@ -63,10 +64,10 @@ export function TeacherCases() {
   );
 
   const filters: { id: Filter; label: string }[] = [
-    { id: "all", label: "كل ما حرّرته" },
-    { id: "counseling", label: "للمرشد الطلابي" },
-    { id: "health", label: "للمرشد الصحي" },
-    { id: "vp", label: "لوكيل شؤون الطلاب" },
+    { id: "all", label: tr("كل ما حرّرته") },
+    { id: "counseling", label: tr("للمرشد الطلابي") },
+    { id: "health", label: tr("للمرشد الصحي") },
+    { id: "vp", label: tr("لوكيل شؤون الطلاب") },
   ];
 
   return (
@@ -75,7 +76,7 @@ export function TeacherCases() {
         <p className="text-sm text-fg-muted">
           صفحة خاصة بك وبطلابك — المخالفات التي حرّرتها، وما أُحيل للإرشاد أو لوكيل شؤون الطلاب، والإجراء المتخذ عليها
         </p>
-        <h2 className="font-display text-xl font-semibold tracking-tight">حالات طلابي</h2>
+        <h2 className="font-display text-xl font-semibold tracking-tight">{tr("حالات طلابي")}</h2>
       </header>
       <nav className="flex flex-wrap gap-1.5">
         {filters.map((item) => (
@@ -90,15 +91,15 @@ export function TeacherCases() {
                 : "border-border bg-bg-elevated text-fg-muted hover:text-fg",
             )}
           >
-            {item.label}
+            {tr(item.label)}
             <span className="tabular-nums opacity-80">{counts[item.id]}</span>
           </button>
         ))}
       </nav>
       {query.isPending ? (
-        <p className="text-sm text-fg-muted">جارٍ تحميل حالاتك…</p>
+        <p className="text-sm text-fg-muted">{tr("جارٍ تحميل حالاتك…")}</p>
       ) : query.isError ? (
-        <p className="text-sm text-danger">تعذر تحميل الحالات.</p>
+        <p className="text-sm text-danger">{tr("تعذر تحميل الحالات.")}</p>
       ) : shown.length === 0 ? (
         <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
           لا حالات في هذا النطاق. ما تحرّره على طلابك يظهر هنا، وكذلك ما يُحال للإرشاد أو لوكيل شؤون الطلاب والإجراء المتخذ.
@@ -121,12 +122,12 @@ export function TeacherCases() {
                   <button type="button" className="min-w-0 flex-1 text-right" onClick={() => setStudentId(note.studentId)}>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={meta.tone}>{meta.label}</Badge>
-                      {note.behaviorTypeName ? <Badge tone="danger">{note.behaviorTypeName}</Badge> : null}
+                      {note.behaviorTypeName ? <Badge tone="danger">{tr(note.behaviorTypeName)}</Badge> : null}
                       <Badge tone={dest === "vp" ? "primary" : "warn"}>
                         {destLabel(dest)}
                       </Badge>
                       <Badge tone={waiting ? "warn" : "ok"}>
-                        {waiting ? destWait(dest) : "رُد عليها"}
+                        {waiting ? destWait(dest) : tr("رُد عليها")}
                       </Badge>
                       {note.occurrence > 1 ? <Badge tone="danger">{occurrenceLabel(note.occurrence)}</Badge> : null}
                     </div>
@@ -142,7 +143,7 @@ export function TeacherCases() {
                     ) : null}
                     {note.status === "closed" && note.actionTaken ? (
                       <p className="mt-2 rounded-[var(--radius-sm)] bg-ok-soft px-3 py-2 text-sm text-ok">
-                        {dest === "vp" ? "إجراء الوكيل: " : "إجراء المرشد: "}
+                        {dest === "vp" ? tr("إجراء الوكيل: ") : tr("إجراء المرشد: ")}
                         {note.actionTaken}
                       </p>
                     ) : (

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { placeLabel, tr } from "@/lib/school/i18n";
 import { ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { classLabel } from "@/lib/school/constants";
@@ -64,7 +65,7 @@ export function StageClassBar({
       <div className="mx-auto max-w-6xl">
         {stages.length === 0 ? (
           <p className="py-1 text-sm text-fg-muted">
-            لا صفوف بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.
+            {tr("لا صفوف بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.")}
           </p>
         ) : (
           <div className="flex items-center gap-1.5">
@@ -94,12 +95,12 @@ export function StageClassBar({
                           : "border-border bg-bg text-fg-muted hover:border-primary hover:text-fg",
                       )}
                     >
-                      {stage.shortName || stage.name}
+                      {placeLabel(stage.shortName || stage.name)}
                       <ChevronDown className={cn("size-3 sm:size-4", active ? "opacity-90" : "opacity-60")} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-64 p-2">
-                    <p className="px-2 pb-2 text-xs text-fg-muted">{stage.name} — اختر الفصل</p>
+                    <p className="px-2 pb-2 text-xs text-fg-muted">{placeLabel(stage.name)} — {tr("اختر الفصل")}</p>
                     <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
                       <button
                         type="button"
@@ -114,7 +115,7 @@ export function StageClassBar({
                             : "hover:bg-muted",
                         )}
                       >
-                        جميع الفصول
+                        {tr("جميع الفصول")}
                       </button>
                       {stageClasses.map((cls) => (
                         <button
@@ -131,11 +132,11 @@ export function StageClassBar({
                               : "hover:bg-muted",
                           )}
                         >
-                          {cls.label || classLabel(cls.shortName, cls.name)}
+                          {placeLabel(cls.label || classLabel(cls.shortName, cls.name))}
                         </button>
                       ))}
                       {stageClasses.length === 0 ? (
-                        <p className="px-3 py-4 text-center text-sm text-fg-muted">لا فصول في هذه المرحلة</p>
+                        <p className="px-3 py-4 text-center text-sm text-fg-muted">{tr("لا فصول في هذه المرحلة")}</p>
                       ) : null}
                     </div>
                   </PopoverContent>
@@ -153,7 +154,7 @@ export function StageClassBar({
                     sort === "order" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
                   )}
                 >
-                  تسلسل
+                  {tr("تسلسل")}
                 </button>
                 <button
                   type="button"
@@ -163,7 +164,7 @@ export function StageClassBar({
                     sort === "alpha" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
                   )}
                 >
-                  أبجدي
+                  {tr("أبجدي")}
                 </button>
               </div>
               {actions}

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -65,8 +66,8 @@ function FormsBody() {
     <div className="space-y-6">
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-fg-muted">نماذج الوزارة — قواعد السلوك والمواظبة 1447هـ</p>
-          <h1 className="text-xl font-semibold tracking-tight">النماذج</h1>
+          <p className="text-sm text-fg-muted">{tr("نماذج الوزارة — قواعد السلوك والمواظبة 1447هـ")}</p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr("النماذج")}</h1>
         </div>
         <div className="flex gap-2">
           <Button
@@ -90,7 +91,7 @@ function FormsBody() {
       </header>
       <form className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
-          <Label htmlFor="f-stage">المرحلة</Label>
+          <Label htmlFor="f-stage">{tr("المرحلة")}</Label>
           <Select
             id="f-stage"
             value={stageId}
@@ -100,7 +101,7 @@ function FormsBody() {
               setStudentId("");
             }}
           >
-            <option value="">الكل</option>
+            <option value="">{tr("الكل")}</option>
             {stages.map((s: any) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -109,7 +110,7 @@ function FormsBody() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="f-class">الفصل</Label>
+          <Label htmlFor="f-class">{tr("الفصل")}</Label>
           <Select
             id="f-class"
             value={classId}
@@ -118,7 +119,7 @@ function FormsBody() {
               setStudentId("");
             }}
           >
-            <option value="">الكل</option>
+            <option value="">{tr("الكل")}</option>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -127,7 +128,7 @@ function FormsBody() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="f-student">اسم الطالب</Label>
+          <Label htmlFor="f-student">{tr("اسم الطالب")}</Label>
           <Select
             id="f-student"
             value={studentId}
@@ -136,7 +137,7 @@ function FormsBody() {
               setNoteIdx(0);
             }}
           >
-            <option value="">اختر طالبًا…</option>
+            <option value="">{tr("اختر طالبًا…")}</option>
             {students.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -145,7 +146,7 @@ function FormsBody() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="f-kind">النموذج</Label>
+          <Label htmlFor="f-kind">{tr("النموذج")}</Label>
           <Select id="f-kind" value={kind} onChange={(e) => setKind(e.target.value as FormKind)}>
             {FORM_ORDER.map((k) => (
               <option key={k} value={k}>
@@ -155,7 +156,7 @@ function FormsBody() {
           </Select>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="f-note">المخالفة أو الملاحظة</Label>
+          <Label htmlFor="f-note">{tr("المخالفة أو الملاحظة")}</Label>
           <Select
             id="f-note"
             value={String(noteIdx)}
@@ -163,13 +164,13 @@ function FormsBody() {
             disabled={notes.length === 0}
           >
             {notes.length === 0 ? (
-              <option value="0">بدون ملاحظة مسجّلة — النموذج للتعبئة اليدوية</option>
+              <option value="0">{tr("بدون ملاحظة مسجّلة — النموذج للتعبئة اليدوية")}</option>
             ) : (
               notes.map((n, i) => (
                 <option key={`${n.createdAt}-${i}`} value={i}>
                   {(n.type === "absence" || n.type === "late"
-                    ? NOTE_META[n.type].label
-                    : n.behaviorTypeName || n.details || "ملاحظة") +
+                    ? tr(NOTE_META[n.type].label)
+                    : n.behaviorTypeName || n.details || tr("ملاحظة")) +
                     (n.createdAt ? ` — ${n.createdAt.slice(0, 10)}` : "")}
                 </option>
               ))
@@ -192,14 +193,14 @@ function FormsBody() {
         <div className="no-print grid gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3 sm:grid-cols-2">
           {(
             [
-              ["name", "اسم الطالب", selectedStudent.name],
-              ["classLine", "الصف / الفصل", selectedStudent.classLabel],
-              ["violation", "المخالفة / الموضوع", selectedNote?.behaviorTypeName || selectedNote?.details || ""],
-              ["degree", "الدرجة", selectedNote?.behaviorDegree ? String(selectedNote.behaviorDegree) : ""],
-              ["day", "التاريخ", selectedNote ? formatDay(selectedNote.occurredAt || selectedNote.createdAt) : ""],
-              ["weekday", "اليوم", selectedNote ? weekdayName(selectedNote.occurredAt || selectedNote.createdAt) : ""],
-              ["period", "الحصة", ""],
-              ["subject", "المادة", selectedNote?.teacherSubject || ""],
+              ["name", tr("اسم الطالب"), selectedStudent.name],
+              ["classLine", tr("الصف / الفصل"), selectedStudent.classLabel],
+              ["violation", tr("المخالفة / الموضوع"), selectedNote?.behaviorTypeName || selectedNote?.details || ""],
+              ["degree", tr("الدرجة"), selectedNote?.behaviorDegree ? String(selectedNote.behaviorDegree) : ""],
+              ["day", tr("التاريخ"), selectedNote ? formatDay(selectedNote.occurredAt || selectedNote.createdAt) : ""],
+              ["weekday", tr("اليوم"), selectedNote ? weekdayName(selectedNote.occurredAt || selectedNote.createdAt) : ""],
+              ["period", tr("الحصة"), ""],
+              ["subject", tr("المادة"), selectedNote?.teacherSubject || ""],
             ] as const
           ).map(([key, label, fallback]) => (
             <div key={key} className="space-y-1.5">
@@ -213,17 +214,17 @@ function FormsBody() {
             </div>
           ))}
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="f-ov-action">الإجراءات (سطر لكل إجراء)</Label>
+            <Label htmlFor="f-ov-action">{tr("الإجراءات (سطر لكل إجراء)")}</Label>
             <textarea
               id="f-ov-action"
               className="min-h-20 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"
               value={overrides.actionText ?? ""}
               onChange={(e) => setOverrides((prev) => ({ ...prev, actionText: e.target.value }))}
-              placeholder="اتركه فارغاً لاستخدام الإجراء الرسمي تلقائياً"
+              placeholder={tr("اتركه فارغاً لاستخدام الإجراء الرسمي تلقائياً")}
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="f-ov-extra">بيانات إضافية / ملاحظات يدوية</Label>
+            <Label htmlFor="f-ov-extra">{tr("بيانات إضافية / ملاحظات يدوية")}</Label>
             <textarea
               id="f-ov-extra"
               className="min-h-16 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm"

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { HeartHandshake } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -38,7 +39,7 @@ export function CounselorCaseDialog({
       void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإرسال"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإرسال")),
   });
 
   return (
@@ -51,7 +52,7 @@ export function CounselorCaseDialog({
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>مراسلة المرشد الطلابي</DialogTitle>
+          <DialogTitle>{tr("مراسلة المرشد الطلابي")}</DialogTitle>
           <DialogDescription>{studentName} — حالة صحية أو نفسية أو صعوبات تعلم</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -68,16 +69,16 @@ export function CounselorCaseDialog({
                     : "border-border bg-bg",
                 )}
               >
-                {item.label}
+                {tr(item.label)}
               </button>
             ))}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`case-${studentId}`}>وصف الحالة للمرشد</Label>
+            <Label htmlFor={`case-${studentId}`}>{tr("وصف الحالة للمرشد")}</Label>
             <Textarea
               id={`case-${studentId}`}
               className="min-h-24"
-              placeholder="اكتب ما يحتاجه المرشد لمتابعة الطالب…"
+              placeholder={tr("اكتب ما يحتاجه المرشد لمتابعة الطالب…")}
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />

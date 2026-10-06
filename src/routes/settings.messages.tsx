@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -41,17 +42,17 @@ function MessagesSettings() {
         data: { templates: drafts, customMessages },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ قوالب الرسائل");
+      toast.success(tr("تم حفظ قوالب الرسائل"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function addCustom() {
     const t = title.trim();
     const b = body.trim();
     if (t.length < 2 || b.length < 4) {
-      toast.error("اكتب عنواناً ونص الرسالة");
+      toast.error(tr("اكتب عنواناً ونص الرسالة"));
       return;
     }
     const next = [...custom, { id: newId(), title: t, body: b }];
@@ -65,7 +66,7 @@ function MessagesSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">قوالب واتساب</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("قوالب واتساب")}</h1>
         <p className="text-sm text-fg-muted">
           المتغيرات: {"{name}"} {"{class}"} {"{date}"} {"{weekday}"} {"{school}"} {"{details}"} {"{session}"}
         </p>
@@ -80,7 +81,7 @@ function MessagesSettings() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor={`t-${key}`}>العنوان</Label>
+              <Label htmlFor={`t-${key}`}>{tr("العنوان")}</Label>
               <Input
                 id={`t-${key}`}
                 value={drafts[key].title}
@@ -90,7 +91,7 @@ function MessagesSettings() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`b-${key}`}>نص الرسالة</Label>
+              <Label htmlFor={`b-${key}`}>{tr("نص الرسالة")}</Label>
               <Textarea
                 id={`b-${key}`}
                 className="min-h-36"
@@ -113,23 +114,23 @@ function MessagesSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>رسائل عامة مخصصة</CardTitle>
+          <CardTitle>{tr("رسائل عامة مخصصة")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-fg-muted">
             أضف قوالب إضافية تظهر مع «رسالة عامة» عند مراسلة ولي الأمر (تهنئة، تنبيه، اجتماع…).
           </p>
           <div className="space-y-1.5">
-            <Label htmlFor="c-title">عنوان القالب</Label>
+            <Label htmlFor="c-title">{tr("عنوان القالب")}</Label>
             <Input
               id="c-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="مثال: تهنئة تفوّق"
+              placeholder={tr("مثال: تهنئة تفوّق")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="c-body">نص الرسالة</Label>
+            <Label htmlFor="c-body">{tr("نص الرسالة")}</Label>
             <Textarea
               id="c-body"
               className="min-h-28"
@@ -165,12 +166,12 @@ function MessagesSettings() {
                   variant="secondary"
                   onClick={() => setCustom((prev) => prev.filter((m) => m.id !== item.id))}
                 >
-                  حذف
+                  {tr("حذف")}
                 </Button>
               </li>
             ))}
             {custom.length === 0 ? (
-              <li className="px-3 py-6 text-center text-sm text-fg-muted">لا توجد رسائل مخصصة بعد</li>
+              <li className="px-3 py-6 text-center text-sm text-fg-muted">{tr("لا توجد رسائل مخصصة بعد")}</li>
             ) : null}
           </ul>
         </CardContent>

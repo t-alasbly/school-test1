@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,32 +33,32 @@ function ProfileSettings() {
         },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ بيانات حسابك");
+      toast.success(tr("تم حفظ بيانات حسابك"));
       setPassword("");
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   return (
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">حسابك</h1>
-        <p className="text-sm text-fg-muted">الاسم الظاهر، رقم الجوال، كلمة المرور، والمادة</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("حسابك")}</h1>
+        <p className="text-sm text-fg-muted">{tr("الاسم الظاهر، رقم الجوال، كلمة المرور، والمادة")}</p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>بيانات الدخول</CardTitle>
+          <CardTitle>{tr("بيانات الدخول")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-fg-muted">صلاحيتك الحالية: {ROLE_LABEL[staff.role]}</p>
+          <p className="text-xs text-fg-muted">صلاحيتك الحالية: {tr(ROLE_LABEL[staff.role])}</p>
           <div className="space-y-1.5">
-            <Label htmlFor="display">الاسم</Label>
+            <Label htmlFor="display">{tr("الاسم")}</Label>
             <Input id="display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="username">اسم المستخدم (رقم الجوال)</Label>
+            <Label htmlFor="username">{tr("اسم المستخدم (رقم الجوال)")}</Label>
             <Input
               id="username"
               value={phone}
@@ -68,7 +69,7 @@ function ProfileSettings() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password">كلمة المرور الجديدة</Label>
+            <Label htmlFor="password">{tr("كلمة المرور الجديدة")}</Label>
             <Input
               id="password"
               type="password"
@@ -76,17 +77,17 @@ function ProfileSettings() {
               onChange={(e) => setPassword(e.target.value)}
               dir="ltr"
               className="text-left"
-              placeholder="اتركه فارغاً إن لم ترد التغيير"
+              placeholder={tr("اتركه فارغاً إن لم ترد التغيير")}
               minLength={4}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="subject">المادة الدراسية</Label>
+            <Label htmlFor="subject">{tr("المادة الدراسية")}</Label>
             <Input
               id="subject"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="مثال: لغتي، رياضيات، علوم"
+              placeholder={tr("مثال: لغتي، رياضيات، علوم")}
             />
           </div>
           <Button

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Search, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -39,16 +40,16 @@ type TeacherMapping = {
 };
 
 const STUDENT_FIELDS: { key: keyof StudentMapping; label: string }[] = [
-  { key: "name", label: "اسم الطالب" },
-  { key: "parentPhone", label: "جوال ولي الأمر" },
-  { key: "stageName", label: "المرحلة" },
-  { key: "className", label: "الفصل" },
+  { key: "name", label: tr("اسم الطالب") },
+  { key: "parentPhone", label: tr("جوال ولي الأمر") },
+  { key: "stageName", label: tr("المرحلة") },
+  { key: "className", label: tr("الفصل") },
 ];
 
 const TEACHER_FIELDS: { key: keyof TeacherMapping; label: string }[] = [
-  { key: "name", label: "اسم المعلم" },
-  { key: "phone", label: "رقم الجوال" },
-  { key: "subject", label: "المادة" },
+  { key: "name", label: tr("اسم المعلم") },
+  { key: "phone", label: tr("رقم الجوال") },
+  { key: "subject", label: tr("المادة") },
 ];
 
 type RosterStudent = {
@@ -85,7 +86,7 @@ function ImportBody() {
   const [tab, setTab] = useState<"students" | "teachers">("students");
 
   if (staff.role !== "admin") {
-    return <p className="text-fg-muted">الاستيراد متاح للإدارة فقط.</p>;
+    return <p className="text-fg-muted">{tr("الاستيراد متاح للإدارة فقط.")}</p>;
   }
 
   return (
@@ -95,14 +96,14 @@ function ImportBody() {
         <p className="text-sm text-fg-muted">
           كل البيانات المضافة ظاهرة هنا: الفصول والطلاب والمعلمون — مع التعديل والحذف والاستيراد من إكسل
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">البيانات والاستيراد</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("البيانات والاستيراد")}</h1>
       </header>
       <div className="flex gap-2">
         <Button
           variant={tab === "students" ? "default" : "secondary"}
           onClick={() => setTab("students")}
         >
-          الطلاب
+          {tr("الطلاب")}
         </Button>
         <Button
           variant={tab === "teachers" ? "default" : "secondary"}
@@ -132,7 +133,7 @@ function StudentImport() {
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   const stages = useMemo(() => {
@@ -162,13 +163,13 @@ function StudentImport() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="بحث باسم الطالب أو جوال ولي الأمر"
+            placeholder={tr("بحث باسم الطالب أو جوال ولي الأمر")}
             className="pr-10"
           />
         </div>
         <Button variant="secondary" onClick={() => setShowExcel((v) => !v)}>
           <Upload className="size-4" />
-          {showExcel ? "إخفاء ملف الإكسل" : "استيراد من إكسل"}
+          {showExcel ? tr("إخفاء ملف الإكسل") : tr("استيراد من إكسل")}
         </Button>
       </div>
       {showExcel ? (
@@ -188,7 +189,7 @@ function StudentImport() {
           ))}
         </div>
       ) : roster.isError ? (
-        <p className="text-danger">تعذر تحميل قائمة الطلاب.</p>
+        <p className="text-danger">{tr("تعذر تحميل قائمة الطلاب.")}</p>
       ) : (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -215,8 +216,8 @@ function StudentImport() {
             <Card>
               <CardContent className="py-10 text-center text-sm text-fg-muted">
                 {q.trim()
-                  ? "لا نتائج مطابقة للبحث."
-                  : "لم يُضف طلاب بعد. ارفع ملف إكسل أو أضف طالبًا داخل فصل."}
+                  ? tr("لا نتائج مطابقة للبحث.")
+                  : tr("لم يُضف طلاب بعد. ارفع ملف إكسل أو أضف طالبًا داخل فصل.")}
               </CardContent>
             </Card>
           ) : null}
@@ -285,7 +286,7 @@ function StudentImport() {
                         </CardHeader>
                         <CardContent className="p-0">
                           {cls.students.length === 0 ? (
-                            <p className="px-4 py-6 text-sm text-fg-muted">لا طلاب في هذا الفصل بعد.</p>
+                            <p className="px-4 py-6 text-sm text-fg-muted">{tr("لا طلاب في هذا الفصل بعد.")}</p>
                           ) : (
                             <ul className="divide-y divide-border">
                               {cls.students.map((student: RosterStudent) => (
@@ -296,7 +297,7 @@ function StudentImport() {
                                   <div className="min-w-0 flex-1">
                                     <p className="font-medium">{student.name}</p>
                                     <p className="text-xs text-fg-subtle" dir="ltr">
-                                      {student.parentPhone || "بدون جوال ولي الأمر"}
+                                      {student.parentPhone || tr("بدون جوال ولي الأمر")}
                                     </p>
                                   </div>
                                   <EditStudentButton student={student} showLabel />
@@ -342,7 +343,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
       );
       onImported();
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الاستيراد"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الاستيراد")),
   });
 
   async function onFile(file: File | undefined) {
@@ -351,10 +352,10 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     setHeaders(parsed.headers);
     setRows(parsed.rows);
     setMapping({
-      name: guess(parsed.headers, ["اسم", "name", "الطالب"]),
-      parentPhone: guess(parsed.headers, ["جوال", "هاتف", "phone", "واتس", "ولي"]),
-      stageName: guess(parsed.headers, ["مرحلة", "صف", "stage"]),
-      className: guess(parsed.headers, ["فصل", "شعبة", "class"]),
+      name: guess(parsed.headers, [tr("اسم"), "name", tr("الطالب")]),
+      parentPhone: guess(parsed.headers, [tr("جوال"), tr("هاتف"), "phone", tr("واتس"), tr("ولي")]),
+      stageName: guess(parsed.headers, [tr("مرحلة"), tr("صف"), "stage"]),
+      className: guess(parsed.headers, [tr("فصل"), tr("شعبة"), "class"]),
     });
   }
 
@@ -378,12 +379,12 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4">
       <DropZone
-        hint="الأعمدة: الاسم، جوال ولي الأمر، المرحلة/الصف، الفصل. يُعتمد تقسيم الملف وتُحذف الأقسام الفارغة القديمة."
+        hint={tr("الأعمدة: الاسم، جوال ولي الأمر، المرحلة/الصف، الفصل. يُعتمد تقسيم الملف وتُحذف الأقسام الفارغة القديمة.")}
         onFile={onFile}
       />
       {headers.length > 0 ? (
         <div className="space-y-4 rounded-[var(--radius-lg)] border border-border bg-card p-4">
-          <h2 className="font-semibold">تعيين الأعمدة</h2>
+          <h2 className="font-semibold">{tr("تعيين الأعمدة")}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {STUDENT_FIELDS.map((field) => (
               <ColumnSelect
@@ -414,7 +415,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             disabled={mutation.isPending || !mapping.name || !mapping.stageName || !mapping.className}
             onClick={() => mutation.mutate(mappedRows())}
           >
-            {mutation.isPending ? "جارٍ الحفظ…" : "اعتماد استيراد الطلاب"}
+            {mutation.isPending ? tr("جارٍ الحفظ…") : tr("اعتماد استيراد الطلاب")}
           </Button>
         </div>
       ) : null}
@@ -429,10 +430,10 @@ function TeacherImport() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-fg-muted">أضف معلمًا أو عدّل بياناته، أو ارفع ملف إكسل دفعة واحدة.</p>
+        <p className="text-sm text-fg-muted">{tr("أضف معلمًا أو عدّل بياناته، أو ارفع ملف إكسل دفعة واحدة.")}</p>
         <Button variant="secondary" onClick={() => setShowExcel((v) => !v)}>
           <Upload className="size-4" />
-          {showExcel ? "إخفاء ملف الإكسل" : "استيراد معلمين من إكسل"}
+          {showExcel ? tr("إخفاء ملف الإكسل") : tr("استيراد معلمين من إكسل")}
         </Button>
       </div>
       {showExcel ? (
@@ -466,7 +467,7 @@ function TeacherExcelForm({ onImported }: { onImported: () => void }) {
       );
       onImported();
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الاستيراد"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الاستيراد")),
   });
 
   async function onFile(file: File | undefined) {
@@ -475,9 +476,9 @@ function TeacherExcelForm({ onImported }: { onImported: () => void }) {
     setHeaders(parsed.headers);
     setRows(parsed.rows);
     setMapping({
-      name: guess(parsed.headers, ["اسم", "name", "معلم"]),
-      phone: guess(parsed.headers, ["جوال", "هاتف", "phone", "رقم"]),
-      subject: guess(parsed.headers, ["مادة", "تخصص", "subject"]),
+      name: guess(parsed.headers, [tr("اسم"), "name", tr("معلم")]),
+      phone: guess(parsed.headers, [tr("جوال"), tr("هاتف"), "phone", tr("رقم")]),
+      subject: guess(parsed.headers, [tr("مادة"), tr("تخصص"), "subject"]),
     });
   }
 
@@ -504,7 +505,7 @@ function TeacherExcelForm({ onImported }: { onImported: () => void }) {
       />
       {headers.length > 0 ? (
         <div className="space-y-4 rounded-[var(--radius-lg)] border border-border bg-card p-4">
-          <h2 className="font-semibold">تعيين الأعمدة</h2>
+          <h2 className="font-semibold">{tr("تعيين الأعمدة")}</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {TEACHER_FIELDS.map((field) => (
               <ColumnSelect
@@ -528,7 +529,7 @@ function TeacherExcelForm({ onImported }: { onImported: () => void }) {
             disabled={mutation.isPending || !mapping.name || !mapping.phone}
             onClick={() => mutation.mutate(mappedRows())}
           >
-            {mutation.isPending ? "جارٍ الحفظ…" : "اعتماد استيراد المعلمين"}
+            {mutation.isPending ? tr("جارٍ الحفظ…") : tr("اعتماد استيراد المعلمين")}
           </Button>
         </div>
       ) : null}
@@ -549,7 +550,7 @@ function DropZone({
         "flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-border bg-card px-4 text-center",
       )}
     >
-      <span className="font-medium">اختر ملف .xlsx أو .xls</span>
+      <span className="font-medium">{tr("اختر ملف .xlsx أو .xls")}</span>
       <span className="mt-1 text-sm text-fg-muted">{hint}</span>
       <input
         type="file"
@@ -578,10 +579,10 @@ function ColumnSelect({
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— غير معيّن —</option>
+        <option value="">{tr("— غير معيّن —")}</option>
         {headers.map((header) => (
           <option key={header} value={header}>
-            {header || "(بدون عنوان)"}
+            {header || tr("(بدون عنوان)")}
           </option>
         ))}
       </Select>
@@ -625,7 +626,7 @@ async function readSheet(file: File | undefined) {
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0] ?? ""];
   if (!sheet) {
-    toast.error("الملف لا يحتوي على ورقة عمل");
+    toast.error(tr("الملف لا يحتوي على ورقة عمل"));
     return null;
   }
   const json = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ import { formatDay, formatTime, hijriDate, todayLabel, toWhatsAppNumber } from "
 import { staffCan } from "@/lib/school/permissions";
 import { printElement } from "@/lib/school/print";
 import { useWorkspace } from "@/lib/school/workspace";
+import { cn } from "@/lib/utils";
 
 export type RosterKind = "absence" | "late";
 
@@ -47,34 +49,34 @@ function currentTerm(today: string) {
     const from = "2026-08-23";
     const end = "2027-01-09";
     const to = today < from ? from : today < end ? today : end;
-    return { from, to, label: "الفصل الدراسي الأول" };
+    return { from, to, label: tr("الفصل الدراسي الأول") };
   }
   const from = "2027-01-17";
   const end = "2027-06-24";
   const to = today < end ? today : end;
-  return { from, to, label: "الفصل الدراسي الثاني" };
+  return { from, to, label: tr("الفصل الدراسي الثاني") };
 }
 
 export function rangeFromPreset(preset: string | undefined): { from: string; to: string; label: string } {
   const today = isoToday();
-  if (preset === "week") return { from: addDays(today, -6), to: today, label: "أسبوع" };
-  if (preset === "month") return { from: monthStart(today), to: today, label: "شهر" };
+  if (preset === "week") return { from: addDays(today, -6), to: today, label: tr("أسبوع") };
+  if (preset === "month") return { from: monthStart(today), to: today, label: tr("شهر") };
   if (preset === "term") {
     const term = currentTerm(today);
     return { from: term.from, to: term.to, label: term.label };
   }
-  if (preset === "all") return { from: "2000-01-01", to: today, label: "كل المدة" };
-  return { from: today, to: today, label: "اليوم" };
+  if (preset === "all") return { from: "2000-01-01", to: today, label: tr("كل المدة") };
+  return { from: today, to: today, label: tr("اليوم") };
 }
 
 function dayCountLabel(n: number) {
-  if (n === 1) return "1 يوم";
-  if (n === 2) return "2 يومين";
+  if (n === 1) return tr("1 يوم");
+  if (n === 2) return tr("2 يومين");
   if (n >= 3 && n <= 10) return `${n} أيام`;
   return `${n} يوماً`;
 }
 
-const GREG_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const GREG_MONTHS = [tr("يناير"), tr("فبراير"), tr("مارس"), tr("أبريل"), tr("مايو"), tr("يونيو"), tr("يوليو"), tr("أغسطس"), tr("سبتمبر"), tr("أكتوبر"), tr("نوفمبر"), tr("ديسمبر")];
 
 type DayMark = { day: string; extra: string };
 
@@ -95,7 +97,7 @@ export function compactMonthLines(days: DayMark[]): string[] {
   }
   const multiYear = new Set([...buckets.values()].map((bucket) => bucket.year)).size > 1;
   return [...buckets.values()].map(
-    (bucket) => `(${bucket.items.join("، ")}) ${multiYear ? `${bucket.name} ${bucket.year}` : bucket.name}`,
+    (bucket) => `(${bucket.items.join(tr("، "))}) ${multiYear ? `${bucket.name} ${bucket.year}` : bucket.name}`,
   );
 }
 
@@ -122,7 +124,7 @@ type StudentGroup = {
 };
 
 function isPeriodDetails(details: string) {
-  return details.includes("حصة");
+  return details.includes(tr("حصة"));
 }
 
 function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
@@ -136,7 +138,7 @@ function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
       days: new Map<string, string[]>(),
     };
     const bits = current.days.get(day) ?? [];
-    const extra = [withTime && row.arrivedAt ? formatTime(row.arrivedAt) : "", row.excused ? "بعذر" : ""]
+    const extra = [withTime && row.arrivedAt ? formatTime(row.arrivedAt) : "", row.excused ? tr("بعذر") : ""]
       .filter(Boolean)
       .join(" ");
     if (extra && !bits.includes(extra)) bits.push(extra);
@@ -149,7 +151,7 @@ function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([day, bits]) => ({
           day,
-          extra: bits.join("، "),
+          extra: bits.join(tr("، ")),
         }));
       return {
         studentId: group.studentId,
@@ -159,7 +161,6 @@ function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
         count: days.length,
       };
     })
-    .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
 }
 
 type FullDay = { day: string; arrivedAt: string | null };
@@ -171,13 +172,13 @@ function fullDate(iso: string) {
 }
 
 function parentDaysMessage(opts: { name: string; classLabel: string; school: string; kind: RosterKind; lines: string[] }) {
-  const what = opts.kind === "absence" ? "الغياب" : "التأخر";
+  const what = opts.kind === "absence" ? tr("الغياب") : tr("التأخر");
   const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
   const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
   const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
   if (opts.lines.length === 0) return packed([]);
   if (packed(opts.lines).length <= 1900) return packed(opts.lines);
-  const note = "… وأيام أقدم لم تُذكر لطول الرسالة.\n";
+  const note = tr("… وأيام أقدم لم تُذكر لطول الرسالة.\n");
   const kept = [...opts.lines];
   while (kept.length > 1 && packed(kept, note).length > 1900) kept.shift();
   return packed(kept, note).slice(0, 2000);
@@ -188,9 +189,9 @@ function StudentDaysTable({ days, kind, print = false }: { days: FullDay[]; kind
     <table className={print ? "official-table" : "w-full border-collapse text-sm"}>
       <thead>
         <tr className={print ? undefined : "border-b border-border text-right text-fg-muted"}>
-          <th className="w-10 py-2 text-right">م</th>
-          <th className="py-2 text-right">التاريخ</th>
-          {kind === "late" ? <th className="py-2 text-right">وقت الحضور</th> : null}
+          <th className="w-10 py-2 text-right">{tr("م")}</th>
+          <th className="py-2 text-right">{tr("التاريخ")}</th>
+          {kind === "late" ? <th className="py-2 text-right">{tr("وقت الحضور")}</th> : null}
         </tr>
       </thead>
       <tbody>
@@ -229,10 +230,12 @@ export function AttendanceRoster({
   const [from, setFrom] = useState(bounds.from);
   const [to, setTo] = useState(bounds.to);
   const [q, setQ] = useState("");
+  const [minDays, setMinDays] = useState(0);
+  const [sortBy, setSortBy] = useState<"class" | "name">("class");
   const [openId, setOpenId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const detailRef = useRef<HTMLElement>(null);
-  const title = kind === "absence" ? "كشف الغائبين" : "كشف المتأخرين";
+  const title = kind === "absence" ? tr("كشف الغائبين") : tr("كشف المتأخرين");
 
   const query = useQuery({
     queryKey: ["attendance-roster", kind, from, to],
@@ -246,10 +249,15 @@ export function AttendanceRoster({
     return list.filter((r) => r.studentName.includes(term) || r.classLabel.includes(term));
   }, [query.data, q]);
 
-  const groups = useMemo(
-    () => groupStudents(rows.filter((row) => !isPeriodDetails(row.details)), kind === "late"),
-    [rows, kind],
-  );
+  const groups = useMemo(() => {
+    const grouped = groupStudents(rows.filter((row) => !isPeriodDetails(row.details)), kind === "late");
+    const filtered = minDays > 0 ? grouped.filter((group) => group.count >= minDays) : grouped;
+    return [...filtered].sort((a, b) =>
+      sortBy === "name"
+        ? a.studentName.localeCompare(b.studentName, "ar") || a.classLabel.localeCompare(b.classLabel, "ar")
+        : a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"),
+    );
+  }, [rows, kind, minDays, sortBy]);
   const detail = useQuery({
     queryKey: ["student-attendance-days", openId],
     queryFn: () => getStudentAttendanceDays({ data: { studentId: openId! } }),
@@ -291,14 +299,19 @@ export function AttendanceRoster({
         },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر حفظ الرسالة");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الرسالة"));
       return;
     }
     window.open(`https://wa.me/${parentNumber}?text=${encodeURIComponent(draft.trim())}`, "_blank", "noopener,noreferrer");
-    toast.success("فُتحت واتساب وحُفظت الرسالة في السجل");
+    toast.success(tr("فُتحت واتساب وحُفظت الرسالة في السجل"));
   }
   const dayTotal = groups.reduce((sum, group) => sum + group.count, 0);
-  const emptyText = kind === "absence" ? "لا يوجد غياب يومي في هذا النطاق." : "لا يوجد تأخر صباحي في هذا النطاق.";
+  const emptyText =
+    minDays > 0
+      ? tr("لا يوجد طالب بلغ هذا العدد من الأيام في المدة المحددة.")
+      : kind === "absence"
+        ? tr("لا يوجد غياب يومي في هذا النطاق.")
+        : tr("لا يوجد تأخر صباحي في هذا النطاق.");
 
   const days = from === to ? formatDay(`${from}T12:00:00`) : `${formatDay(`${from}T12:00:00`)} — ${formatDay(`${to}T12:00:00`)}`;
 
@@ -308,8 +321,8 @@ export function AttendanceRoster({
         <div>
           <p className="text-sm text-fg-muted">
             {kind === "absence"
-              ? "الغياب اليومي فقط. كل طالب يظهر مرة مع عدد أيام غيابه في المدة."
-              : "التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة."}
+              ? tr("الغياب اليومي فقط. كل طالب يظهر مرة مع عدد أيام غيابه في المدة.")
+              : tr("التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة.")}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         </div>
@@ -318,35 +331,72 @@ export function AttendanceRoster({
           onClick={() => sheetRef.current && printElement(sheetRef.current)}
         >
           <Printer className="size-4" />
-          طباعة الكشف
+          {tr("طباعة الكشف")}
         </Button>
       </header>
 
       <form className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
-          <Label htmlFor={`${kind}-from`}>من</Label>
+          <Label htmlFor={`${kind}-from`}>{tr("من")}</Label>
           <Input id={`${kind}-from`} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${kind}-to`}>إلى</Label>
+          <Label htmlFor={`${kind}-to`}>{tr("إلى")}</Label>
           <Input id={`${kind}-to`} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor={`${kind}-q`}>طالب أو فصل</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${kind}-days`}>{tr("عدد الأيام فأكثر")}</Label>
+          <Input
+            id={`${kind}-days`}
+            type="number"
+            min={1}
+            inputMode="numeric"
+            value={minDays || ""}
+            placeholder={tr("الكل")}
+            onChange={(e) => setMinDays(Math.max(0, Number(e.target.value) || 0))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label>{tr("الترتيب")}</Label>
+          <div className="grid h-11 grid-cols-2 overflow-hidden rounded-[var(--radius-sm)] border border-border">
+            <button
+              type="button"
+              onClick={() => setSortBy("class")}
+              className={cn(
+                "text-sm font-medium",
+                sortBy === "class" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
+              )}
+            >
+              {tr("حسب الصف")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortBy("name")}
+              className={cn(
+                "text-sm font-medium",
+                sortBy === "name" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
+              )}
+            >
+              {tr("أبجدي")}
+            </button>
+          </div>
+        </div>
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
+          <Label htmlFor={`${kind}-q`}>{tr("طالب أو فصل")}</Label>
           <Input
             id={`${kind}-q`}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="اسم الطالب أو الفصل"
+            placeholder={tr("اسم الطالب أو الفصل")}
           />
         </div>
         <div className="flex flex-wrap gap-1.5 sm:col-span-2 lg:col-span-4">
           {(
             [
-              ["today", "اليوم"],
-              ["week", "أسبوع"],
-              ["month", "شهر"],
-              ["all", "الكل"],
+              ["today", tr("اليوم")],
+              ["week", tr("أسبوع")],
+              ["month", tr("شهر")],
+              ["all", tr("الكل")],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -360,6 +410,21 @@ export function AttendanceRoster({
               className="h-10 rounded-full border border-border bg-bg-elevated px-3 text-sm font-medium text-fg-muted hover:border-primary hover:text-primary"
             >
               {label}
+            </button>
+          ))}
+          {[2, 3, 5, 10].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setMinDays(minDays === n ? 0 : n)}
+              className={cn(
+                "h-10 rounded-full border px-3 text-sm font-medium",
+                minDays === n
+                  ? "border-primary bg-primary text-primary-fg"
+                  : "border-border bg-bg-elevated text-fg-muted hover:border-primary hover:text-primary",
+              )}
+            >
+              {n}+ {tr("أيام")}
             </button>
           ))}
         </div>
@@ -398,7 +463,7 @@ export function AttendanceRoster({
           </li>
         ))}
         {query.isPending ? (
-          <li className="px-4 py-8 text-center text-sm text-fg-muted">جارٍ التحميل…</li>
+          <li className="px-4 py-8 text-center text-sm text-fg-muted">{tr("جارٍ التحميل…")}</li>
         ) : groups.length === 0 ? (
           <li className="px-4 py-8 text-center text-sm text-fg-muted">{emptyText}</li>
         ) : null}
@@ -413,9 +478,9 @@ export function AttendanceRoster({
         <table className="official-table mb-3">
           <thead>
             <tr>
-              <th>الفترة</th>
-              <th>الطلاب</th>
-              <th>عدد الأيام</th>
+              <th>{tr("الفترة")}</th>
+              <th>{tr("الطلاب")}</th>
+              <th>{tr("عدد الأيام")}</th>
             </tr>
           </thead>
           <tbody>
@@ -429,11 +494,11 @@ export function AttendanceRoster({
         <table className="official-table">
           <thead>
             <tr>
-              <th className="w-10">م</th>
-              <th>اسم الطالب</th>
-              <th>الصف</th>
-              <th className="w-16">عدد الأيام</th>
-              <th>الأيام</th>
+              <th className="w-10">{tr("م")}</th>
+              <th>{tr("اسم الطالب")}</th>
+              <th>{tr("الصف")}</th>
+              <th className="w-16">{tr("عدد الأيام")}</th>
+              <th>{tr("الأيام")}</th>
             </tr>
           </thead>
           <tbody>
@@ -462,19 +527,19 @@ export function AttendanceRoster({
       <Dialog open={openId != null} onOpenChange={(open) => { if (!open) setOpenId(null); }}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detail.data?.studentName ?? "أيام الطالب"}</DialogTitle>
+            <DialogTitle>{detail.data?.studentName ?? tr("أيام الطالب")}</DialogTitle>
             <DialogDescription>
               {detail.data?.classLabel
-                ? `${detail.data.classLabel} — كل أيام ${kind === "absence" ? "الغياب اليومي" : "التأخر اليومي"}`
-                : "كل الأيام المسجّلة لهذا الطالب"}
+                ? `${detail.data.classLabel} — كل أيام ${kind === "absence" ? tr("الغياب اليومي") : tr("التأخر اليومي")}`
+                : tr("كل الأيام المسجّلة لهذا الطالب")}
             </DialogDescription>
           </DialogHeader>
           {detail.isPending ? (
-            <p className="text-sm text-fg-muted">جارٍ التحميل…</p>
+            <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
           ) : detail.isError ? (
-            <p className="text-sm text-danger">تعذر تحميل أيام الطالب.</p>
+            <p className="text-sm text-danger">{tr("تعذر تحميل أيام الطالب.")}</p>
           ) : detailDays.length === 0 ? (
-            <p className="text-sm text-fg-muted">لا توجد أيام مسجّلة لهذا الطالب.</p>
+            <p className="text-sm text-fg-muted">{tr("لا توجد أيام مسجّلة لهذا الطالب.")}</p>
           ) : (
             <>
               <p className="text-sm text-fg-muted">المجموع: {dayCountLabel(detailDays.length)}</p>
@@ -486,22 +551,22 @@ export function AttendanceRoster({
                   className="min-h-32"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  aria-label="نص الرسالة"
+                  aria-label={tr("نص الرسالة")}
                 />
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="secondary" className="min-w-36 flex-1" onClick={() => detailRef.current && printElement(detailRef.current)}>
                   <Printer className="size-4" />
-                  طباعة
+                  {tr("طباعة")}
                 </Button>
                 {canMessage ? (
                   <Button type="button" className="min-w-36 flex-1" disabled={!parentNumber || !draft.trim()} onClick={() => void sendParent()}>
-                    إرسال لولي الأمر
+                    {tr("إرسال لولي الأمر")}
                   </Button>
                 ) : null}
               </div>
               {canMessage && !parentNumber ? (
-                <p className="text-xs text-fg-muted">لا يوجد رقم جوال محفوظ لولي الأمر.</p>
+                <p className="text-xs text-fg-muted">{tr("لا يوجد رقم جوال محفوظ لولي الأمر.")}</p>
               ) : null}
             </>
           )}
@@ -511,7 +576,7 @@ export function AttendanceRoster({
       <article ref={detailRef} className="print-form print-report attendance-print official-sheet hidden bg-white font-naskh text-black">
         <OfficialLetterhead school={school} />
         <h2 className="mt-2 text-center text-[18px] font-semibold">
-          {kind === "absence" ? "كشف غياب الطالب" : "كشف تأخر الطالب"}
+          {kind === "absence" ? tr("كشف غياب الطالب") : tr("كشف تأخر الطالب")}
         </h2>
         <p className="student-print-line">
           <strong>{detail.data?.studentName ?? ""}</strong>
@@ -519,7 +584,7 @@ export function AttendanceRoster({
           <span> · المجموع: {dayCountLabel(detailDays.length)}</span>
         </p>
         {detailDays.length === 0 ? (
-          <p className="py-6 text-center">لا توجد أيام مسجّلة.</p>
+          <p className="py-6 text-center">{tr("لا توجد أيام مسجّلة.")}</p>
         ) : (
           <StudentDaysTable days={detailDays} kind={kind} print />
         )}

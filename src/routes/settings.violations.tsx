@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -40,12 +41,12 @@ function ViolationsSettings() {
   const createMutation = useMutation({
     mutationFn: () => createBehaviorType({ data: { name: newName, degree: Number(newDegree) } }),
     onSuccess: () => {
-      toast.success("تمت إضافة المخالفة بإجراءات درجتها الرسمية");
+      toast.success(tr("تمت إضافة المخالفة بإجراءات درجتها الرسمية"));
       setNewName("");
       void queryClient.invalidateQueries({ queryKey: ["behavior-types"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const rows = (query.data ?? []) as CatalogItem[];
@@ -59,9 +60,9 @@ function ViolationsSettings() {
     <div className="space-y-5 pb-8">
       <div>
         <SettingsBack />
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">المخالفات</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{tr("المخالفات")}</h1>
         <p className="text-sm leading-6 text-fg-muted">
-          مخالفات الطلبة منفصلة عن المخالفات تجاه المعلمين ومن في حكمهم. لكل درجة لونها وإجراءاتها.
+          {tr("مخالفات الطلبة منفصلة عن المخالفات تجاه المعلمين ومن في حكمهم. لكل درجة لونها وإجراءاتها.")}
         </p>
       </div>
 
@@ -71,14 +72,14 @@ function ViolationsSettings() {
           onClick={() => { setAudience("students"); setDegree(1); }}
           className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "students" ? "border-primary bg-primary text-primary-fg" : "border-border bg-card"}`}
         >
-          مخالفات الطلبة
+          {tr("مخالفات الطلبة")}
         </button>
         <button
           type="button"
           onClick={() => { setAudience("staff"); setDegree(4); }}
           className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "staff" ? "border-[#7f1d1d] bg-[#7f1d1d] text-white" : "border-border bg-card"}`}
         >
-          تجاه المعلمين ومن في حكمهم
+          {tr("تجاه المعلمين ومن في حكمهم")}
         </button>
       </div>
 
@@ -90,14 +91,14 @@ function ViolationsSettings() {
             onClick={() => setDegree(value)}
             className={`min-h-[4.25rem] rounded-2xl border-2 px-1 text-center ${degreeTone(value)} ${activeDegree === value ? "ring-2 ring-offset-2 ring-current" : "opacity-80"}`}
           >
-            <span className="block text-sm font-bold leading-5 sm:text-base">الدرجة {degreeLabel(value)}</span>
+            <span className="block text-sm font-bold leading-5 sm:text-base">{degreeLabel(value)}</span>
             <span className="mt-0.5 block text-[11px] font-semibold leading-4">{DEGREE_DEDUCT[value]}</span>
           </button>
         ))}
       </div>
 
       <section className={`space-y-3 rounded-2xl border-2 p-3 sm:p-4 ${degreeTone(activeDegree)}`}>
-        <h2 className="text-lg font-bold">إجراءات الدرجة {degreeLabel(activeDegree)}</h2>
+        <h2 className="text-lg font-bold">{tr("الإجراءات")} — {degreeLabel(activeDegree)}</h2>
         <ol className="space-y-2 text-sm leading-6 text-fg">
           {ladder.map((stage, index) => (
             <li key={index} className="rounded-xl bg-white/80 px-3 py-2 text-[#111]">
@@ -110,7 +111,7 @@ function ViolationsSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>إضافة مخالفة</CardTitle>
+          <CardTitle>{tr("إضافة مخالفة")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -123,18 +124,18 @@ function ViolationsSettings() {
             <Input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="اسم المخالفة…"
+              placeholder={tr("اسم المخالفة…")}
               className="min-h-12 min-w-48 flex-1 text-base"
             />
             <Select value={newDegree} onChange={(e) => setNewDegree(e.target.value)} className="min-h-12 w-full text-base sm:w-36">
-              <option value="1">الدرجة الأولى</option>
-              <option value="2">الدرجة الثانية</option>
-              <option value="3">الدرجة الثالثة</option>
-              <option value="4">الدرجة الرابعة</option>
-              <option value="5">الدرجة الخامسة</option>
+              <option value="1">{tr("الدرجة الأولى")}</option>
+              <option value="2">{tr("الدرجة الثانية")}</option>
+              <option value="3">{tr("الدرجة الثالثة")}</option>
+              <option value="4">{tr("الدرجة الرابعة")}</option>
+              <option value="5">{tr("الدرجة الخامسة")}</option>
             </Select>
             <Button type="submit" className="min-h-12" disabled={createMutation.isPending || newName.trim().length < 2}>
-              إضافة
+              {tr("إضافة")}
             </Button>
           </form>
         </CardContent>
@@ -150,7 +151,7 @@ function ViolationsSettings() {
           />
         ))}
         {items.length === 0 ? (
-          <li className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-fg-muted">لا مخالفات في هذه الدرجة.</li>
+          <li className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-fg-muted">{tr("لا مخالفات في هذه الدرجة.")}</li>
         ) : null}
       </ul>
     </div>
@@ -184,11 +185,11 @@ function ViolationCard({
         },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ المخالفة وإجراءاتها");
+      toast.success(tr("تم حفظ المخالفة وإجراءاتها"));
       void queryClient.invalidateQueries({ queryKey: ["behavior-types"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   const toggle = useMutation({
@@ -203,17 +204,17 @@ function ViolationCard({
     <li className="rounded-[var(--radius-lg)] border border-border bg-card">
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-right">
-          <span className="block font-medium">{item.name}</span>
+          <span className="block font-medium">{tr(item.name)}</span>
           <span className="text-xs text-fg-muted">
             {(item.procedures?.length || procedureLadder(item.degree).length)} إجراءات متدرجة
           </span>
         </button>
-        <Badge tone={item.active ? "ok" : "default"}>{item.active ? "نشط" : "موقوف"}</Badge>
+        <Badge tone={item.active ? "ok" : "default"}>{item.active ? tr("نشط") : tr("موقوف")}</Badge>
         <Button size="sm" variant="secondary" onClick={onToggle}>
-          {open ? "إخفاء" : "الإجراءات"}
+          {open ? tr("إخفاء") : tr("الإجراءات")}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => toggle.mutate()}>
-          {item.active ? "إيقاف" : "تفعيل"}
+          {item.active ? tr("إيقاف") : tr("تفعيل")}
         </Button>
       </div>
       {open ? (
@@ -221,11 +222,11 @@ function ViolationCard({
           <div className="flex flex-wrap gap-2">
             <Input value={name} onChange={(e) => setName(e.target.value)} className="min-w-48 flex-1" />
             <Select value={degree} onChange={(e) => setDegree(e.target.value)} className="w-36">
-              <option value="1">الأولى</option>
-              <option value="2">الثانية</option>
-              <option value="3">الثالثة</option>
-              <option value="4">الرابعة</option>
-              <option value="5">الخامسة</option>
+              <option value="1">{tr("الأولى")}</option>
+              <option value="2">{tr("الثانية")}</option>
+              <option value="3">{tr("الثالثة")}</option>
+              <option value="4">{tr("الرابعة")}</option>
+              <option value="5">{tr("الخامسة")}</option>
             </Select>
           </div>
           <div className="space-y-3">
@@ -234,7 +235,7 @@ function ViolationCard({
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">
                     {procedureStageLabel(i + 1)}
-                    {i === stages.length - 1 ? " — ويستمر عند التكرار بعد ذلك" : ""}
+                    {i === stages.length - 1 ? tr(" — ويستمر عند التكرار بعد ذلك") : ""}
                   </p>
                   {stages.length > 1 ? (
                     <Button
@@ -242,7 +243,7 @@ function ViolationCard({
                       variant="ghost"
                       onClick={() => setStages(stages.filter((_, idx) => idx !== i))}
                     >
-                      حذف
+                      {tr("حذف")}
                     </Button>
                   ) : null}
                 </div>

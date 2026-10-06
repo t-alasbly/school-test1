@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -65,7 +66,7 @@ function ReportsBody() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [mode, setMode] = useState<"notes" | "messages" | "names">("notes");
-  const [rosterTitle, setRosterTitle] = useState("بيانات الطلاب");
+  const [rosterTitle, setRosterTitle] = useState(tr("بيانات الطلاب"));
   const [showPhone, setShowPhone] = useState(false);
   const [showClass, setShowClass] = useState(false);
   const [showStage, setShowStage] = useState(false);
@@ -155,11 +156,11 @@ function ReportsBody() {
         .map((group) => {
           const days = [...group.days.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([day, bits]) => ({ day, extra: bits.join("، ") }));
+            .map(([day, bits]) => ({ day, extra: bits.join(tr("، ")) }));
           return { studentId: group.studentId, studentName: group.studentName, classLabel: group.classLabel, days, count: group.days.size };
         })
         .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
-      return { kind, title: NOTE_META[kind].label, groups };
+      return { kind, title: tr(NOTE_META[kind].label), groups };
     }).filter((summary) => type !== "all" || summary.groups.length > 0);
   }, [mode, type, notes, reportSchool.season, reportSchool.schedules]);
 
@@ -171,12 +172,12 @@ function ReportsBody() {
     ? selectedClass.label
     : selectedStage
       ? selectedStage.name
-      : "جميع الفصول";
+      : tr("جميع الفصول");
   const rangeLine =
     from || to
-      ? `${from ? formatDay(`${from}T12:00:00`) : "البداية"} — ${to ? formatDay(`${to}T12:00:00`) : "اليوم"}`
-      : "جميع التواريخ";
-  const typeLine = type === "all" ? "جميع الملاحظات" : NOTE_META[type].label;
+      ? `${from ? formatDay(`${from}T12:00:00`) : tr("البداية")} — ${to ? formatDay(`${to}T12:00:00`) : tr("اليوم")}`
+      : tr("جميع التواريخ");
+  const typeLine = type === "all" ? tr("جميع الملاحظات") : tr(NOTE_META[type].label);
 
   const counts = useMemo(() => {
     const empty = { absence: 0, late: 0, homework: 0, behavior: 0, open: 0, closed: 0 };
@@ -206,7 +207,7 @@ function ReportsBody() {
 
   function applyTemplate(payload: Partial<RosterPayload> | undefined, id?: number) {
     if (!payload) return;
-    setRosterTitle(payload.title || "بيانات الطلاب");
+    setRosterTitle(payload.title || tr("بيانات الطلاب"));
     setShowPhone(Boolean(payload.showPhone));
     setShowClass(Boolean(payload.showClass));
     setShowStage(Boolean(payload.showStage));
@@ -247,8 +248,8 @@ function ReportsBody() {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...body]);
     ws["!cols"] = nameCols.map((c) => ({ wch: Math.max(8, Math.round(c.width / 2)) }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "كشف الأسماء");
-    XLSX.writeFile(wb, `${(rosterTitle.trim() || "كشف-الاسماء").replace(/[\\/:*?"<>|]+/g, "-")}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, tr("كشف الأسماء"));
+    XLSX.writeFile(wb, `${(rosterTitle.trim() || tr("كشف-الاسماء")).replace(/[\\/:*?"<>|]+/g, "-")}.xlsx`);
   }
 
   const saveTpl = useMutation({
@@ -266,7 +267,7 @@ function ReportsBody() {
       if (id) setActiveTemplateId(id);
       void queryClient.invalidateQueries({ queryKey: ["roster-templates"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ القالب"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : "تعذر حفظ القالب"),
   });
   const deleteTpl = useMutation({
     mutationFn: (id: number) => deleteRosterTemplate({ data: { id } }),
@@ -275,7 +276,7 @@ function ReportsBody() {
       setActiveTemplateId((cur) => (cur === id ? null : cur));
       void queryClient.invalidateQueries({ queryKey: ["roster-templates"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
   const publishTpl = useMutation({
     mutationFn: (id: number) => publishRosterTemplate({ data: { id } }),
@@ -283,7 +284,7 @@ function ReportsBody() {
       toast.success("عُمّم القالب على كل المعلمين");
       void queryClient.invalidateQueries({ queryKey: ["roster-templates"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التعميم"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : "تعذر التعميم"),
   });
 
   const principal = principalTitle(reportSchool.leadershipGender);
@@ -297,7 +298,7 @@ function ReportsBody() {
           <p className="text-sm text-fg-muted">
             مخالفات ورسائل أولياء الأمور، أو كشف أسماء لفصل أو صف كامل
           </p>
-          <h1 className="text-xl font-semibold tracking-tight">التقارير</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{tr("التقارير")}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border">
@@ -310,7 +311,7 @@ function ReportsBody() {
                   : "h-11 px-3 text-sm bg-bg-elevated"
               }
             >
-              الملاحظات
+              {tr("الملاحظات")}
             </button>
             <button
               type="button"
@@ -321,7 +322,7 @@ function ReportsBody() {
                   : "h-11 px-3 text-sm bg-bg-elevated"
               }
             >
-              الرسائل
+              {tr("الرسائل")}
             </button>
             <button
               type="button"
@@ -332,7 +333,7 @@ function ReportsBody() {
                   : "h-11 px-3 text-sm bg-bg-elevated"
               }
             >
-              كشف الأسماء
+              {tr("كشف الأسماء")}
             </button>
           </div>
           <Button
@@ -347,7 +348,7 @@ function ReportsBody() {
 
       <form className="no-print grid gap-3 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-1.5">
-          <Label htmlFor="stage">المرحلة</Label>
+          <Label htmlFor="stage">{tr("المرحلة")}</Label>
           <Select
             id="stage"
             value={stageId}
@@ -357,7 +358,7 @@ function ReportsBody() {
               setStudentId("");
             }}
           >
-            <option value="">الكل</option>
+            <option value="">{tr("الكل")}</option>
             {stages.map((s: any) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -366,7 +367,7 @@ function ReportsBody() {
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="cls">الفصل</Label>
+          <Label htmlFor="cls">{tr("الفصل")}</Label>
           <Select
             id="cls"
             value={classId}
@@ -375,7 +376,7 @@ function ReportsBody() {
               setStudentId("");
             }}
           >
-            <option value="">الكل</option>
+            <option value="">{tr("الكل")}</option>
             {classes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -385,9 +386,9 @@ function ReportsBody() {
         </div>
         {mode !== "names" ? (
         <div className="space-y-1.5">
-          <Label htmlFor="student">اسم الطالب</Label>
+          <Label htmlFor="student">{tr("اسم الطالب")}</Label>
           <Select id="student" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
-            <option value="">الكل</option>
+            <option value="">{tr("الكل")}</option>
             {students.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -398,16 +399,16 @@ function ReportsBody() {
         ) : null}
         {mode === "notes" ? (
         <div className="space-y-1.5">
-          <Label htmlFor="type">نوع الملاحظة</Label>
+          <Label htmlFor="type">{tr("نوع الملاحظة")}</Label>
           <Select
             id="type"
             value={type}
             onChange={(e) => setType(e.target.value as "all" | NoteType)}
           >
-            <option value="all">الكل</option>
+            <option value="all">{tr("الكل")}</option>
             {NOTE_TYPES.map((t) => (
               <option key={t} value={t}>
-                {NOTE_META[t].label}
+                {tr(NOTE_META[t].label)}
               </option>
             ))}
           </Select>
@@ -416,11 +417,11 @@ function ReportsBody() {
         {mode !== "names" ? (
         <>
         <div className="space-y-1.5">
-          <Label htmlFor="from">من تاريخ</Label>
+          <Label htmlFor="from">{tr("من تاريخ")}</Label>
           <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="to">إلى تاريخ</Label>
+          <Label htmlFor="to">{tr("إلى تاريخ")}</Label>
           <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
         </>
@@ -485,11 +486,11 @@ function ReportsBody() {
         {mode === "names" ? (
           <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center">
             <div className="border-l border-black px-1.5 py-1.5">
-              <p className="text-[11px] font-semibold text-[#00857c]">الصف / الفصل</p>
+              <p className="text-[11px] font-semibold text-[#00857c]">{tr("الصف / الفصل")}</p>
               <p className="text-[13px] font-medium leading-5">{classLine}</p>
             </div>
             <div className="px-1.5 py-1.5">
-              <p className="text-[11px] font-semibold text-[#00857c]">عدد الطلاب</p>
+              <p className="text-[11px] font-semibold text-[#00857c]">{tr("عدد الطلاب")}</p>
               <p className="text-[13px] font-medium leading-5 tabular-nums">{students.length}</p>
             </div>
           </div>
@@ -497,8 +498,8 @@ function ReportsBody() {
           <table className="official-table mb-3">
             <thead>
               <tr>
-                <th>اسم الطالب</th>
-                <th>الصف / الفصل</th>
+                <th>{tr("اسم الطالب")}</th>
+                <th>{tr("الصف / الفصل")}</th>
               </tr>
             </thead>
             <tbody>
@@ -512,8 +513,8 @@ function ReportsBody() {
         <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center sm:grid-cols-4">
           {[
             ["الصف / المرحلة", classLine],
-            ["اسم الطالب", "جميع الطلاب"],
-            ["نوع الملاحظة", mode === "messages" ? "رسائل أولياء الأمور" : typeLine],
+            [tr("اسم الطالب"), "جميع الطلاب"],
+            [tr("نوع الملاحظة"), mode === "messages" ? "رسائل أولياء الأمور" : typeLine],
             ["الفترة", rangeLine],
           ].map(([label, value]) => (
             <div key={label} className="border-l border-black px-1.5 py-1.5 last:border-l-0">
@@ -528,10 +529,10 @@ function ReportsBody() {
         <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
           {(
             [
-              ["غياب حصة", counts.absence],
-              ["تأخر حصة", counts.late],
-              ["واجب", counts.homework],
-              ["سلوك", counts.behavior],
+              [tr("غياب حصة"), counts.absence],
+              [tr("تأخر حصة"), counts.late],
+              [tr("واجب"), counts.homework],
+              [tr("سلوك"), counts.behavior],
               ["مفتوحة", counts.open],
               ["أُغلقت", counts.closed],
             ] as const
@@ -594,12 +595,12 @@ function ReportsBody() {
         <table className="official-table official-report-table">
           <thead>
             <tr>
-              <th className="w-8">م</th>
-              <th>اسم الطالب</th>
-              <th>النوع</th>
-              <th>المرسل</th>
-              <th>التاريخ</th>
-              <th>نص الرسالة</th>
+              <th className="w-8">{tr("م")}</th>
+              <th>{tr("اسم الطالب")}</th>
+              <th>{tr("النوع")}</th>
+              <th>{tr("المرسل")}</th>
+              <th>{tr("التاريخ")}</th>
+              <th>{tr("نص الرسالة")}</th>
               {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
             </tr>
           </thead>
@@ -645,17 +646,17 @@ function ReportsBody() {
             <table className="official-table">
               <thead>
                 <tr>
-                  <th className="w-8">م</th>
-                  <th>اسم الطالب</th>
-                  <th>الصف</th>
-                  <th className="w-16">عدد الأيام</th>
-                  <th>الأيام والحصص</th>
+                  <th className="w-8">{tr("م")}</th>
+                  <th>{tr("اسم الطالب")}</th>
+                  <th>{tr("الصف")}</th>
+                  <th className="w-16">{tr("عدد الأيام")}</th>
+                  <th>{tr("الأيام والحصص")}</th>
                 </tr>
               </thead>
               <tbody>
                 {summary.groups.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center">لا سجلات في هذا النطاق.</td>
+                    <td colSpan={5} className="py-6 text-center">{tr("لا سجلات في هذا النطاق.")}</td>
                   </tr>
                 ) : (
                   summary.groups.map((group, index) => (
@@ -678,12 +679,12 @@ function ReportsBody() {
         <table className="official-table official-report-table">
           <thead>
             <tr>
-              <th className="w-8">م</th>
-              <th>اسم الطالب</th>
-              <th>النوع / المخالفة</th>
-              <th>الحصة · المادة</th>
-              <th>التاريخ</th>
-              <th>الحالة / الإجراء</th>
+              <th className="w-8">{tr("م")}</th>
+              <th>{tr("اسم الطالب")}</th>
+              <th>{tr("النوع / المخالفة")}</th>
+              <th>{tr("الحصة · المادة")}</th>
+              <th>{tr("التاريخ")}</th>
+              <th>{tr("الحالة / الإجراء")}</th>
               {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
             </tr>
           </thead>
@@ -705,10 +706,10 @@ function ReportsBody() {
                     </span>
                   </td>
                   <td className="text-right">
-                    <span className="block leading-5">{NOTE_META[note.type as NoteType].label}</span>
+                    <span className="block leading-5">{tr(NOTE_META[note.type as NoteType].label)}</span>
                     {note.behaviorTypeName ? (
                       <span className="block text-[10px] leading-4">
-                        {note.behaviorTypeName}
+                        {tr(note.behaviorTypeName)}
                         {note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}
                       </span>
                     ) : note.details ? (
@@ -772,23 +773,23 @@ function ReportsBody() {
         >
           {showTeacherSign ? (
             <div>
-              <p className="font-semibold">المعلم</p>
+              <p className="font-semibold">{tr("المعلم")}</p>
               <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
-              <p>التوقيع: ………………</p>
+              <p>{tr("التوقيع: ………………")}</p>
             </div>
           ) : null}
           {showCounselorSign ? (
             <div>
               <p className="font-semibold">{counselor}</p>
               <p>الاسم: {reportSchool.counselorName || "………………"}</p>
-              <p>التوقيع: ………………</p>
+              <p>{tr("التوقيع: ………………")}</p>
             </div>
           ) : null}
           {showPrincipalSign ? (
             <div>
               <p className="font-semibold">{principal}</p>
               <p>الاسم: {reportSchool.principalName || "………………"}</p>
-              <p>التوقيع: ………………</p>
+              <p>{tr("التوقيع: ………………")}</p>
             </div>
           ) : null}
         </footer>

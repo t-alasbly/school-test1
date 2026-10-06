@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -57,7 +58,7 @@ function HealthPage() {
       void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   const addHealth = useMutation({
@@ -65,11 +66,11 @@ function HealthPage() {
     onSuccess: (res) => {
       applyChip(res.name);
       setCustomHealth("");
-      toast.success(res.existed ? "موجود في القائمة واخترناه" : "أُضيف للقائمة واخترناه");
+      toast.success(res.existed ? tr("موجود في القائمة واخترناه") : tr("أُضيف للقائمة واخترناه"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["health-conditions"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const selected = roster.find((s: { id: number }) => s.id === Number(healthId));
@@ -77,12 +78,12 @@ function HealthPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">تظهر أسفل اسم الطالب في كشف الفصل</p>
-        <h1 className="text-3xl font-semibold tracking-tight">الملاحظات الصحية</h1>
+        <p className="text-sm text-fg-muted">{tr("تظهر أسفل اسم الطالب في كشف الفصل")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("الملاحظات الصحية")}</h1>
       </header>
       <Card>
         <CardHeader>
-          <CardTitle>تسجيل ملاحظة صحية</CardTitle>
+          <CardTitle>{tr("تسجيل ملاحظة صحية")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-fg-muted">
@@ -90,11 +91,11 @@ function HealthPage() {
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="health-q">بحث عن طالب</Label>
-              <Input id="health-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="الاسم أو الصف" />
+              <Label htmlFor="health-q">{tr("بحث عن طالب")}</Label>
+              <Input id="health-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("الاسم أو الصف")} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="health-student">الطالب</Label>
+              <Label htmlFor="health-student">{tr("الطالب")}</Label>
               <select
                 id="health-student"
                 className="h-11 w-full rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
@@ -106,7 +107,7 @@ function HealthPage() {
                   setHealthNote(found?.healthNote ?? "");
                 }}
               >
-                <option value="">اختر طالباً</option>
+                <option value="">{tr("اختر طالباً")}</option>
                 {filtered.slice(0, 80).map((s: { id: number; name: string; classLabel: string }) => (
                   <option key={s.id} value={s.id}>
                     {s.name} — {s.classLabel}
@@ -143,7 +144,7 @@ function HealthPage() {
             <Input
               value={customHealth}
               onChange={(e) => setCustomHealth(e.target.value)}
-              placeholder="مرض غير موجود في القائمة…"
+              placeholder={tr("مرض غير موجود في القائمة…")}
               className="min-w-48 flex-1"
             />
             <Button type="submit" variant="secondary" disabled={addHealth.isPending || customHealth.trim().length < 2}>
@@ -151,11 +152,11 @@ function HealthPage() {
             </Button>
           </form>
           <div className="space-y-1.5">
-            <Label htmlFor="health-note">الملاحظة الصحية</Label>
+            <Label htmlFor="health-note">{tr("الملاحظة الصحية")}</Label>
             <Textarea
               id="health-note"
               className="min-h-20"
-              placeholder="مثال: يعاني من الربو — يحتاج بخاخاً عند الضيق"
+              placeholder={tr("مثال: يعاني من الربو — يحتاج بخاخاً عند الضيق")}
               value={healthNote}
               onChange={(e) => setHealthNote(e.target.value)}
             />

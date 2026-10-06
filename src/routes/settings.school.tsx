@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -57,17 +58,17 @@ function SchoolSettings() {
         },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ بيانات المدرسة");
+      toast.success(tr("تم حفظ بيانات المدرسة"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   if (staff.role !== "admin") {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">بيانات المدرسة متاحة لمدير التطبيق.</p>
+        <p className="text-fg-muted">{tr("بيانات المدرسة متاحة لمدير التطبيق.")}</p>
       </div>
     );
   }
@@ -93,7 +94,7 @@ function SchoolSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">بيانات المدرسة</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("بيانات المدرسة")}</h1>
         <p className="text-sm text-fg-muted">
           ثلاثة أسطر تُكتب يدوياً كما تريدها في يسار ترويسة الخطاب — السطر الأسفل اسم المدرسة
         </p>
@@ -101,39 +102,39 @@ function SchoolSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>ترويسة الخطاب — الجهة اليسرى</CardTitle>
+          <CardTitle>{tr("ترويسة الخطاب — الجهة اليسرى")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-fg-muted">
             ثلاث خانات فاضية تُكتب كاملة كما تظهر في الخطاب. لا تُضاف كلمات تلقائياً — اكتب «منطقة…» أو «إدارة التعليم بـ…» بنفسك إن أردت.
           </p>
           <div className="space-y-1.5">
-            <Label htmlFor="region">السطر الأول</Label>
+            <Label htmlFor="region">{tr("السطر الأول")}</Label>
             <Input
               id="region"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              placeholder="مثال: منطقة مكة المكرمة"
+              placeholder={tr("مثال: منطقة مكة المكرمة")}
               maxLength={120}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="gov">السطر الثاني</Label>
+            <Label htmlFor="gov">{tr("السطر الثاني")}</Label>
             <Input
               id="gov"
               value={governorate}
               onChange={(e) => setGovernorate(e.target.value)}
-              placeholder="مثال: إدارة التعليم بمحافظة جدة"
+              placeholder={tr("مثال: إدارة التعليم بمحافظة جدة")}
               maxLength={120}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="school">اسم المدرسة (السطر الثالث — الأسفل)</Label>
+            <Label htmlFor="school">{tr("اسم المدرسة (السطر الثالث — الأسفل)")}</Label>
             <Input
               id="school"
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
-              placeholder="مثال: متوسطة الأمير سلطان"
+              placeholder={tr("مثال: متوسطة الأمير سلطان")}
               maxLength={120}
             />
           </div>
@@ -148,7 +149,7 @@ function SchoolSettings() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>صفة القيادة في النماذج</Label>
+            <Label>{tr("صفة القيادة في النماذج")}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["male", "female"] as SchoolGender[]).map((g) => (
                 <button
@@ -167,7 +168,7 @@ function SchoolSettings() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>صفة الطلبة في النماذج</Label>
+            <Label>{tr("صفة الطلبة في النماذج")}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["male", "female"] as SchoolGender[]).map((g) => (
                 <button
@@ -180,7 +181,7 @@ function SchoolSettings() {
                       : "h-11 rounded-[var(--radius-sm)] border border-border bg-bg-elevated text-sm"
                   }
                 >
-                  {g === "male" ? "طالب" : "طالبة"}
+                  {g === "male" ? tr("طالب") : tr("طالبة")}
                 </button>
               ))}
             </div>
@@ -191,7 +192,7 @@ function SchoolSettings() {
               id="principal"
               value={principalName}
               onChange={(e) => setPrincipalName(e.target.value)}
-              placeholder="يظهر في الترويسة والكشوفات"
+              placeholder={tr("يظهر في الترويسة والكشوفات")}
             />
           </div>
           <div className="space-y-1.5">
@@ -200,20 +201,20 @@ function SchoolSettings() {
               id="counselor"
               value={counselorName}
               onChange={(e) => setCounselorName(e.target.value)}
-              placeholder="يظهر في التوقيعات والإحالات"
+              placeholder={tr("يظهر في التوقيعات والإحالات")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="techvp">وكيل الشؤون الفنية</Label>
+            <Label htmlFor="techvp">{tr("وكيل الشؤون الفنية")}</Label>
             <Input
               id="techvp"
               value={technicalVpName}
               onChange={(e) => setTechnicalVpName(e.target.value)}
-              placeholder="يُذكر عند تكرار المخالفة"
+              placeholder={tr("يُذكر عند تكرار المخالفة")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>التوقيت الدراسي</Label>
+            <Label>{tr("التوقيت الدراسي")}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["winter", "summer"] as Season[]).map((s) => (
                 <button
@@ -226,7 +227,7 @@ function SchoolSettings() {
                       : "h-11 rounded-[var(--radius-sm)] border border-border bg-bg-elevated text-sm"
                   }
                 >
-                  {s === "winter" ? "شتوي — بداية 7:00" : "صيفي — بداية 6:45"}
+                  {s === "winter" ? tr("شتوي — بداية 7:00") : tr("صيفي — بداية 6:45")}
                 </button>
               ))}
             </div>
@@ -245,14 +246,14 @@ function SchoolSettings() {
           <CardTitle>جدول الحصص ({SEASON_LABEL[season]})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-fg-muted">عدّل أوقات الحصص للتوقيت المعروض أعلاه ثم احفظ بيانات المدرسة.</p>
+          <p className="text-sm text-fg-muted">{tr("عدّل أوقات الحصص للتوقيت المعروض أعلاه ثم احفظ بيانات المدرسة.")}</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-right text-fg-muted">
-                  <th className="px-3 py-2 font-medium">الحصة</th>
-                  <th className="px-3 py-2 font-medium">من</th>
-                  <th className="px-3 py-2 font-medium">إلى</th>
+                  <th className="px-3 py-2 font-medium">{tr("الحصة")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("من")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("إلى")}</th>
                 </tr>
               </thead>
               <tbody>

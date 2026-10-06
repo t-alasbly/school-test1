@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -51,12 +52,12 @@ function AppearanceSettings() {
     onSuccess: (result, input) => {
       applyAppearance(result.appearance);
       setDraft(result.appearance);
-      if (input.reset) toast.success("عاد المظهر إلى افتراضي المدرسة");
-      else if (result.scope === "school") toast.success("صار هذا المظهر افتراضي المدرسة");
-      else toast.success("تم حفظ مظهر حسابك");
+      if (input.reset) toast.success(tr("عاد المظهر إلى افتراضي المدرسة"));
+      else if (result.scope === "school") toast.success(tr("صار هذا المظهر افتراضي المدرسة"));
+      else toast.success(tr("تم حفظ مظهر حسابك"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function pickTheme(id: ThemeId) {
@@ -97,7 +98,7 @@ function AppearanceSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">المظهر</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("المظهر")}</h1>
         <p className="text-sm text-fg-muted">
           قوالب جاهزة، وخطوط عربية أجمل (ال مسيري، Cairo، أميري وغيرها)، مع تكبير أو تصغير حجم الخط.
         </p>
@@ -116,10 +117,10 @@ function AppearanceSettings() {
           style={{ background: tokens.bgElevated, borderColor: tokens.border }}
         >
           <span className="grid size-8 place-items-center rounded-full text-xs font-bold" style={{ background: tokens.primary, color: tokens.primaryFg }}>
-            م
+            {tr("م")}
           </span>
           <span>
-            <span className="block text-sm font-semibold">متابعة الطلاب الشاملة</span>
+            <span className="block text-sm font-semibold">{tr("متابعة الطلاب الشاملة")}</span>
             <span className="block text-[11px]" style={{ color: tokens.fgMuted }}>
               معاينة مباشرة للألوان والخط
             </span>
@@ -127,18 +128,18 @@ function AppearanceSettings() {
         </div>
         <div className="grid gap-3 p-4 sm:grid-cols-2">
           <div className="rounded-[var(--radius-md)] border p-3" style={{ background: tokens.card, borderColor: tokens.border }}>
-            <p className="text-base font-semibold leading-7">عبدالرحمن القحطاني</p>
+            <p className="text-base font-semibold leading-7">{tr("عبدالرحمن القحطاني")}</p>
             <p className="mt-1 text-sm" style={{ color: tokens.fgMuted }}>
               أولى / 1 — اضغط الاسم للرسائل والطباعة
             </p>
           </div>
           <div className="flex items-center justify-between rounded-[var(--radius-md)] border p-3" style={{ background: tokens.card, borderColor: tokens.border }}>
-            <span className="text-sm" style={{ color: tokens.fgMuted }}>زر أساسي</span>
+            <span className="text-sm" style={{ color: tokens.fgMuted }}>{tr("زر أساسي")}</span>
             <span
               className="inline-flex h-10 items-center rounded-[var(--radius-sm)] px-4 text-sm font-medium"
               style={{ background: tokens.primary, color: tokens.primaryFg }}
             >
-              حفظ
+              {tr("حفظ")}
             </span>
           </div>
         </div>
@@ -146,7 +147,7 @@ function AppearanceSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>قوالب جاهزة</CardTitle>
+          <CardTitle>{tr("قوالب جاهزة")}</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {THEME_LIST.map((theme) => {
@@ -166,7 +167,7 @@ function AppearanceSettings() {
                   <span className="block text-sm font-semibold">{theme.name}</span>
                   <span className="mt-0.5 block text-[11px] leading-4 text-fg-muted">{theme.hint}</span>
                   {selected && customized ? (
-                    <span className="mt-1 block text-[11px] text-primary">معدّل بألوانك</span>
+                    <span className="mt-1 block text-[11px] text-primary">{tr("معدّل بألوانك")}</span>
                   ) : null}
                 </span>
               </button>
@@ -177,15 +178,15 @@ function AppearanceSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>التقويم</CardTitle>
+          <CardTitle>{tr("التقويم")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-sm text-fg-muted">الأساس الهجري. يمكنك إظهار التواريخ بالميلادي من هنا أو من شاشة الغياب.</p>
+          <p className="text-sm text-fg-muted">{tr("الأساس الهجري. يمكنك إظهار التواريخ بالميلادي من هنا أو من شاشة الغياب.")}</p>
           <div className="grid grid-cols-2 gap-2">
             {(
               [
-                ["hijri", "هجري", "أم القرى — المعتمد في الوزارة"],
-                ["gregorian", "ميلادي", "التقويم الميلادي بجانب الهجري"],
+                ["hijri", tr("هجري"), tr("أم القرى — المعتمد في الوزارة")],
+                ["gregorian", tr("ميلادي"), tr("التقويم الميلادي بجانب الهجري")],
               ] as const
             ).map(([id, label, hint]) => {
               const selected = (draft.calendar ?? "hijri") === id;
@@ -216,7 +217,7 @@ function AppearanceSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>الخط</CardTitle>
+          <CardTitle>{tr("الخط")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
           {FONT_LIST.map((font) => (
@@ -241,7 +242,7 @@ function AppearanceSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>حجم الخط</CardTitle>
+          <CardTitle>{tr("حجم الخط")}</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           {FONT_SCALES.map((item) => {
@@ -259,7 +260,7 @@ function AppearanceSettings() {
                 )}
                 style={{ fontSize: `${16 * item.value}px` }}
               >
-                {item.label}
+                {tr(item.label)}
               </button>
             );
           })}
@@ -268,15 +269,15 @@ function AppearanceSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>ألوان مخصصة</CardTitle>
+          <CardTitle>{tr("ألوان مخصصة")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {(
             [
-              ["primary", "اللون الأساسي", draft.custom?.primary],
-              ["bg", "خلفية الصفحة", draft.custom?.bg],
-              ["fg", "لون الخط", draft.custom?.fg],
-              ["card", "لون البطاقات", draft.custom?.card],
+              ["primary", tr("اللون الأساسي"), draft.custom?.primary],
+              ["bg", tr("خلفية الصفحة"), draft.custom?.bg],
+              ["fg", tr("لون الخط"), draft.custom?.fg],
+              ["card", tr("لون البطاقات"), draft.custom?.card],
             ] as const
           ).map(([key, label, value]) => (
             <div key={key} className="space-y-1.5">

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -49,8 +50,8 @@ function WelcomeDesk() {
   const cards = [
     {
       id: "notes",
-      label: "ملاحظاتي",
-      hint: "كل ما سجّلته على الطلاب",
+      label: tr("ملاحظاتي"),
+      hint: tr("كل ما سجّلته على الطلاب"),
       value: stats?.myNotes ?? 0,
       tone: "ok" as const,
       icon: ClipboardList,
@@ -58,8 +59,8 @@ function WelcomeDesk() {
     },
     {
       id: "closed",
-      label: "رُد عليها",
-      hint: "مخالفات أُغلق فيها الإجراء",
+      label: tr("رُد عليها"),
+      hint: tr("مخالفات أُغلق فيها الإجراء"),
       value: stats?.myClosed ?? 0,
       tone: "ok" as const,
       icon: CheckCircle2,
@@ -67,8 +68,8 @@ function WelcomeDesk() {
     },
     {
       id: "waiting",
-      label: "تنتظر الرد",
-      hint: "لا تزال مفتوحة بانتظار الإجراء",
+      label: tr("تنتظر الرد"),
+      hint: tr("لا تزال مفتوحة بانتظار الإجراء"),
       value: stats?.waiting ?? 0,
       tone: "warn" as const,
       icon: Clock3,
@@ -76,8 +77,8 @@ function WelcomeDesk() {
     },
     {
       id: "referrals",
-      label: "حالاتي",
-      hint: counsel ? "محالة إلى الإرشاد الطلابي" : "ما حرّرته وأحلتَه للإرشاد أو لوكيل شؤون الطلاب",
+      label: tr("حالاتي"),
+      hint: counsel ? tr("محالة إلى الإرشاد الطلابي") : tr("ما حرّرته وأحلتَه للإرشاد أو لوكيل شؤون الطلاب"),
       value: stats?.referrals ?? 0,
       tone: "danger" as const,
       icon: HeartHandshake,
@@ -95,7 +96,7 @@ function WelcomeDesk() {
             مرحباً {staff.displayName}
           </h1>
           <p className="text-sm text-fg-muted">
-            {ROLE_LABEL[staff.role]}
+            {tr(ROLE_LABEL[staff.role])}
             {staff.subject ? ` · ${staff.subject}` : ""} — {school.name}
           </p>
         </div>
@@ -158,11 +159,11 @@ function WelcomeDesk() {
               <MessageCircle className="size-5" />
             </span>
             <span>
-              <span className="block font-semibold">رسائل جماعية</span>
-              <span className="block text-xs text-fg-muted">واتساب لفصل أو صف أو غائبي اليوم ومتأخريه</span>
+              <span className="block font-semibold">{tr("رسائل جماعية")}</span>
+              <span className="block text-xs text-fg-muted">{tr("واتساب لفصل أو صف أو غائبي اليوم ومتأخريه")}</span>
             </span>
           </span>
-          <span className="text-sm text-primary">فتح</span>
+          <span className="text-sm text-primary">{tr("فتح")}</span>
         </Link>
       ) : null}
       {classes ? (
@@ -175,11 +176,11 @@ function WelcomeDesk() {
               <BookOpen className="size-5" />
             </span>
             <span>
-              <span className="block font-semibold">الفصول</span>
-              <span className="block text-xs text-fg-muted">افتح قائمة الصفوف لتسجيل ملاحظة أو غياب حصة</span>
+              <span className="block font-semibold">{tr("الفصول")}</span>
+              <span className="block text-xs text-fg-muted">{tr("افتح قائمة الصفوف لتسجيل ملاحظة أو غياب حصة")}</span>
             </span>
           </span>
-          <span className="text-sm text-primary">فتح</span>
+          <span className="text-sm text-primary">{tr("فتح")}</span>
         </Link>
       ) : null}
     </div>

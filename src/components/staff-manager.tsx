@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { Ban, Check, Shield, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -65,7 +66,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
         data: { name, email, phone, password, role, subject },
       }),
     onSuccess: () => {
-      toast.success("تم إضافة المستخدم");
+      toast.success(tr("تم إضافة المستخدم"));
       setName("");
       setEmail("");
       setPhone("");
@@ -75,7 +76,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإضافة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإضافة")),
   });
 
   const updateMutation = useMutation({
@@ -94,12 +95,12 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
         },
       }),
     onSuccess: () => {
-      toast.success("تم حفظ بيانات المستخدم");
+      toast.success(tr("تم حفظ بيانات المستخدم"));
       setEditing(null);
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر التحديث"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر التحديث")),
   });
 
   const activeMutation = useMutation({
@@ -110,7 +111,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر تغيير حالة الحساب"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تغيير حالة الحساب")),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -122,7 +123,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   const deleteMutation = useMutation({
@@ -133,7 +134,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
 
   const permMutation = useMutation({
@@ -151,7 +152,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
     },
     onError: (err, _input, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(["staff"], ctx.previous);
-      toast.error(err instanceof Error ? err.message : "تعذر حفظ الصلاحية");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الصلاحية"));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
@@ -167,7 +168,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>{compact ? "إضافة معلم" : "إضافة معلم أو مستخدم"}</CardTitle>
+          <CardTitle>{compact ? tr("إضافة معلم") : tr("إضافة معلم أو مستخدم")}</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -178,17 +179,17 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
             }}
           >
             <div className="space-y-1.5">
-              <Label htmlFor="new-name">الاسم</Label>
+              <Label htmlFor="new-name">{tr("الاسم")}</Label>
               <Input
                 id="new-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: سعد العتيبي"
+                placeholder={tr("مثال: سعد العتيبي")}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-phone">رقم الجوال (اسم المستخدم)</Label>
+              <Label htmlFor="new-phone">{tr("رقم الجوال (اسم المستخدم)")}</Label>
               <Input
                 id="new-phone"
                 value={phone}
@@ -199,34 +200,34 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-email">البريد الإلكتروني (اختياري)</Label>
+              <Label htmlFor="new-email">{tr("البريد الإلكتروني (اختياري)")}</Label>
               <Input
                 id="new-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="إن وُجد بدل الجوال"
+                placeholder={tr("إن وُجد بدل الجوال")}
                 dir="ltr"
                 className="text-left"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-subject">المادة</Label>
+              <Label htmlFor="new-subject">{tr("المادة")}</Label>
               <Input
                 id="new-subject"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="رياضيات، لغتي…"
+                placeholder={tr("رياضيات، لغتي…")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-pass">كلمة المرور</Label>
+              <Label htmlFor="new-pass">{tr("كلمة المرور")}</Label>
               <Input
                 id="new-pass"
                 type="text"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="الافتراضي 1234"
+                placeholder={tr("الافتراضي 1234")}
                 required
                 minLength={4}
                 dir="ltr"
@@ -234,7 +235,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new-role">المسمى الوظيفي</Label>
+              <Label htmlFor="new-role">{tr("المسمى الوظيفي")}</Label>
               <Select
                 id="new-role"
                 value={role}
@@ -242,7 +243,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               >
                 {CREATE_ROLES.map((r) => (
                   <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
+                    {tr(ROLE_LABEL[r])}
                   </option>
                 ))}
               </Select>
@@ -273,7 +274,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
           onClick={() => {
             const n = (query.data ?? []).filter((m) => m.role === "teacher").length;
             if (!n) {
-              toast.error("لا يوجد معلمون للحذف");
+              toast.error(tr("لا يوجد معلمون للحذف"));
               return;
             }
             if (window.confirm(`حذف جميع المعلمين (${n}) نهائياً؟ لا يُحذف حسابك. لا يمكن التراجع.`)) {
@@ -318,15 +319,15 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{member.displayName}</p>
                 <p className="text-xs text-fg-subtle">
-                  {member.phone || member.email || "بدون حساب دخول"}
+                  {member.phone || member.email || tr("بدون حساب دخول")}
                   {member.subject ? ` · ${member.subject}` : ""}
                   {` · ${formatStamp(member.createdAt)}`}
                 </p>
               </div>
-              <Badge tone={roleTone(member.role)}>{ROLE_LABEL[member.role]}</Badge>
-              {member.active === false ? <Badge tone="danger">ملغى</Badge> : null}
+              <Badge tone={roleTone(member.role)}>{tr(ROLE_LABEL[member.role])}</Badge>
+              {member.active === false ? <Badge tone="danger">{tr("ملغى")}</Badge> : null}
               {member.role === "admin" ? (
-                <span className="text-xs text-fg-muted">كل الصلاحيات</span>
+                <span className="text-xs text-fg-muted">{tr("كل الصلاحيات")}</span>
               ) : (
                 <Button
                   size="sm"
@@ -352,10 +353,10 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                   })
                 }
               >
-                تعديل
+                {tr("تعديل")}
               </Button>
               {member.userId === staff.userId ? (
-                <span className="text-xs text-fg-muted">حسابك</span>
+                <span className="text-xs text-fg-muted">{tr("حسابك")}</span>
               ) : member.active === false ? (
                 <Button
                   size="sm"
@@ -373,7 +374,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                   aria-label={`إلغاء ${member.displayName}`}
                 >
                   <Ban className="size-4" />
-                  إلغاء
+                  {tr("إلغاء")}
                 </Button>
               )}
               {member.userId !== staff.userId ? (
@@ -391,14 +392,14 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
           </li>
         ))}
         {query.data?.length === 0 ? (
-          <li className="px-4 py-8 text-center text-sm text-fg-muted">لا يوجد موظفون بعد</li>
+          <li className="px-4 py-8 text-center text-sm text-fg-muted">{tr("لا يوجد موظفون بعد")}</li>
         ) : null}
       </ul>
 
       <Dialog open={editing != null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>تعديل المستخدم</DialogTitle>
+            <DialogTitle>{tr("تعديل المستخدم")}</DialogTitle>
           </DialogHeader>
           {editing ? (
             <form
@@ -409,7 +410,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
               }}
             >
               <div className="space-y-1.5">
-                <Label htmlFor="edit-name">الاسم</Label>
+                <Label htmlFor="edit-name">{tr("الاسم")}</Label>
                 <Input
                   id="edit-name"
                   value={editing.displayName}
@@ -419,7 +420,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-phone">الجوال</Label>
+                <Label htmlFor="edit-phone">{tr("الجوال")}</Label>
                 <Input
                   id="edit-phone"
                   value={editing.phone}
@@ -429,21 +430,21 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-pass">كلمة المرور</Label>
+                <Label htmlFor="edit-pass">{tr("كلمة المرور")}</Label>
                 <Input
                   id="edit-pass"
                   type="text"
                   value={editing.password}
                   onChange={(e) => setEditing({ ...editing, password: e.target.value })}
-                  placeholder="اتركه فارغاً إن لم ترد التغيير"
+                  placeholder={tr("اتركه فارغاً إن لم ترد التغيير")}
                   dir="ltr"
                   className="text-left"
                   autoComplete="new-password"
                 />
-                <p className="text-xs text-fg-muted">إن كُتبت بالخطأ يمكنك تصحيحها هنا دون إنشاء حساب جديد.</p>
+                <p className="text-xs text-fg-muted">{tr("إن كُتبت بالخطأ يمكنك تصحيحها هنا دون إنشاء حساب جديد.")}</p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-subject">المادة</Label>
+                <Label htmlFor="edit-subject">{tr("المادة")}</Label>
                 <Input
                   id="edit-subject"
                   value={editing.subject}
@@ -451,7 +452,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-role">المسمى الوظيفي</Label>
+                <Label htmlFor="edit-role">{tr("المسمى الوظيفي")}</Label>
                 <Select
                   id="edit-role"
                   value={editing.role}
@@ -461,7 +462,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 >
                   {ASSIGNABLE_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {ROLE_LABEL[r]}
+                      {tr(ROLE_LABEL[r])}
                     </option>
                   ))}
                 </Select>
@@ -475,7 +476,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                   (editing.password.trim().length > 0 && editing.password.trim().length < 4)
                 }
               >
-                حفظ التعديلات
+                {tr("حفظ التعديلات")}
               </Button>
             </form>
           ) : null}
@@ -527,8 +528,8 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                         {on ? <Check className="size-3.5" /> : null}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium leading-5">{item.label}</span>
-                        <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{item.hint}</span>
+                        <span className="block text-sm font-medium leading-5">{tr(item.label)}</span>
+                        <span className="mt-0.5 block text-[11px] leading-4 opacity-80">{tr(item.hint)}</span>
                       </span>
                     </button>
                   );

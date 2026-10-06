@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import {
   Archive,
   Award,
@@ -27,113 +28,113 @@ function SettingsHub() {
   const cards = [
     {
       to: "/settings/profile" as const,
-      title: "حسابك",
-      body: "اسمك الظاهر، رقم الجوال، كلمة المرور، والمادة الدراسية.",
+      title: tr("حسابك"),
+      body: tr("اسمك الظاهر، رقم الجوال، كلمة المرور، والمادة الدراسية."),
       icon: UserRound,
       show: true,
     },
     {
       to: "/settings/school" as const,
-      title: "بيانات المدرسة",
-      body: "ثلاثة أسطر تُكتب يدوياً لترويسة الخطاب، ثم اسم المدرسة في السطر الأسفل، وأسماء القيادة.",
+      title: tr("بيانات المدرسة"),
+      body: tr("ثلاثة أسطر تُكتب يدوياً لترويسة الخطاب، ثم اسم المدرسة في السطر الأسفل، وأسماء القيادة."),
       icon: School,
       show: admin,
     },
     {
       to: "/settings/classes" as const,
-      title: "تنسيق الصفوف والفصول",
-      body: "صفوف المدرسة وأقسامها كما في ملف الطلاب. احذف الأقسام الفارغة القديمة من هنا.",
+      title: tr("تنسيق الصفوف والفصول"),
+      body: tr("صفوف المدرسة وأقسامها كما في ملف الطلاب. احذف الأقسام الفارغة القديمة من هنا."),
       icon: Layers,
       show: staffCan(staff, "editClasses"),
     },
     {
       to: "/settings/app" as const,
-      title: "أيقونة التطبيق",
-      body: "شعار البرنامج للأيقونة، وشعار المدرسة عند التشغيل وفي رأس الصفحة، وشعار الرؤية بجانب الوزارة.",
+      title: tr("أيقونة التطبيق"),
+      body: tr("شعار البرنامج للأيقونة، وشعار المدرسة عند التشغيل وفي رأس الصفحة، وشعار الرؤية بجانب الوزارة."),
       icon: Smartphone,
       show: admin,
     },
     {
       to: "/settings/print" as const,
-      title: "هوامش الطباعة",
-      body: "ضبط هوامش الورقة بالمليمتر لتوافق الطابعة المستخدمة.",
+      title: tr("هوامش الطباعة"),
+      body: tr("ضبط هوامش الورقة بالمليمتر لتوافق الطابعة المستخدمة."),
       icon: Printer,
       show: admin,
     },
     {
       to: "/staff" as const,
-      title: "شؤون الموظفين",
-      body: "المسميات والصلاحيات لكل موظف، وافتراضي المعلمين الجدد: الرسائل ومشاهدة المخالفات، وإظهار صفحات الفصول والطباعة والغياب.",
+      title: tr("شؤون الموظفين"),
+      body: tr("المسميات والصلاحيات لكل موظف، وافتراضي المعلمين الجدد: الرسائل ومشاهدة المخالفات، وإظهار صفحات الفصول والطباعة والغياب."),
       icon: Users,
       show: staffCan(staff, "editStaff"),
     },
     {
       to: "/import" as const,
-      title: "الاستيراد والبيانات",
-      body: "رفع ملف الطلاب والمعلمين من إكسل، واستعراض الأسماء مع التعديل والحذف.",
+      title: tr("الاستيراد والبيانات"),
+      body: tr("رفع ملف الطلاب والمعلمين من إكسل، واستعراض الأسماء مع التعديل والحذف."),
       icon: Upload,
       show: admin,
     },
     {
       to: "/archive" as const,
-      title: "الأرشيف",
-      body: "كل الملاحظات والرسائل وخطط التحسين والحالات — تصحيح أو حذف ما سُجّل بالخطأ لمن مُنح الصلاحية.",
+      title: tr("الأرشيف"),
+      body: tr("كل الملاحظات والرسائل وخطط التحسين والحالات — تصحيح أو حذف ما سُجّل بالخطأ لمن مُنح الصلاحية."),
       icon: Archive,
       show: staffCan(staff, "editRecords"),
     },
     {
       to: "/settings/appearance" as const,
-      title: "المظهر",
-      body: "قوالب ألوان جاهزة، خطوط عربية، وتكبير أو تصغير حجم الخط.",
+      title: tr("المظهر"),
+      body: tr("قوالب ألوان جاهزة، خطوط عربية، وتكبير أو تصغير حجم الخط."),
       icon: Palette,
       show: true,
     },
     {
       to: "/settings/health" as const,
-      title: "الأمراض والحالات الصحية",
-      body: "قائمة الأمراض المتكررة التي يختار منها المرشد، ويُضاف إليها تلقائياً ما ليس موجوداً.",
+      title: tr("الأمراض والحالات الصحية"),
+      body: tr("قائمة الأمراض المتكررة التي يختار منها المرشد، ويُضاف إليها تلقائياً ما ليس موجوداً."),
       icon: HeartPulse,
       show: admin,
     },
     {
       to: "/settings/violations" as const,
-      title: "المخالفات",
-      body: "أنواع المخالفات السلوكية وإجراءات كل مخالفة: الإجراء الأول ثم الثاني حتى الأخير.",
+      title: tr("المخالفات"),
+      body: tr("أنواع المخالفات السلوكية وإجراءات كل مخالفة: الإجراء الأول ثم الثاني حتى الأخير."),
       icon: ShieldAlert,
       show: admin,
     },
     {
       to: "/settings/actions" as const,
-      title: "الإجراءات",
-      body: "خيارات اتخاذ الإجراء الإضافية التي تظهر لوكيل شؤون الطلاب.",
+      title: tr("الإجراءات"),
+      body: tr("خيارات اتخاذ الإجراء الإضافية التي تظهر لوكيل شؤون الطلاب."),
       icon: Gavel,
       show: admin,
     },
     {
       to: "/settings/compensation" as const,
-      title: "فرص تعويض السلوك",
-      body: "فرص تعويض درجات السلوك التي يختار منها الوكيل والمرشد عند اتخاذ الإجراء.",
+      title: tr("فرص تعويض السلوك"),
+      body: tr("فرص تعويض درجات السلوك التي يختار منها الوكيل والمرشد عند اتخاذ الإجراء."),
       icon: Award,
       show: admin,
     },
     {
       to: "/settings/improve" as const,
-      title: "خيارات تحسين السلوك",
-      body: "السلوكيات التي يختار منها المعلم عند تحسين سلوك الطالب — يضيفها المدير أو المرشد.",
+      title: tr("خيارات تحسين السلوك"),
+      body: tr("السلوكيات التي يختار منها المعلم عند تحسين سلوك الطالب — يضيفها المدير أو المرشد."),
       icon: Sprout,
       show: admin || staffCan(staff, "counseling") || staffCan(staff, "acceptImprovements"),
     },
     {
       to: "/messages" as const,
-      title: "رسائل جماعية",
-      body: "إرسال واتساب لفصل أو صف كامل أو غائبي اليوم ومتأخريه، بالقالب الذي تختاره.",
+      title: tr("رسائل جماعية"),
+      body: tr("إرسال واتساب لفصل أو صف كامل أو غائبي اليوم ومتأخريه، بالقالب الذي تختاره."),
       icon: MessageCircle,
       show: staffCan(staff, "sendMessages"),
     },
     {
       to: "/settings/messages" as const,
-      title: "قوالب واتساب",
-      body: "نصوص الغياب والتأخر والواجب والسلوك، مع رسائل عامة مخصصة تُضاف للقائمة.",
+      title: tr("قوالب واتساب"),
+      body: tr("نصوص الغياب والتأخر والواجب والسلوك، مع رسائل عامة مخصصة تُضاف للقائمة."),
       icon: MessageCircle,
       show: admin,
     },
@@ -142,8 +143,8 @@ function SettingsHub() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm text-fg-muted">كل بطاقة تفتح صفحتها فقط</p>
-        <h1 className="text-3xl font-semibold tracking-tight">الإعدادات</h1>
+        <p className="text-sm text-fg-muted">{tr("كل بطاقة تفتح صفحتها فقط")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("الإعدادات")}</h1>
       </header>
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((card) => {

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { tr } from "@/lib/school/i18n";
 
 /** شعار وزارة التعليم — النقاط الرسمية مع الاسم. */
 export function MoeLogo({ className, compact = false }: { className?: string; compact?: boolean }) {
@@ -35,7 +36,7 @@ export function MoeLogo({ className, compact = false }: { className?: string; co
       </svg>
       {compact ? null : (
         <div className="text-center leading-tight">
-          <p className="text-[13px] font-semibold tracking-wide">وزارة التعليم</p>
+          <p className="text-[13px] font-semibold tracking-wide">{tr("وزارة التعليم")}</p>
           <p className="text-[9px] font-medium text-[#6b7280]">Ministry of Education</p>
         </div>
       )}
@@ -54,7 +55,7 @@ export function SchoolEmblem({
     return (
       <img
         src={src}
-        alt="شعار المدرسة"
+        alt={tr("شعار المدرسة")}
         className={cn("h-16 w-auto max-w-[7.5rem] object-contain", className)}
       />
     );

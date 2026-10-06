@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useLocale } from "@/lib/school/i18n";
 import { cn } from "@/lib/utils";
 
 export function SectionNav({
@@ -7,6 +8,7 @@ export function SectionNav({
   items: { to: string; label: string }[];
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { t } = useLocale();
   return (
     <nav className="no-print flex flex-wrap gap-1.5">
       {items.map((item) => {
@@ -28,7 +30,7 @@ export function SectionNav({
                 : "border-border bg-bg-elevated text-fg-muted hover:text-fg",
             )}
           >
-            {item.label}
+            {t(item.label)}
           </Link>
         );
       })}

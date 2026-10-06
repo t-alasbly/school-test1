@@ -9,6 +9,7 @@ import { StaffMailInbox } from "@/components/staff-mail-inbox";
 import { PrintFormsButton } from "@/components/print-forms";
 import { NoteRecordTools, ImprovementRecordTools, MessageRecordTools } from "@/components/record-actions";
 import { EditStudentButton } from "@/components/student-editor";
+import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function StudentSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const { school, staff } = useWorkspace();
+  const { locale } = useLocale();
   const query = useQuery({
     queryKey: ["student", studentId],
     queryFn: () => getStudentNotes({ data: { studentId: studentId! } }),
@@ -56,6 +58,7 @@ export function StudentSheet({
   });
 
   const student = query.data?.student;
+  const shown = student ? studentLabel(locale, student.name, student.nameEn) : "";
   const notes = query.data?.notes ?? [];
   const scoped = query.data?.scopedToTeacher;
   const canEditRecords = staffCan(staff, "editRecords");
@@ -66,7 +69,7 @@ export function StudentSheet({
       <SheetContent side="left" className="max-w-4xl overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0">{student?.name ?? "سجل الطالب"}</span>
+            <span className="min-w-0">{shown || tr("سجل الطالب")}</span>
             {student ? (
               <StaffMailDialog studentId={student.id} studentName={student.name} compact />
             ) : null}
@@ -114,6 +117,7 @@ export function StudentSheet({
                 student={{
                   id: student.id,
                   name: student.name,
+                  nameEn: student.nameEn,
                   parentPhone: student.parentPhone,
                   classId: student.classId,
                 }}
@@ -134,7 +138,7 @@ export function StudentSheet({
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-auto p-5">
           {query.isPending ? (
-            <p className="text-sm text-fg-muted">جارٍ التحميل…</p>
+            <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
           ) : (
             <div className="space-y-6">
               {scoped ? (
@@ -143,22 +147,22 @@ export function StudentSheet({
                 </p>
               ) : null}
               {notes.length === 0 ? (
-                <p className="text-sm text-fg-muted">لا توجد ملاحظات مسجّلة بعد.</p>
+                <p className="text-sm text-fg-muted">{tr("لا توجد ملاحظات مسجّلة بعد.")}</p>
               ) : (
             <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
               <table className="w-full min-w-[60rem] border-collapse text-sm">
                 <thead>
                   <tr className="bg-muted text-right">
-                    <th className="border-b border-border px-3 py-2 font-medium">التاريخ</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الحصة / المادة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">النوع</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">نوع المخالفة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الدرجة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">التكرار</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">المعلم</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">التفاصيل</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الحالة</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">الإجراء</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التاريخ")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الحصة / المادة")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("النوع")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("نوع المخالفة")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الدرجة")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التكرار")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("المعلم")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التفاصيل")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الحالة")}</th>
+                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الإجراء")}</th>
                     {canEditRecords ? (
                       <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
                         تصحيح
@@ -183,10 +187,10 @@ export function StudentSheet({
                           />
                         </td>
                         <td className="border-b border-border px-3 py-2">
-                          <Badge tone={tone}>{NOTE_META[note.type].label}</Badge>
+                          <Badge tone={tone}>{tr(NOTE_META[note.type].label)}</Badge>
                         </td>
                         <td className="border-b border-border px-3 py-2">
-                          {note.behaviorTypeName ?? "—"}
+                          {note.behaviorTypeName ? tr(note.behaviorTypeName) : "—"}
                         </td>
                         <td className="border-b border-border px-3 py-2 whitespace-nowrap">
                           {note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "—"}
@@ -211,9 +215,9 @@ export function StudentSheet({
                         </td>
                         <td className="border-b border-border px-3 py-2 whitespace-nowrap">
                           {note.status === "closed" ? (
-                            <span className="text-ok">أُغلقت</span>
+                            <span className="text-ok">{tr("أُغلقت")}</span>
                           ) : (
-                            <span className="text-warn">مفتوحة</span>
+                            <span className="text-warn">{tr("مفتوحة")}</span>
                           )}
                         </td>
                         <td className="border-b border-border px-3 py-2">
@@ -246,8 +250,8 @@ export function StudentSheet({
               {studentId ? (
                 <StaffMailInbox
                   studentId={studentId}
-                  title="المراسلات"
-                  hint="بينك وبين الوكيل أو المرشد أو المرشد الصحي أو معلم آخر — يمكن تتبعها وتحويلها"
+                  title={tr("المراسلات")}
+                  hint={tr("بينك وبين الوكيل أو المرشد أو المرشد الصحي أو معلم آخر — يمكن تتبعها وتحويلها")}
                 />
               ) : null}
               <MessagesBlock items={messages.data?.messages ?? []} />
@@ -273,9 +277,9 @@ function ImprovementsBlock({
   if (!studentId) return null;
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-semibold">تحسين السلوك — متابعة المرشد</h3>
+      <h3 className="text-base font-semibold">{tr("تحسين السلوك — متابعة المرشد")}</h3>
       {items.length === 0 ? (
-        <p className="text-sm text-fg-muted">لا توجد خطط تحسين بعد. أرسل خطة من زر النبتة.</p>
+        <p className="text-sm text-fg-muted">{tr("لا توجد خطط تحسين بعد. أرسل خطة من زر النبتة.")}</p>
       ) : (
         <ul className="space-y-2">
           {items.map((item) => (
@@ -306,11 +310,11 @@ function ImprovementCard({
       status?: ImprovementStatus;
     }) => followImprovement({ data: { id: item.id, ...input } }),
     onSuccess: () => {
-      toast.success("تم حفظ متابعة التحسين");
+      toast.success(tr("تم حفظ متابعة التحسين"));
       void queryClient.invalidateQueries({ queryKey: ["improvements"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
   const tone =
     item.status === "closed" ? "ok" : item.status === "following" ? "primary" : "warn";
@@ -339,7 +343,7 @@ function ImprovementCard({
         <div className="mt-2 space-y-2">
           <Textarea
             className="min-h-16"
-            placeholder="متابعة المعلم…"
+            placeholder={tr("متابعة المعلم…")}
             value={followup}
             onChange={(e) => setFollowup(e.target.value)}
           />
@@ -357,7 +361,7 @@ function ImprovementCard({
         <div className="mt-3 space-y-2 border-t border-border pt-3">
           <Textarea
             className="min-h-16"
-            placeholder="ملاحظة المرشد الطلابي…"
+            placeholder={tr("ملاحظة المرشد الطلابي…")}
             value={counselorNote}
             onChange={(e) => setCounselorNote(e.target.value)}
           />
@@ -394,7 +398,7 @@ function MessagesBlock({
   if (items.length === 0) return null;
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-semibold">رسائل ولي الأمر</h3>
+      <h3 className="text-base font-semibold">{tr("رسائل ولي الأمر")}</h3>
       <ul className="space-y-2">
         {items.map((msg) => (
           <li key={msg.id} className="rounded-[var(--radius-md)] border border-border bg-card p-3 text-sm">

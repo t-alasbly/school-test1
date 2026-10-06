@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getWorkspace } from "@/lib/school/api";
@@ -24,11 +25,11 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       <div className="grid min-h-dvh place-items-center px-6 text-center">
         <div className="max-w-sm space-y-3">
           <SchoolMark size="lg" className="mx-auto" />
-          <h1 className="text-xl font-semibold">تعذر تحميل المدرسة</h1>
+          <h1 className="text-xl font-semibold">{tr("تعذر تحميل المدرسة")}</h1>
           <p className="text-sm text-fg-muted">
             {workspace.error instanceof Error
               ? workspace.error.message
-              : "حاول تحديث الصفحة."}
+              : tr("حاول تحديث الصفحة.")}
           </p>
         </div>
       </div>
@@ -40,7 +41,7 @@ export function AppGate({ children }: { children: React.ReactNode }) {
       <div className="grid min-h-dvh place-items-center bg-bg px-6 text-center">
         <div className="max-w-md space-y-4">
           <SchoolMark size="lg" className="mx-auto" />
-          <h1 className="text-2xl font-semibold">بانتظار موافقة الإدارة</h1>
+          <h1 className="text-2xl font-semibold">{tr("بانتظار موافقة الإدارة")}</h1>
           <p className="text-fg-muted">
             تم إنشاء حسابك في {workspace.data.school.name}. سيظهر لك التطبيق بعد
             أن يعتمد المدير صلاحيتك كمعلم أو أحد مسميات القيادة والإرشاد.
@@ -69,7 +70,7 @@ function BootScreen() {
             <Skeleton className="h-3 w-24" />
           </div>
         </div>
-        <p className="text-sm text-fg-muted">جارٍ تجهيز لوحة المتابعة…</p>
+        <p className="text-sm text-fg-muted">{tr("جارٍ تجهيز لوحة المتابعة…")}</p>
         <div className="grid gap-4 sm:grid-cols-3">
           <Skeleton className="h-44 rounded-[var(--radius-xl)]" />
           <Skeleton className="h-44 rounded-[var(--radius-xl)]" />

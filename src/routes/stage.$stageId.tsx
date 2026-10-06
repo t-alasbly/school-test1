@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Users } from "lucide-react";
 import { AppGate } from "@/components/app-gate";
@@ -35,7 +36,7 @@ function StageBody() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-danger">تعذر تحميل المرحلة.</p>;
+    return <p className="text-danger">{tr("تعذر تحميل المرحلة.")}</p>;
   }
 
   const { stage, classes } = query.data;
@@ -45,12 +46,12 @@ function StageBody() {
         <Link
           to="/classes"
           className="grid size-11 place-items-center rounded-[var(--radius-sm)] hover:bg-muted"
-          aria-label="رجوع"
+          aria-label={tr("رجوع")}
         >
           <ArrowRight className="size-5" />
         </Link>
         <div>
-          <p className="text-sm text-fg-muted">المرحلة</p>
+          <p className="text-sm text-fg-muted">{tr("المرحلة")}</p>
           <h1 className="text-3xl font-semibold tracking-tight">{stage.name}</h1>
         </div>
       </div>

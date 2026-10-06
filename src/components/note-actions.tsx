@@ -1,4 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { studentLabel, tr, useLocale } from "@/lib/school/i18n";
 import { Check, ChevronDown, Plus, Send } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -15,8 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createNote, closeNote } from "@/lib/school/api";
-import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, occurrenceLabel, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, toDatetimeLocalValue } from "@/lib/school/constants";
+import { createNote, closeNote, previewBehaviorOccurrence } from "@/lib/school/api";
+import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, toDatetimeLocalValue } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -59,7 +60,7 @@ function BehaviorPicker({
   const degrees = audience === "staff" ? [4, 5] : [1, 2, 3, 4, 5];
   const active = degrees.includes(degree) ? degree : degrees[0]!;
   const list = pool.filter((item) => (item.degree ?? 1) === active);
-  const deduct: Record<number, string> = { 1: "حسم 1", 2: "حسم 2", 3: "حسم 3", 4: "حسم 10", 5: "حسم 15" };
+  const deduct: Record<number, string> = { 1: tr("حسم 1"), 2: tr("حسم 2"), 3: tr("حسم 3"), 4: tr("حسم 10"), 5: tr("حسم 15") };
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent
@@ -69,10 +70,10 @@ function BehaviorPicker({
           "!inset-0 !h-dvh !max-h-dvh !w-full !max-w-none !translate-x-0 !translate-y-0 !rounded-none",
         )}
       >
-        <DialogTitle className="sr-only">اختيار المخالفة</DialogTitle>
+        <DialogTitle className="sr-only">{tr("اختيار المخالفة")}</DialogTitle>
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={onClose} className="h-11 shrink-0 rounded-full border border-border px-4 text-sm font-semibold">
-            رجوع
+            {tr("رجوع")}
           </button>
           <div className="grid h-11 min-w-0 flex-1 grid-cols-2 rounded-full border border-border bg-card p-1">
             <button
@@ -83,7 +84,7 @@ function BehaviorPicker({
                 audience === "students" ? "bg-primary text-primary-fg" : "text-fg",
               )}
             >
-              طلبة
+              {tr("طلبة")}
             </button>
             <button
               type="button"
@@ -93,7 +94,7 @@ function BehaviorPicker({
                 audience === "staff" ? "bg-[#7f1d1d] text-white" : "text-fg",
               )}
             >
-              تجاه المعلمين
+              {tr("تجاه المعلمين")}
             </button>
           </div>
         </div>
@@ -122,7 +123,7 @@ function BehaviorPicker({
               onClick={() => onPick(bt.id)}
               className={cn("min-h-16 w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(bt.degree ?? 1))}
             >
-              <p className="text-base font-semibold leading-7">{bt.name}</p>
+              <p className="text-base font-semibold leading-7">{tr(bt.name)}</p>
             </button>
           ))}
           {audience === "students" && active === 1 && other ? (
@@ -131,15 +132,59 @@ function BehaviorPicker({
               onClick={() => onPick(other.id)}
               className="min-h-16 w-full rounded-2xl border-2 border-border bg-card px-3 py-3 text-right"
             >
-              <p className="text-base font-semibold leading-7">أخرى</p>
+              <p className="text-base font-semibold leading-7">{tr("أخرى")}</p>
             </button>
           ) : null}
           {list.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-fg-muted">لا مخالفات في هذه الدرجة.</p>
+            <p className="px-2 py-6 text-center text-sm text-fg-muted">{tr("لا مخالفات في هذه الدرجة.")}</p>
           ) : null}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ProcedurePreview({
+  degree,
+  procedures,
+  nextOccurrence,
+  shared,
+}: {
+  degree: number;
+  procedures?: string[][];
+  nextOccurrence?: number;
+  shared?: boolean;
+}) {
+  const ladder = procedureLadder(degree, procedures);
+  return (
+    <div className="space-y-2 rounded-2xl border border-border bg-bg-elevated p-3">
+      <p className="text-sm font-semibold">{tr("الإجراءات")}</p>
+      {shared ? (
+        <p className="text-xs text-fg-muted">{tr("المرحلة تعتمد على عدد مرات كل طالب.")}</p>
+      ) : null}
+      {ladder.map((lines, index) => {
+        const time = index + 1;
+        const current = !shared && nextOccurrence != null && index === stageIndexFor(nextOccurrence, ladder.length);
+        const verbal = isTeacherVerbal(degree, time);
+        return (
+          <div
+            key={time}
+            className={cn("rounded-xl border px-3 py-2", current ? "border-primary bg-primary/5" : "border-border bg-bg")}
+          >
+            <p className="text-xs font-semibold">
+              {occurrenceLabel(time)}
+              {current ? ` — ${tr("هذه المرة")}` : ""}
+              {verbal ? ` — ${tr("دون إجراء من الوكيل")}` : degree === 1 ? ` — ${tr("تُحال إلى الوكيل")}` : ""}
+            </p>
+            <ul className="mt-1 space-y-0.5 text-sm leading-6">
+              {lines.map((line) => (
+                <li key={line}>{tr(line)}</li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -209,14 +254,14 @@ function ActionSequence({
       }
     },
     onSuccess: () => {
-      toast.success(notes.length > 1 ? `تم إنهاء المخالفة على ${notes.length} طلاب` : "تم إنهاء المخالفة");
+      toast.success(notes.length > 1 ? `تم إنهاء المخالفة على ${notes.length} طلاب` : tr("تم إنهاء المخالفة"));
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       onDone();
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر حفظ الإجراء"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الإجراء")),
   });
 
   if (!head) return null;
@@ -248,7 +293,7 @@ function ActionSequence({
           }]}
           studentId={note.studentId}
           defaultKind="pledge"
-          label="طباعة التعهد"
+          label={tr("طباعة التعهد")}
         />
         {canSend ? (
           <WhatsAppDialog
@@ -262,7 +307,7 @@ function ActionSequence({
             sharedText={note.details}
             subject={staff.subject}
             periodKey={note.periodKey}
-            label="إرسال رسالة"
+            label={tr("إرسال رسالة")}
           />
         ) : null}
       </div>
@@ -272,19 +317,19 @@ function ActionSequence({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <DialogHeader className="shrink-0">
-        <DialogTitle>إجراءات المخالفة</DialogTitle>
+        <DialogTitle>{tr("إجراءات المخالفة")}</DialogTitle>
         <DialogDescription>
-          {notes.length > 1 ? `${notes.map((note) => note.studentName).join("، ")} · ` : `${head.studentName} · `}
-          {head.behaviorName}
+          {notes.length > 1 ? `${notes.map((note) => note.studentName).join(tr("، "))} · ` : `${head.studentName} · `}
+          {tr(head.behaviorName)}
           {notes.length === 1 ? ` · ${occurrenceLabel(head.occurrence)}` : ""}
-          {head.degree ? ` · الدرجة ${degreeLabel(head.degree)}` : ""}
+          {head.degree ? ` · ${degreeLabel(head.degree)}` : ""}
         </DialogDescription>
       </DialogHeader>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
         {sameStage ? (
           <div className="space-y-2">
             <p className="text-sm font-semibold">
-              {procedureStageLabel(rows[0]!.stage + 1)} — المناسب لهذه المرة
+              {procedureStageLabel(rows[0]!.stage + 1)} — {tr("المناسب لهذه المرة")}
               {notes.length > 1 ? ` · يُطبَّق على ${notes.length} طلاب` : ""}
             </p>
             {rows[0]!.lines.map((line) => (
@@ -295,7 +340,7 @@ function ActionSequence({
                   checked={pickedFor(head.id).includes(line)}
                   onChange={() => toggle(head.id, line)}
                 />
-                <span>{line}</span>
+                <span>{tr(line)}</span>
               </label>
             ))}
             {notes.length === 1 ? tools(head, resolveOther(pickedFor(head.id), "").join(" — ")) : notes.map((note) => (
@@ -318,7 +363,7 @@ function ActionSequence({
                   checked={pickedFor(row.note.id).includes(line)}
                   onChange={() => toggle(row.note.id, line)}
                 />
-                <span>{line}</span>
+                <span>{tr(line)}</span>
               </label>
             ))}
             {tools(row.note, resolveOther(pickedFor(row.note.id), "").join(" — "))}
@@ -326,7 +371,7 @@ function ActionSequence({
         ))}
       </div>
       <Button className="w-full shrink-0" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-        {mutation.isPending ? "جارٍ الحفظ…" : notes.length > 1 ? `إنهاء المخالفة على ${notes.length}` : "إنهاء المخالفة"}
+        {mutation.isPending ? tr("جارٍ الحفظ…") : notes.length > 1 ? `إنهاء المخالفة على ${notes.length}` : tr("إنهاء المخالفة")}
       </Button>
     </div>
   );
@@ -367,6 +412,8 @@ export function NoteComposer({
   trigger?: ReactNode;
 }) {
   const { behaviorTypes, school, staff } = useWorkspace();
+  const { locale } = useLocale();
+  const showName = (name: string) => studentLabel(locale, name);
   const slots = scheduleFor(school.season, school.schedules);
   const auto = useMemo(() => currentPeriod(school.season, new Date(), school.schedules)?.key ?? "", [school.season, school.schedules]);
   const [innerOpen, setInnerOpen] = useState(false);
@@ -388,9 +435,14 @@ export function NoteComposer({
   const queryClient = useQueryClient();
   const selectedBehavior = behaviorTypes.find((bt) => bt.id === behaviorTypeId);
   const otherBehavior = Boolean(selectedBehavior && isOtherChoice(selectedBehavior.name));
-  const periodLabel = slots.find((s) => s.key === periodKey)?.label ?? "الحصة غير محددة";
+  const periodLabel = slots.find((s) => s.key === periodKey)?.label ?? tr("الحصة غير محددة");
   const many = targets.length > 1;
   const formKey = many ? "group" : String(targets[0]?.studentId ?? "note");
+  const occurrencePreview = useQuery({
+    queryKey: ["behavior-occurrence", targets[0]?.studentId, behaviorTypeId],
+    queryFn: () => previewBehaviorOccurrence({ data: { studentId: targets[0]!.studentId, behaviorTypeId: behaviorTypeId! } }),
+    enabled: !many && type === "behavior" && behaviorTypeId != null && targets[0] != null,
+  });
   useEffect(() => {
     if (open && !wasOpen.current) {
       setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
@@ -401,18 +453,18 @@ export function NoteComposer({
   }, [open, school.season, school.schedules]);
   const namePreview =
     targets.length <= 4
-      ? targets.map((t) => t.studentName).join("، ")
+      ? targets.map((t) => t.studentName).join(tr("، "))
       : `${targets
           .slice(0, 3)
           .map((t) => t.studentName)
-          .join("، ")} و${targets.length - 3} آخرين`;
+          .join(tr("، "))} و${targets.length - 3} آخرين`;
 
   function sharedDetails() {
     const extra = details.trim();
     const names = targets.map((item) => item.studentName);
     let shown = [...names];
     const build = (list: string[], more: number) => {
-      const who = `${list.join("، ")}${more > 0 ? ` و${more} آخرين` : ""}`;
+      const who = `${list.join(tr("، "))}${more > 0 ? ` و${more} آخرين` : ""}`;
       const line = `مخالفة مشتركة — المشتركون: ${who}`;
       return extra ? `${line}. ${extra}` : line;
     };
@@ -425,16 +477,16 @@ export function NoteComposer({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!type) throw new Error("اختر نوع الملاحظة");
-      if (targets.length === 0) throw new Error("لم يُحدد طلاب");
-      if (type === "behavior" && !behaviorTypeId) throw new Error("اختر نوع المخالفة السلوكية");
-      if (otherBehavior && details.trim().length < 2) throw new Error("صف المخالفة يدوياً");
+      if (!type) throw new Error(tr("اختر نوع الملاحظة"));
+      if (targets.length === 0) throw new Error(tr("لم يُحدد طلاب"));
+      if (type === "behavior" && !behaviorTypeId) throw new Error(tr("اختر نوع المخالفة السلوكية"));
+      if (otherBehavior && details.trim().length < 2) throw new Error(tr("صف المخالفة يدوياً"));
       const saved: SavedBehavior[] = [];
       const failedIds: number[] = [];
       const failedNames: string[] = [];
       let label = "";
       let count = 0;
-      let firstError = "تعذر التسجيل";
+      let firstError = tr("تعذر التسجيل");
       setSent(0);
       for (const target of targets) {
         try {
@@ -489,21 +541,36 @@ export function NoteComposer({
     },
     onSuccess: (result) => {
       if (result.failedIds.length > 0) {
-        toast.error(`تعذر على ${result.failedIds.length}: ${result.failedNames.slice(0, 4).join("، ")}`);
+        toast.error(`تعذر على ${result.failedIds.length}: ${result.failedNames.slice(0, 4).join(tr("، "))}`);
       }
-      const actNow = type === "behavior" && staffCan(staff, "takeActions") && result.saved.length > 0;
+      const verbal = result.saved.filter((note) => isTeacherVerbal(note.degree, note.occurrence));
+      const pending = result.saved.filter((note) => !isTeacherVerbal(note.degree, note.occurrence));
+      const actNow = type === "behavior" && staffCan(staff, "takeActions") && pending.length > 0;
+      if (verbal.length > 0) {
+        toast.success(
+          verbal.length > 1
+            ? tr("سُجّل تنبيه شفهي على الطلاب وأُغلق دون إجراء من الوكيل")
+            : `${tr("سُجّل تنبيه شفهي")} — ${occurrenceLabel(verbal[0]!.occurrence)}. ${tr("لا يحتاج إجراء من الوكيل.")}`,
+        );
+      }
       if (actNow) {
-        toast.success("سُجّلت المخالفة. أكمل الإجراء ثم التعهد ثم الإرسال.");
-        setFollow(result.saved);
+        toast.success(tr("سُجّلت المخالفة. أكمل الإجراء ثم التعهد ثم الإرسال."));
+        setFollow(pending);
         setPicking(false);
-      } else if (targets.length === 1) {
-        toast.success(`تم تسجيل ${result.label} لـ ${targets[0]?.studentName ?? ""}`);
-      } else {
+      } else if (verbal.length === 0 && targets.length === 1) {
+        toast.success(
+          type === "behavior" && (result.saved[0]?.occurrence ?? 1) >= 3
+            ? `${tr("أُرسلت المخالفة إلى وكيل شؤون الطلاب")} — ${occurrenceLabel(result.saved[0]?.occurrence ?? 3)}`
+            : `تم تسجيل ${result.label} لـ ${targets[0]?.studentName ?? ""}`,
+        );
+      } else if (verbal.length === 0) {
         toast.success(
           many && shared
             ? `تم تسجيل مخالفة مشتركة على ${result.count} طلاب`
             : `تم تسجيل ${result.label} على ${result.count} طلاب`,
         );
+      } else if (pending.length > 0) {
+        toast.success(tr("أُرسلت المخالفة إلى وكيل شؤون الطلاب من المرة الثالثة"));
       }
       if (!actNow) {
         reset();
@@ -519,7 +586,7 @@ export function NoteComposer({
       void queryClient.invalidateQueries({ queryKey: ["student"] });
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "تعذر تسجيل الملاحظة");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تسجيل الملاحظة"));
     },
   });
 
@@ -582,17 +649,17 @@ export function NoteComposer({
         ) : (
         <>
         <DialogHeader className="mb-2 shrink-0">
-          <DialogTitle>{many ? "مخالفة جماعية" : "تسجيل ملاحظة أو مخالفة"}</DialogTitle>
+          <DialogTitle>{many ? tr("مخالفة جماعية") : tr("تسجيل ملاحظة أو مخالفة")}</DialogTitle>
           <DialogDescription>
             {many
               ? namePreview
-              : `${targets[0]?.studentName ?? ""}${staff.subject ? ` · ${staff.subject}` : ""}`}
+              : `${showName(targets[0]?.studentName ?? "")}${staff.subject ? ` · ${staff.subject}` : ""}`}
           </DialogDescription>
           {many ? (
             <p className="-mt-1 mb-2 text-xs text-fg-muted">
               {shared
-                ? "ستُكتب أسماء كل المشاركين في تسجيل كل طالب، ويبقى لكل واحد إجراءه عند وكيل شؤون الطلاب."
-                : "تُسجَّل نفس المخالفة على كل طالب وحده، ولكل واحد إجراءه عند وكيل شؤون الطلاب."}
+                ? tr("ستُكتب أسماء كل المشاركين في تسجيل كل طالب، ويبقى لكل واحد إجراءه عند وكيل شؤون الطلاب.")
+                : tr("تُسجَّل نفس المخالفة على كل طالب وحده، ولكل واحد إجراءه عند وكيل شؤون الطلاب.")}
             </p>
           ) : null}
           {many ? (
@@ -614,9 +681,9 @@ export function NoteComposer({
                 {shared ? <Check className="size-3.5" /> : null}
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-semibold">مخالفة مشتركة</span>
+                <span className="block text-sm font-semibold">{tr("مخالفة مشتركة")}</span>
                 <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
-                  مثل المضاربة: يظهر في التسجيل اسم كل من اشترك، وليس نسخة منفصلة بلا ذكر البقية.
+                  {tr("مثل المضاربة: يظهر في التسجيل اسم كل من اشترك، وليس نسخة منفصلة بلا ذكر البقية.")}
                 </span>
               </span>
             </button>
@@ -629,35 +696,35 @@ export function NoteComposer({
           className="mb-2 flex min-h-12 w-full shrink-0 items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated px-3 text-right"
         >
           <span className="min-w-0">
-            <span className="block text-sm font-semibold leading-5">{periodLabel}</span>
+            <span className="block text-sm font-semibold leading-5">{tr(periodLabel)}</span>
             <span className="block text-xs text-fg-muted">
               {formatDay(iso)} · {formatTime(iso)}
             </span>
           </span>
           <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
-            تعديل
+            {tr("تعديل")}
             <ChevronDown className={cn("size-4 transition-transform", whenOpen && "rotate-180")} />
           </span>
         </button>
         {whenOpen ? (
           <div className="mb-2 shrink-0 space-y-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
             <div className="space-y-1.5">
-              <Label htmlFor={`period-${formKey}`}>الحصة</Label>
+              <Label htmlFor={`period-${formKey}`}>{tr("الحصة")}</Label>
               <Select
                 id={`period-${formKey}`}
                 value={periodKey}
                 onChange={(e) => setPeriodKey(e.target.value)}
               >
-                <option value="">غير محدد</option>
+                <option value="">{tr("غير محدد")}</option>
                 {slots.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.label} ({s.from}–{s.to})
+                    {tr(s.label)} ({s.from}–{s.to})
                   </option>
                 ))}
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`when-${formKey}`}>التاريخ والوقت</Label>
+              <Label htmlFor={`when-${formKey}`}>{tr("التاريخ والوقت")}</Label>
               <Input
                 id={`when-${formKey}`}
                 type="datetime-local"
@@ -671,7 +738,7 @@ export function NoteComposer({
         ) : null}
 
         <div className="shrink-0 space-y-2">
-          <Label>نوع الملاحظة</Label>
+          <Label>{tr("نوع الملاحظة")}</Label>
           <div className="grid grid-cols-4 gap-1.5">
             {NOTE_TYPES.map((item) => {
               const meta = NOTE_META[item];
@@ -687,7 +754,7 @@ export function NoteComposer({
                       setType("behavior");
                       setBehaviorTypeId(found?.id ?? null);
                       setPicking(false);
-                      if (!found) toast.error("المخالفة غير جاهزة بعد. حدّث الصفحة ثم أعد المحاولة.");
+                      if (!found) toast.error(tr("المخالفة غير جاهزة بعد. حدّث الصفحة ثم أعد المحاولة."));
                       return;
                     }
                     setShortcut(null);
@@ -705,17 +772,17 @@ export function NoteComposer({
                       : "border-border bg-bg text-fg",
                   )}
                 >
-                  {meta.short}
+                  {tr(meta.short)}
                 </button>
               );
             })}
           </div>
           {shortcut && selectedBehavior ? (
             <p className="text-xs text-fg-muted">
-              اختصار للتسجيل السريع، وتُعامل كمخالفة سلوكية من الدرجة {degreeLabel(selectedBehavior.degree)}. بعد الإرسال تُكمَل إجراءاتها.
+              {tr("اختصار للتسجيل السريع، وتُعامل كمخالفة سلوكية من الدرجة")} {degreeLabel(selectedBehavior.degree)}. {tr("بعد الإرسال تُكمَل إجراءاتها.")}
             </p>
           ) : type ? (
-            <p className="text-xs text-fg-muted">{TYPE_HINT[type]}</p>
+            <p className="text-xs text-fg-muted">{tr(TYPE_HINT[type])}</p>
           ) : null}
         </div>
 
@@ -728,20 +795,20 @@ export function NoteComposer({
                   onClick={() => setPicking(true)}
                   className={cn("w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(selectedBehavior.degree ?? 1))}
                 >
-                  <p className="text-base font-semibold leading-7">{selectedBehavior.name}</p>
+                  <p className="text-base font-semibold leading-7">{tr(selectedBehavior.name)}</p>
                   <p className="text-sm font-medium">
-                    الدرجة {degreeLabel(selectedBehavior.degree)}
-                    {isStaffViolation(selectedBehavior) ? " · تجاه المعلمين ومن في حكمهم" : ""}
-                    {" "}— اضغط لتغيير المخالفة
+                    {degreeLabel(selectedBehavior.degree)}
+                    {isStaffViolation(selectedBehavior) ? tr(" · تجاه المعلمين ومن في حكمهم") : ""}
+                    {" "}— {tr("اضغط لتغيير المخالفة")}
                   </p>
                 </button>
                 {otherBehavior ? (
                   <div className="space-y-1.5">
-                    <Label htmlFor={`other-${formKey}`}>صف المخالفة يدوياً</Label>
+                    <Label htmlFor={`other-${formKey}`}>{tr("صف المخالفة يدوياً")}</Label>
                     <Textarea
                       id={`other-${formKey}`}
                       className="min-h-20"
-                      placeholder="اكتب نوع المخالفة…"
+                      placeholder={tr("اكتب نوع المخالفة…")}
                       value={details}
                       onChange={(e) => setDetails(e.target.value)}
                       autoFocus
@@ -749,16 +816,22 @@ export function NoteComposer({
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Label htmlFor={`details-${formKey}`}>الملاحظات</Label>
+                    <Label htmlFor={`details-${formKey}`}>{tr("الملاحظات")}</Label>
                     <Textarea
                       id={`details-${formKey}`}
                       className="min-h-11"
-                      placeholder="أضف تفاصيل الملاحظة…"
+                      placeholder={tr("أضف تفاصيل الملاحظة…")}
                       value={details}
                       onChange={(e) => setDetails(e.target.value)}
                     />
                   </div>
                 )}
+                <ProcedurePreview
+                  degree={selectedBehavior.degree ?? 1}
+                  procedures={selectedBehavior.procedures}
+                  nextOccurrence={many ? undefined : occurrencePreview.data?.next}
+                  shared={many}
+                />
               </div>
             ) : (
               <button
@@ -766,22 +839,22 @@ export function NoteComposer({
                 onClick={() => setPicking(true)}
                 className="min-h-16 w-full rounded-2xl border-2 border-dashed border-primary px-3 text-base font-bold text-primary"
               >
-                اختيار المخالفة
+                {tr("اختيار المخالفة")}
               </button>
             )
           ) : type ? (
             <div className="space-y-1.5">
-              <Label htmlFor={`details-${formKey}`}>الملاحظات</Label>
+              <Label htmlFor={`details-${formKey}`}>{tr("الملاحظات")}</Label>
               <Textarea
                 id={`details-${formKey}`}
                 className="min-h-20"
-                placeholder="أضف تفاصيل الملاحظة…"
+                placeholder={tr("أضف تفاصيل الملاحظة…")}
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
               />
             </div>
           ) : (
-            <p className="px-1 py-6 text-center text-sm text-fg-muted">اختر نوع الملاحظة أعلاه لعرض القائمة.</p>
+            <p className="px-1 py-6 text-center text-sm text-fg-muted">{tr("اختر نوع الملاحظة أعلاه لعرض القائمة.")}</p>
           )}
         </div>
 
@@ -791,18 +864,18 @@ export function NoteComposer({
             {mutation.isPending
               ? many
                 ? `جارٍ التسجيل… ${sent} من ${targets.length}`
-                : "جارٍ الإرسال…"
+                : tr("جارٍ الإرسال…")
               : many
                 ? selectedBehavior
-                  ? `تسجيل «${selectedBehavior.name}» على ${targets.length}`
+                  ? `تسجيل «${tr(selectedBehavior.name)}» على ${targets.length}`
                   : type
-                    ? `تسجيل ${NOTE_META[type].label} على ${targets.length}`
+                    ? `تسجيل ${tr(NOTE_META[type].label)} على ${targets.length}`
                     : `تسجيل على ${targets.length}`
                 : selectedBehavior
-                  ? `إرسال — ${selectedBehavior.name}`
+                  ? `${tr("إرسال")} — ${tr(selectedBehavior.name)}`
                   : type
-                    ? `إرسال — ${NOTE_META[type].label}`
-                    : "إرسال الملاحظة"}
+                    ? `${tr("إرسال")} — ${tr(NOTE_META[type].label)}`
+                    : tr("إرسال الملاحظة")}
           </Button>
         </div>
         </>

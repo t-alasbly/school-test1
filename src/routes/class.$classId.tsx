@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getClassPage } from "@/lib/school/api";
+import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
 import {
   addGroupStudents,
   clearGroupStudents,
@@ -55,6 +56,7 @@ function ClassBody() {
   const { student: studentParam } = Route.useSearch();
   const id = Number(classId);
   const { school, staff, stages, classes } = useWorkspace();
+  const { locale } = useLocale();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
@@ -74,7 +76,9 @@ function ClassBody() {
   const students = useMemo(() => {
     const list = query.data?.students ?? [];
     const term = q.trim();
-    const filtered = term ? list.filter((s: StudentRow) => s.name.includes(term)) : list;
+    const filtered = term
+      ? list.filter((s: StudentRow) => s.name.includes(term) || (s.nameEn ?? "").toLowerCase().includes(term.toLowerCase()))
+      : list;
     if (sort === "alpha") {
       return [...filtered].sort((a: StudentRow, b: StudentRow) => a.name.localeCompare(b.name, "ar"));
     }
@@ -117,7 +121,7 @@ function ClassBody() {
     );
   }
   if (query.isError || !query.data) {
-    return <p className="text-danger">تعذر تحميل الفصل.</p>;
+    return <p className="text-danger">{tr("تعذر تحميل الفصل.")}</p>;
   }
 
   const { classInfo } = query.data;
@@ -156,7 +160,7 @@ function ClassBody() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="ابحث عن طالب…"
+          placeholder={tr("ابحث عن طالب…")}
           className="pr-10"
         />
       </div>
@@ -189,6 +193,7 @@ function ClassBody() {
           const extra = student.todayNotes.length - 1;
           const absent = student.dailyKind === "absence";
           const late = student.dailyKind === "late";
+          const label = studentLabel(locale, student.name, student.nameEn);
           return (
             <li
               key={student.id}
@@ -203,11 +208,11 @@ function ClassBody() {
                 {picking ? (
                   <PickMark
                     checked={pickedIds.has(student.id)}
-                    label={student.name}
+                    label={label}
                     onToggle={() =>
                       toggleGroupStudent({
                         studentId: student.id,
-                        studentName: student.name,
+                        studentName: label,
                         classId: id,
                       })
                     }
@@ -219,7 +224,7 @@ function ClassBody() {
                     if (picking) {
                       toggleGroupStudent({
                         studentId: student.id,
-                        studentName: student.name,
+                        studentName: label,
                         classId: id,
                       });
                     } else setActiveStudent(student.id);
@@ -234,43 +239,43 @@ function ClassBody() {
                         late && "text-warn",
                       )}
                     >
-                      {student.name}
+                      {label}
                     </span>
                     {student.todayNotes.length > 0 ? (
                       <span
                         className="mt-2 inline-block size-2 shrink-0 rounded-full bg-danger"
-                        title={staff.role === "teacher" ? "لديك ملاحظات اليوم" : "ملاحظات اليوم"}
+                        title={staff.role === "teacher" ? tr("لديك ملاحظات اليوم") : tr("ملاحظات اليوم")}
                       />
                     ) : null}
                   </span>
                   {absent ? (
                     <span className="mt-1 inline-flex items-center">
-                      <Badge tone="danger">غائب اليوم — مسجّل في الكشف اليومي</Badge>
+                      <Badge tone="danger">{tr("غائب اليوم — مسجّل في الكشف اليومي")}</Badge>
                     </span>
                   ) : late ? (
                     <span className="mt-1 inline-flex flex-wrap items-center gap-1.5">
                       <Badge tone="warn">
-                        متأخر
-                        {student.arrivedAt ? ` · حضر الساعة ${formatTime(student.arrivedAt)}` : ""}
+                        {tr("متأخر")}
+                        {student.arrivedAt ? ` · ${tr("حضر الساعة")} ${formatTime(student.arrivedAt)}` : ""}
                       </Badge>
                     </span>
                   ) : null}
                   {student.healthNote ? (
                     <span className="mt-1 block text-xs font-medium leading-5 text-warn">
-                      ملاحظة صحية: {student.healthNote}
+                      {tr("ملاحظة صحية")}: {student.healthNote}
                     </span>
                   ) : null}
                   <span className="mt-1 block">
                     {student.todayNotes.length === 0 ? (
                       <span className="text-xs text-fg-subtle">
-                        اضغط الاسم للرسائل والطباعة والتعديل
+                        {tr("اضغط الاسم للرسائل والطباعة والتعديل")}
                       </span>
                     ) : (
                       <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border border-border bg-bg-elevated px-2 py-0.5">
                         <Badge tone={noteTone(latest.type, latest.status)}>
                           {latest.behaviorTypeName
-                            ? `${NOTE_META[latest.type as keyof typeof NOTE_META].short} · ${latest.behaviorTypeName}`
-                            : NOTE_META[latest.type as keyof typeof NOTE_META].short}
+                            ? `${tr(NOTE_META[latest.type as keyof typeof NOTE_META].short)} · ${tr(latest.behaviorTypeName)}`
+                            : tr(NOTE_META[latest.type as keyof typeof NOTE_META].short)}
                         </Badge>
                         <NoteSession
                           periodKey={latest.periodKey}
@@ -278,7 +283,7 @@ function ClassBody() {
                           season={school.season}
                         />
                         {extra > 0 ? (
-                          <span className="text-[11px] text-fg-muted">و{extra} أخرى — اضغط الاسم</span>
+                          <span className="text-[11px] text-fg-muted">{tr("و")}{extra} {tr("أخرى — اضغط الاسم")}</span>
                         ) : null}
                       </span>
                     )}
@@ -286,7 +291,7 @@ function ClassBody() {
                 </button>
                 <StudentQuickActions
                   studentId={student.id}
-                  studentName={student.name}
+                  studentName={label}
                   classId={id}
                   parentPhone={student.parentPhone}
                   className={classInfo.name}
@@ -297,7 +302,7 @@ function ClassBody() {
           );
         })}
         {students.length === 0 ? (
-          <li className="px-4 py-10 text-center text-sm text-fg-muted">لا يوجد طلاب مطابقون</li>
+          <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا يوجد طلاب مطابقون")}</li>
         ) : null}
       </ul>
       <NoteComposer

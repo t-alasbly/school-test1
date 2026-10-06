@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -30,10 +31,10 @@ function PrintSettings() {
       }),
     onSuccess: () => {
       applyPrintMargins(margins);
-      toast.success("تم حفظ هوامش الطباعة");
+      toast.success(tr("تم حفظ هوامش الطباعة"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function setSide(side: keyof PrintMargins, value: string) {
@@ -44,30 +45,30 @@ function PrintSettings() {
     return (
       <div className="space-y-3">
         <SettingsBack />
-        <p className="text-fg-muted">هوامش الطباعة متاحة لمدير التطبيق.</p>
+        <p className="text-fg-muted">{tr("هوامش الطباعة متاحة لمدير التطبيق.")}</p>
       </div>
     );
   }
 
   const fields: { key: keyof PrintMargins; label: string }[] = [
-    { key: "top", label: "أعلى" },
-    { key: "bottom", label: "أسفل" },
-    { key: "right", label: "يمين (جهة الترويسة)" },
-    { key: "left", label: "يسار" },
+    { key: "top", label: tr("أعلى") },
+    { key: "bottom", label: tr("أسفل") },
+    { key: "right", label: tr("يمين (جهة الترويسة)") },
+    { key: "left", label: tr("يسار") },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">هوامش الطباعة</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("هوامش الطباعة")}</h1>
         <p className="text-sm text-fg-muted">
           اضبط الهوامش بالمليمتر لتوافق طابعتك. القيمة صفر تلصق المحتوى بحافة الورقة.
         </p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>هوامش الورقة (مم)</CardTitle>
+          <CardTitle>{tr("هوامش الورقة (مم)")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -100,7 +101,7 @@ function PrintSettings() {
         </CardContent>
       </Card>
       <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-white p-3">
-        <p className="mb-2 text-sm text-fg-muted">معاينة الترويسة</p>
+        <p className="mb-2 text-sm text-fg-muted">{tr("معاينة الترويسة")}</p>
         <OfficialLetterhead school={school} />
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { useState } from "react";
 import { StaffMailThread } from "@/components/staff-mail-thread";
 import { StudentSheet } from "@/components/student-sheet";
@@ -11,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 export function StaffMailInbox({
   studentId,
-  title = "مراسلاتي",
+  title = tr("مراسلاتي"),
   hint,
 }: {
   studentId?: number;
@@ -37,10 +38,10 @@ export function StaffMailInbox({
         </header>
       ) : null}
       {query.isPending ? (
-        <p className="text-sm text-fg-muted">جارٍ تحميل المراسلات…</p>
+        <p className="text-sm text-fg-muted">{tr("جارٍ تحميل المراسلات…")}</p>
       ) : threads.length === 0 ? (
         <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-sm text-fg-muted">
-          لا توجد مراسلات بعد. أرسلها من زر «مراسلة» في صفحة الطالب.
+          {tr("لا توجد مراسلات بعد. أرسلها من زر «مراسلة» في صفحة الطالب.")}
         </p>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">

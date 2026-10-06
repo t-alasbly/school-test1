@@ -1,3 +1,4 @@
+import { tr, uiLocale } from "./i18n-core";
 import type {
   ImprovementStatus,
   MessageKind,
@@ -686,13 +687,13 @@ export function parseSchedules(raw: unknown): SchoolSchedules {
 export function degreeLabel(degree: number | null | undefined): string {
 	if (!degree) return "";
 	const map: Record<number, string> = {
-		1: "الأولى",
-		2: "الثانية",
-		3: "الثالثة",
-		4: "الرابعة",
-		5: "الخامسة"
+		1: "الدرجة الأولى",
+		2: "الدرجة الثانية",
+		3: "الدرجة الثالثة",
+		4: "الدرجة الرابعة",
+		5: "الدرجة الخامسة"
 	};
-	return map[degree] ?? String(degree);
+	return tr(map[degree] ?? String(degree));
 }
 export const DEGREE_DEDUCT: Record<number, string> = {
 	1: "حسم درجة",
@@ -716,26 +717,26 @@ export function isStaffViolation(item: { name?: string | null }) {
 	return /المعلمين|الإداريين|منسوبي المدرسة|أحد منسوبي/.test(String(item.name ?? ""));
 }
 export function occurrenceLabel(n: number): string {
-	if (n <= 1) return "المرة الأولى";
-	if (n === 2) return "المرة الثانية";
-	if (n === 3) return "المرة الثالثة";
-	if (n === 4) return "المرة الرابعة";
-	return `المرة ${n}`;
+	if (n <= 1) return tr("المرة الأولى");
+	if (n === 2) return tr("المرة الثانية");
+	if (n === 3) return tr("المرة الثالثة");
+	if (n === 4) return tr("المرة الرابعة");
+	return `${tr("المرة")} ${n}`;
 }
 export function procedureStageLabel(n: number): string {
 	const map = [
 		"",
-		"الأول",
-		"الثاني",
-		"الثالث",
-		"الرابع",
-		"الخامس",
-		"السادس",
-		"السابع",
-		"الثامن"
+		"الإجراء الأول",
+		"الإجراء الثاني",
+		"الإجراء الثالث",
+		"الإجراء الرابع",
+		"الإجراء الخامس",
+		"الإجراء السادس",
+		"الإجراء السابع",
+		"الإجراء الثامن"
 	];
-	if (n >= 1 && n < map.length) return `الإجراء ${map[n]}`;
-	return `الإجراء ${n}`;
+	if (n >= 1 && n < map.length) return tr(map[n]);
+	return `${tr("الإجراء")} ${n}`;
 }
 export function parseProcedures(raw: unknown, degree?: number): string[][] {
 	let value = raw;
@@ -761,6 +762,10 @@ export function stageIndexFor(occurrence: number, length: number): number {
 export function proceduresFor(degree: number | null | undefined, occurrence: number, custom?: string[][]): string[] {
 	const table = procedureLadder(degree ?? undefined, custom);
 	return table[stageIndexFor(occurrence, table.length)] ?? table[table.length - 1] ?? [];
+}
+/** الدرجة الأولى: المرة الأولى والثانية تنبيه شفهي يغلقه المعلم، ومن الثالثة تُحال للوكيل. */
+export function isTeacherVerbal(degree: number | null | undefined, occurrence: number) {
+	return degree === 1 && occurrence >= 1 && occurrence <= 2;
 }
 export function studentNoun(gender: SchoolGender, plural = false): string {
 	if (gender === "female") return plural ? "طالبات" : "طالبة";
@@ -797,7 +802,7 @@ export function withOccurrence<T extends { id?: number; type: string; createdAt:
 export function hijriDate(iso?: string): string {
 	const d = iso ? new Date(iso) : new Date();
 	if (Number.isNaN(d.getTime())) return "";
-	return new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
+	return new Intl.DateTimeFormat(uiLocale() === "en-GB" ? "en-GB-u-ca-islamic-umalqura" : "ar-SA-u-ca-islamic-umalqura", {
 		day: "numeric",
 		month: "long",
 		year: "numeric"
@@ -813,7 +818,7 @@ export function classLabel(shortName: string, className: string): string {
 export function formatStamp(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
-	return new Intl.DateTimeFormat("ar-EG", {
+	return new Intl.DateTimeFormat(uiLocale(), {
 		day: "numeric",
 		month: "short",
 		year: "numeric",
@@ -824,7 +829,7 @@ export function formatStamp(iso: string): string {
 export function formatDay(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
-	return new Intl.DateTimeFormat("ar-EG", {
+	return new Intl.DateTimeFormat(uiLocale(), {
 		day: "numeric",
 		month: "long",
 		year: "numeric"
@@ -844,7 +849,7 @@ export function fromDatetimeLocalValue(value: string): string {
 export function formatTime(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return "";
-	return new Intl.DateTimeFormat("ar-EG", {
+	return new Intl.DateTimeFormat(uiLocale(), {
 		hour: "numeric",
 		minute: "2-digit"
 	}).format(d);
@@ -852,10 +857,10 @@ export function formatTime(iso: string): string {
 export function weekdayName(iso: string): string {
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return "";
-	return new Intl.DateTimeFormat("ar-EG", { weekday: "long" }).format(d);
+	return new Intl.DateTimeFormat(uiLocale(), { weekday: "long" }).format(d);
 }
 export function todayLabel() {
-	return new Intl.DateTimeFormat("ar-EG", {
+	return new Intl.DateTimeFormat(uiLocale(), {
 		weekday: "long",
 		day: "numeric",
 		month: "long",

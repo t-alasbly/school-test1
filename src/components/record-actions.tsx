@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -72,7 +73,7 @@ export function NoteRecordTools({ note }: { note: EditableNote }) {
     <span className="no-print inline-flex shrink-0 items-center gap-1">
       <EditNoteButton note={note} />
       <DeleteRecordButton
-        label="حذف الملاحظة"
+        label={tr("حذف الملاحظة")}
         confirm={`حذف هذه الملاحظة نهائياً؟ لا يمكن التراجع.`}
         onConfirm={() => deleteNote({ data: { noteId: note.id } })}
       />
@@ -92,14 +93,14 @@ export function MessageRecordTools({
   return (
     <span className="no-print inline-flex shrink-0 items-center gap-1">
       <EditTextButton
-        title="تعديل الرسالة"
+        title={tr("تعديل الرسالة")}
         value={body}
         min={2}
         onSave={(next) => updateParentMessage({ data: { id, body: next } })}
       />
       <DeleteRecordButton
-        label="حذف الرسالة"
-        confirm="حذف هذه الرسالة من السجل؟"
+        label={tr("حذف الرسالة")}
+        confirm={tr("حذف هذه الرسالة من السجل؟")}
         onConfirm={() => deleteParentMessage({ data: { id } })}
       />
     </span>
@@ -118,14 +119,14 @@ export function ImprovementRecordTools({
   return (
     <span className="no-print inline-flex shrink-0 items-center gap-1">
       <EditTextButton
-        title="تعديل خطة التحسين"
+        title={tr("تعديل خطة التحسين")}
         value={plan}
         min={4}
         onSave={(next) => updateImprovementPlan({ data: { id, plan: next } })}
       />
       <DeleteRecordButton
-        label="حذف خطة التحسين"
-        confirm="حذف خطة تحسين السلوك؟"
+        label={tr("حذف خطة التحسين")}
+        confirm={tr("حذف خطة تحسين السلوك؟")}
         onConfirm={() => deleteImprovement({ data: { id } })}
       />
     </span>
@@ -138,14 +139,14 @@ export function CaseRecordTools({ id, body }: { id: number; body: string }) {
   return (
     <span className="no-print inline-flex shrink-0 items-center gap-1">
       <EditTextButton
-        title="تعديل الحالة"
+        title={tr("تعديل الحالة")}
         value={body}
         min={2}
         onSave={(next) => updateCounselingCase({ data: { id, body: next } })}
       />
       <DeleteRecordButton
-        label="حذف الحالة"
-        confirm="حذف هذه المراسلة / الحالة؟"
+        label={tr("حذف الحالة")}
+        confirm={tr("حذف هذه المراسلة / الحالة؟")}
         onConfirm={() => deleteCounselingCase({ data: { id } })}
       />
     </span>
@@ -166,11 +167,11 @@ function DeleteRecordButton({
   const mutation = useMutation({
     mutationFn: onConfirm,
     onSuccess: () => {
-      toast.success("تم الحذف");
+      toast.success(tr("تم الحذف"));
       setOpen(false);
       invalidateRecords(queryClient);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحذف"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
   return (
     <>
@@ -182,7 +183,7 @@ function DeleteRecordButton({
         onClick={() => setOpen(true)}
       >
         <Trash2 className="size-4 text-danger" />
-        حذف
+        {tr("حذف")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -200,7 +201,7 @@ function DeleteRecordButton({
               disabled={mutation.isPending}
               onClick={() => mutation.mutate()}
             >
-              تأكيد الحذف
+              {tr("تأكيد الحذف")}
             </Button>
           </div>
         </DialogContent>
@@ -226,11 +227,11 @@ function EditTextButton({
   const mutation = useMutation({
     mutationFn: () => onSave(draft.trim()),
     onSuccess: () => {
-      toast.success("تم الحفظ");
+      toast.success(tr("تم الحفظ"));
       setOpen(false);
       invalidateRecords(queryClient);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
   return (
     <>
@@ -245,7 +246,7 @@ function EditTextButton({
         }}
       >
         <Pencil className="size-4" />
-        تعديل
+        {tr("تعديل")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -300,11 +301,11 @@ function EditNoteButton({ note }: { note: EditableNote }) {
         },
       }),
     onSuccess: () => {
-      toast.success("صُحّحت الملاحظة");
+      toast.success(tr("صُحّحت الملاحظة"));
       setOpen(false);
       invalidateRecords(queryClient);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الحفظ"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
 
   function openDialog() {
@@ -325,18 +326,18 @@ function EditNoteButton({ note }: { note: EditableNote }) {
 
   return (
     <>
-      <Button type="button" size="sm" variant="ghost" aria-label="تعديل الملاحظة" onClick={openDialog}>
+      <Button type="button" size="sm" variant="ghost" aria-label={tr("تعديل الملاحظة")} onClick={openDialog}>
         <Pencil className="size-4" />
-        تعديل
+        {tr("تعديل")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>تصحيح الملاحظة</DialogTitle>
+            <DialogTitle>{tr("تصحيح الملاحظة")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor={`en-type-${note.id}`}>النوع</Label>
+              <Label htmlFor={`en-type-${note.id}`}>{tr("النوع")}</Label>
               <Select
                 id={`en-type-${note.id}`}
                 value={type}
@@ -344,14 +345,14 @@ function EditNoteButton({ note }: { note: EditableNote }) {
               >
                 {NOTE_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {NOTE_META[t].label}
+                    {tr(NOTE_META[t].label)}
                   </option>
                 ))}
               </Select>
             </div>
             {type === "behavior" ? (
               <div className="space-y-1.5">
-                <Label htmlFor={`en-bt-${note.id}`}>نوع المخالفة</Label>
+                <Label htmlFor={`en-bt-${note.id}`}>{tr("نوع المخالفة")}</Label>
                 <Select
                   id={`en-bt-${note.id}`}
                   value={behaviorTypeId === "" ? "" : String(behaviorTypeId)}
@@ -359,12 +360,12 @@ function EditNoteButton({ note }: { note: EditableNote }) {
                     setBehaviorTypeId(e.target.value ? Number(e.target.value) : "")
                   }
                 >
-                  <option value="">اختر…</option>
+                  <option value="">{tr("اختر…")}</option>
                   {[1, 2, 3, 4, 5].map((degree) => {
                     const group = behaviorTypes.filter((b) => (b.degree ?? 1) === degree && !isStaffViolation(b));
                     if (!group.length) return null;
                     return (
-                      <optgroup key={`s-${degree}`} label={`مخالفات الطلبة — الدرجة ${degreeLabel(degree)}`}>
+                      <optgroup key={`s-${degree}`} label={`${tr("طلبة")} — ${degreeLabel(degree)}`}>
                         {group.map((b) => (
                           <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
@@ -375,7 +376,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
                     const group = behaviorTypes.filter((b) => (b.degree ?? 1) === degree && isStaffViolation(b));
                     if (!group.length) return null;
                     return (
-                      <optgroup key={`t-${degree}`} label={`تجاه المعلمين — الدرجة ${degreeLabel(degree)}`}>
+                      <optgroup key={`t-${degree}`} label={`${tr("تجاه المعلمين")} — ${degreeLabel(degree)}`}>
                         {group.map((b) => (
                           <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
@@ -386,7 +387,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
               </div>
             ) : null}
             <div className="space-y-1.5">
-              <Label htmlFor={`en-details-${note.id}`}>التفاصيل</Label>
+              <Label htmlFor={`en-details-${note.id}`}>{tr("التفاصيل")}</Label>
               <Textarea
                 id={`en-details-${note.id}`}
                 className="min-h-20"
@@ -396,13 +397,13 @@ function EditNoteButton({ note }: { note: EditableNote }) {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor={`en-period-${note.id}`}>الحصة</Label>
+                <Label htmlFor={`en-period-${note.id}`}>{tr("الحصة")}</Label>
                 <Select
                   id={`en-period-${note.id}`}
                   value={periodKey}
                   onChange={(e) => setPeriodKey(e.target.value)}
                 >
-                  <option value="">غير محددة</option>
+                  <option value="">{tr("غير محددة")}</option>
                   {slots.map((s) => (
                     <option key={s.key} value={s.key}>
                       {s.label}
@@ -411,7 +412,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`en-when-${note.id}`}>وقت التسجيل</Label>
+                <Label htmlFor={`en-when-${note.id}`}>{tr("وقت التسجيل")}</Label>
                 <Input
                   id={`en-when-${note.id}`}
                   type="datetime-local"
@@ -421,18 +422,18 @@ function EditNoteButton({ note }: { note: EditableNote }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`en-status-${note.id}`}>الحالة</Label>
+              <Label htmlFor={`en-status-${note.id}`}>{tr("الحالة")}</Label>
               <Select
                 id={`en-status-${note.id}`}
                 value={status}
                 onChange={(e) => setStatus(e.target.value as NoteStatus)}
               >
-                <option value="open">مفتوحة</option>
-                <option value="closed">أُغلقت</option>
+                <option value="open">{tr("مفتوحة")}</option>
+                <option value="closed">{tr("أُغلقت")}</option>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`en-action-${note.id}`}>الإجراء المتخذ</Label>
+              <Label htmlFor={`en-action-${note.id}`}>{tr("الإجراء المتخذ")}</Label>
               <Textarea
                 id={`en-action-${note.id}`}
                 className="min-h-16"
@@ -441,7 +442,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`en-comp-${note.id}`}>فرص التعويض</Label>
+              <Label htmlFor={`en-comp-${note.id}`}>{tr("فرص التعويض")}</Label>
               <Input
                 id={`en-comp-${note.id}`}
                 value={compensation}

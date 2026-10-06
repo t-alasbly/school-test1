@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { placeLabel, tr } from "@/lib/school/i18n";
 import { ArrowRight } from "lucide-react";
 
 export function ClassSwitcher({
@@ -15,11 +16,11 @@ export function ClassSwitcher({
       <Link
         to="/classes"
         className="grid size-11 place-items-center rounded-[var(--radius-sm)] hover:bg-muted"
-        aria-label="قائمة الفصول"
+        aria-label={tr("قائمة الفصول")}
       >
         <ArrowRight className="size-5" />
       </Link>
-      <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{label}</h1>
+      <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight sm:text-3xl">{placeLabel(label)}</h1>
     </div>
   );
 }

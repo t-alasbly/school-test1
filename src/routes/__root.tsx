@@ -4,6 +4,7 @@ import {
   Outlet,
   Scripts,
 } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { createServerFn } from "@tanstack/react-start";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
@@ -11,7 +12,7 @@ import { AppProviders } from "@/components/providers";
 import { AppErrorComponent } from "@/lib/error-component";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "متابعة الطلاب الشاملة";
+const APP_NAME = tr("متابعة الطلاب الشاملة");
 
 const fetchSessionUser = createServerFn({ method: "GET" }).handler(async () => {
   const { getSessionUser } = await import("@/lib/auth/verify.server");
@@ -29,7 +30,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "نظام متابعة شؤون الطلاب بين المعلم والإدارة وولي الأمر",
+        content: tr("نظام متابعة شؤون الطلاب بين المعلم والإدارة وولي الأمر"),
       },
       { name: "theme-color", content: "#1B5C57" },
     ],

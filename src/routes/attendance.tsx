@@ -23,6 +23,7 @@ import { getStudentAttendanceDays, listAttendanceDayCounts } from "@/lib/school/
 import { formatPrimaryDate, isoFromDate, weekdayAr, type CalendarKind } from "@/lib/school/calendar";
 import { formatTime, toWhatsAppNumber } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
+import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
 import { rangeFromPreset } from "@/components/attendance-roster";
 import { staffCan } from "@/lib/school/permissions";
 import { mergeAppearance, applyAppearance } from "@/lib/school/theme";
@@ -62,8 +63,8 @@ function isoFromDayTime(day: string, time: string) {
 }
 
 function dayCountLabel(n: number) {
-  if (n === 1) return "1 يوم";
-  if (n === 2) return "2 يومين";
+  if (n === 1) return tr("1 يوم");
+  if (n === 2) return tr("2 يومين");
   if (n >= 3 && n <= 10) return `${n} أيام`;
   return `${n} يوماً`;
 }
@@ -84,12 +85,12 @@ function historyMessage(opts: {
   span: string;
   lines: string[];
 }) {
-  const what = opts.kind === "absence" ? "الغياب" : "التأخر";
+  const what = opts.kind === "absence" ? tr("الغياب") : tr("التأخر");
   const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel} خلال ${opts.span}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
   const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
   const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
   if (packed(opts.lines).length <= 1900) return packed(opts.lines);
-  const note = "… وأيام أقدم لم تُذكر لطول الرسالة.\n";
+  const note = tr("… وأيام أقدم لم تُذكر لطول الرسالة.\n");
   const kept = [...opts.lines];
   while (kept.length > 1 && packed(kept, note).length > 1900) kept.shift();
   return packed(kept, note).slice(0, 2000);
@@ -105,6 +106,7 @@ function AttendancePage() {
 
 function AttendanceBody() {
   const { school, staff, classes, stages } = useWorkspace();
+  const { locale } = useLocale();
   const calendar = useCalendar();
   const queryClient = useQueryClient();
   const sheetRef = useRef<HTMLElement>(null);
@@ -144,7 +146,7 @@ function AttendanceBody() {
       }),
     onSuccess: (result, next) => {
       applyAppearance(result.appearance ?? { ...appearance, calendar: next });
-      toast.success(next === "hijri" ? "التواريخ بالهجري" : "التواريخ بالميلادي");
+      toast.success(next === "hijri" ? tr("التواريخ بالهجري") : tr("التواريخ بالميلادي"));
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     },
   });
@@ -173,7 +175,7 @@ function AttendanceBody() {
   const historyBounds = useMemo(() => rangeFromPreset(historySpan), [historySpan]);
   const historySpanText =
     historySpan === "all"
-      ? "كل الأيام المسجّلة"
+      ? tr("كل الأيام المسجّلة")
       : `${historyBounds.label} (${formatPrimaryDate(historyBounds.from, calendar)} — ${formatPrimaryDate(historyBounds.to, calendar)})`;
   const historyDays = useMemo(() => {
     const all = history.data?.days ?? [];
@@ -197,7 +199,7 @@ function AttendanceBody() {
         classLabel: history.data.classLabel,
         school: school.name,
         kind: historyKind,
-        span: historySpan === "all" ? "كل المدة المسجّلة" : historyBounds.label,
+        span: historySpan === "all" ? tr("كل المدة المسجّلة") : historyBounds.label,
         lines,
       }),
     );
@@ -286,7 +288,7 @@ function AttendanceBody() {
       void queryClient.invalidateQueries({ queryKey: ["attendance-day-counts"] });
       void queryClient.invalidateQueries({ queryKey: ["student-attendance-days", s.studentId] });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر الحفظ");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ"));
     } finally {
       setPendingIds((p) => p.filter((id) => id !== s.studentId));
     }
@@ -302,7 +304,7 @@ function AttendanceBody() {
   );
 
   function scopeText() {
-    if (printAll) return "كل المراحل";
+    if (printAll) return tr("كل المراحل");
     return printStageIds
       .map((id) => stages.find((s) => s.id === id)?.name)
       .filter(Boolean)
@@ -367,7 +369,7 @@ function AttendanceBody() {
 
   async function prepareSheet(kind: PrintKind, doPrint: boolean) {
     if (!printAll && printStageIds.length === 0) {
-      toast.error("اختر كل المراحل، أو مرحلة، أو مرحلتين.");
+      toast.error(tr("اختر كل المراحل، أو مرحلة، أو مرحلتين."));
       return false;
     }
     setBusyPrint(true);
@@ -383,7 +385,7 @@ function AttendanceBody() {
       if (doPrint && sheetRef.current) printElement(sheetRef.current);
       return true;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر تجهيز الكشف");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تجهيز الكشف"));
       return false;
     } finally {
       setBusyPrint(false);
@@ -411,7 +413,7 @@ function AttendanceBody() {
         },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذر حفظ الرسالة");
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الرسالة"));
       return;
     }
     window.open(
@@ -419,7 +421,7 @@ function AttendanceBody() {
       "_blank",
       "noopener,noreferrer",
     );
-    toast.success("فُتحت واتساب وحُفظت الرسالة في السجل");
+    toast.success(tr("فُتحت واتساب وحُفظت الرسالة في السجل"));
   }
 
   const moveClass = useMutation({
@@ -439,19 +441,19 @@ function AttendanceBody() {
       }
       setMoveClassId("");
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر إرسال الطلب"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال الطلب")),
   });
 
   if (!can) {
-    return <p className="text-fg-muted">تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.</p>;
+    return <p className="text-fg-muted">{tr("تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.")}</p>;
   }
 
   const printTitle =
     printKind === "absence"
-      ? "كشف الغياب اليومي"
+      ? tr("كشف الغياب اليومي")
       : printKind === "late"
-        ? "كشف التأخر الصباحي"
-        : "كشف الغياب اليومي والتأخر الصباحي";
+        ? tr("كشف التأخر الصباحي")
+        : tr("كشف الغياب اليومي والتأخر الصباحي");
   const dayStamp = `${day}T12:00:00`;
   const sheetNames = sheetRows.filter((s) => {
     if (printKind === "absence") return s.kind === "absence";
@@ -478,19 +480,19 @@ function AttendanceBody() {
           <>
             <Button type="button" size="sm" variant="secondary" className="h-8 px-2 text-[11px]" onClick={() => setPrintOpen(true)}>
               <Printer className="size-3.5" />
-              طباعة
+              {tr("طباعة")}
             </Button>
             {showSheet ? (
               <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-[11px]" onClick={() => setShowSheet(false)}>
-                إخفاء
+                {tr("إخفاء")}
               </Button>
             ) : null}
           </>
         }
       />
       <header className="no-print space-y-1">
-        <p className="text-sm text-fg-muted">غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.</p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">الغياب اليومي</h1>
+        <p className="text-sm text-fg-muted">{tr("غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{tr("الغياب اليومي")}</h1>
       </header>
       <div className="no-print">
         <DayField
@@ -531,16 +533,16 @@ function AttendanceBody() {
                       kind === "late" && "text-warn",
                     )}
                   >
-                    {s.studentName}
-                    {saving ? <span className="ms-2 text-xs font-normal text-fg-muted">يُحفظ…</span> : null}
+                    {studentLabel(locale, s.studentName, s.nameEn)}
+                    {saving ? <span className="ms-2 text-xs font-normal text-fg-muted">{tr("يُحفظ…")}</span> : null}
                   </button>
                   <p className="truncate text-xs text-fg-muted">{s.classLabel}</p>
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
                   {(
                     [
-                      ["late", "تأخر", days.lateDays, "text-warn"],
-                      ["absence", "غياب", days.absenceDays, "text-danger"],
+                      ["late", tr("تأخر"), days.lateDays, "text-warn"],
+                      ["absence", tr("غياب"), days.absenceDays, "text-danger"],
                     ] as const
                   ).map(([k, label, count, tone]) => (
                     <div key={k} className="flex flex-col items-center">
@@ -571,7 +573,7 @@ function AttendanceBody() {
               </div>
               {kind === "late" ? (
                 <label className="mt-2 flex h-10 w-fit items-center gap-1.5 rounded-full border border-warn bg-warn-soft px-3 text-xs text-warn">
-                  وقت الحضور
+                  {tr("وقت الحضور")}
                   <input
                     type="time"
                     value={timeFromIso(arrivedOf(s))}
@@ -587,7 +589,7 @@ function AttendanceBody() {
           );
         })}
         {shown.length === 0 ? (
-          <li className="px-4 py-10 text-center text-sm text-fg-muted">لا يوجد طلاب في هذا النطاق</li>
+          <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا يوجد طلاب في هذا النطاق")}</li>
         ) : null}
       </ul>
 
@@ -604,9 +606,9 @@ function AttendanceBody() {
         <table className="official-table mb-3">
           <thead>
             <tr>
-              <th>التاريخ</th>
-              {printKind !== "late" ? <th>عدد الغائبين</th> : null}
-              {printKind !== "absence" ? <th>عدد المتأخرين</th> : null}
+              <th>{tr("التاريخ")}</th>
+              {printKind !== "late" ? <th>{tr("عدد الغائبين")}</th> : null}
+              {printKind !== "absence" ? <th>{tr("عدد المتأخرين")}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -624,11 +626,11 @@ function AttendanceBody() {
         <table className="official-table">
           <thead>
             <tr>
-              <th className="w-10">م</th>
-              <th>اسم الطالب</th>
-              <th>الصف</th>
-              <th>النوع</th>
-              {printKind !== "absence" ? <th>وقت الحضور</th> : null}
+              <th className="w-10">{tr("م")}</th>
+              <th>{tr("اسم الطالب")}</th>
+              <th>{tr("الصف")}</th>
+              <th>{tr("النوع")}</th>
+              {printKind !== "absence" ? <th>{tr("وقت الحضور")}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -636,19 +638,19 @@ function AttendanceBody() {
               <tr>
                 <td colSpan={printKind === "absence" ? 4 : 5} className="py-8">
                   {printKind === "absence"
-                    ? "لا يوجد غائبون في هذا النطاق."
+                    ? tr("لا يوجد غائبون في هذا النطاق.")
                     : printKind === "late"
-                      ? "لا يوجد متأخرون في هذا النطاق."
-                      : "لا يوجد غائبون أو متأخرون في هذا النطاق."}
+                      ? tr("لا يوجد متأخرون في هذا النطاق.")
+                      : tr("لا يوجد غائبون أو متأخرون في هذا النطاق.")}
                 </td>
               </tr>
             ) : (
               sheetNames.map((s, i) => (
                 <tr key={s.studentId}>
                   <td>{i + 1}</td>
-                  <td className="text-[15px] font-semibold">{s.studentName}</td>
+                  <td className="text-[15px] font-semibold">{studentLabel(locale, s.studentName, s.nameEn)}</td>
                   <td>{s.classLabel}</td>
-                  <td>{s.kind === "late" ? "تأخر صباحي" : "غياب اليوم الكامل"}</td>
+                  <td>{s.kind === "late" ? tr("تأخر صباحي") : tr("غياب اليوم الكامل")}</td>
                   {printKind !== "absence" ? (
                     <td>{s.kind === "late" && s.arrivedAt ? formatTime(s.arrivedAt) : "—"}</td>
                   ) : null}
@@ -666,18 +668,18 @@ function AttendanceBody() {
       <Dialog open={printOpen} onOpenChange={setPrintOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>طباعة الكشف</DialogTitle>
-            <DialogDescription>اختر نوع الكشف ونطاق المراحل، ثم اطبع. التسجيل على الشاشة لا يتغير.</DialogDescription>
+            <DialogTitle>{tr("طباعة الكشف")}</DialogTitle>
+            <DialogDescription>{tr("اختر نوع الكشف ونطاق المراحل، ثم اطبع. التسجيل على الشاشة لا يتغير.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <p className="text-sm font-semibold">نوع الكشف</p>
+              <p className="text-sm font-semibold">{tr("نوع الكشف")}</p>
               <div className="grid grid-cols-3 gap-2">
                 {(
                   [
-                    ["absence", "الغياب"],
-                    ["late", "التأخر"],
-                    ["all", "الكل"],
+                    ["absence", tr("الغياب")],
+                    ["late", tr("التأخر")],
+                    ["all", tr("الكل")],
                   ] as const
                 ).map(([kind, label]) => (
                   <button
@@ -697,8 +699,8 @@ function AttendanceBody() {
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-semibold">المراحل</p>
-              <p className="text-xs text-fg-muted">كل المراحل، أو مرحلة واحدة، أو مرحلتين.</p>
+              <p className="text-sm font-semibold">{tr("المراحل")}</p>
+              <p className="text-xs text-fg-muted">{tr("كل المراحل، أو مرحلة واحدة، أو مرحلتين.")}</p>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -711,7 +713,7 @@ function AttendanceBody() {
                     printAll ? "border-primary bg-primary/5 text-primary" : "border-border bg-bg text-fg",
                   )}
                 >
-                  كل المراحل
+                  {tr("كل المراحل")}
                 </button>
                 {stages.map((stage) => {
                   const on = !printAll && printStageIds.includes(stage.id);
@@ -742,7 +744,7 @@ function AttendanceBody() {
                 }}
               >
                 <Printer className="size-4" />
-                {busyPrint ? "جارٍ…" : "طباعة"}
+                {busyPrint ? tr("جارٍ…") : tr("طباعة")}
               </Button>
               <Button
                 type="button"
@@ -764,18 +766,18 @@ function AttendanceBody() {
       <Dialog open={historyId != null} onOpenChange={(open) => { if (!open) { setHistoryId(null); setMoveClassId(""); } }}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{history.data?.studentName ?? "أيام الطالب"}</DialogTitle>
+            <DialogTitle>{history.data?.studentName ?? tr("أيام الطالب")}</DialogTitle>
             <DialogDescription>
               {history.data?.classLabel
                 ? `${history.data.classLabel} — طباعة أيام المدة في صفحة واحدة`
-                : "طباعة أيام الغياب أو التأخر حسب المدة"}
+                : tr("طباعة أيام الغياب أو التأخر حسب المدة")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2">
             {(
               [
-                ["absence", "أيام الغياب"],
-                ["late", "أيام التأخر"],
+                ["absence", tr("أيام الغياب")],
+                ["late", tr("أيام التأخر")],
               ] as const
             ).map(([kind, label]) => (
               <button
@@ -796,10 +798,10 @@ function AttendanceBody() {
           <div className="flex flex-wrap gap-1.5">
             {(
               [
-                ["week", "أسبوع"],
-                ["month", "شهر"],
-                ["term", "ترم"],
-                ["all", "الكل"],
+                ["week", tr("أسبوع")],
+                ["month", tr("شهر")],
+                ["term", tr("ترم")],
+                ["all", tr("الكل")],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -819,10 +821,10 @@ function AttendanceBody() {
           </div>
           <p className="text-xs text-fg-muted">{historySpanText}</p>
           {history.isPending ? (
-            <p className="text-sm text-fg-muted">جارٍ التحميل…</p>
+            <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
           ) : historyDays.length === 0 ? (
             <p className="text-sm text-fg-muted">
-              {historyKind === "absence" ? "لا أيام غياب في هذه المدة." : "لا أيام تأخر في هذه المدة."}
+              {historyKind === "absence" ? tr("لا أيام غياب في هذه المدة.") : tr("لا أيام تأخر في هذه المدة.")}
             </p>
           ) : (
             <ul className="max-h-40 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-border px-3 py-2 text-sm">
@@ -836,31 +838,31 @@ function AttendanceBody() {
             className="min-h-36"
             value={historyDraft}
             onChange={(e) => setHistoryDraft(e.target.value)}
-            aria-label="نص الرسالة"
+            aria-label={tr("نص الرسالة")}
           />
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="secondary" disabled={historyDays.length === 0} onClick={printHistory}>
               <Printer className="size-4" />
-              طباعة
+              {tr("طباعة")}
             </Button>
             {canMessage ? (
               <Button type="button" disabled={!historyNumber || historyDays.length === 0 || !historyDraft.trim()} onClick={() => void sendHistory()}>
-                إرسال لولي الأمر
+                {tr("إرسال لولي الأمر")}
               </Button>
             ) : null}
           </div>
           {canMessage && history.data && !historyNumber ? (
-            <p className="text-xs text-fg-muted">لا يوجد رقم جوال محفوظ لولي الأمر.</p>
+            <p className="text-xs text-fg-muted">{tr("لا يوجد رقم جوال محفوظ لولي الأمر.")}</p>
           ) : null}
           <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-sm font-semibold">طلب تغيير الفصل</p>
-            <Select value={moveClassId} onChange={(e) => setMoveClassId(e.target.value)} aria-label="الفصل الجديد">
-              <option value="">اختر الفصل الجديد</option>
+            <p className="text-sm font-semibold">{tr("طلب تغيير الفصل")}</p>
+            <Select value={moveClassId} onChange={(e) => setMoveClassId(e.target.value)} aria-label={tr("الفصل الجديد")}>
+              <option value="">{tr("اختر الفصل الجديد")}</option>
               {classes
                 .filter((item) => item.id !== history.data?.classId)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.label}
+                    {tr(item.label)}
                   </option>
                 ))}
             </Select>
@@ -870,7 +872,7 @@ function AttendanceBody() {
               disabled={!historyId || !moveClassId || moveClass.isPending}
               onClick={() => moveClass.mutate()}
             >
-              {moveClass.isPending ? "جارٍ الإرسال…" : "إرسال لمن يعدّل بيانات الطلاب"}
+              {moveClass.isPending ? tr("جارٍ الإرسال…") : tr("إرسال لمن يعدّل بيانات الطلاب")}
             </Button>
           </div>
         </DialogContent>
@@ -882,26 +884,26 @@ function AttendanceBody() {
       >
         <OfficialLetterhead school={school} />
         <h2 className="mt-2 text-center text-[18px] font-semibold">
-          {historyKind === "absence" ? "كشف أيام الغياب" : "كشف أيام التأخر"}
+          {historyKind === "absence" ? tr("كشف أيام الغياب") : tr("كشف أيام التأخر")}
         </h2>
         <p className="student-print-line">
           <strong>{history.data?.studentName ?? ""}</strong>
           {history.data?.classLabel ? <span> · {history.data.classLabel}</span> : null}
-          <span> · {historySpan === "all" ? "كل المدة" : historyBounds.label}</span>
+          <span> · {historySpan === "all" ? tr("كل المدة") : historyBounds.label}</span>
           <span> · المجموع: {dayCountLabel(historyDays.length)}</span>
         </p>
         <table className="official-table">
           <thead>
             <tr>
-              <th className="w-10">م</th>
-              <th>اليوم والتاريخ</th>
-              {historyKind === "late" ? <th>وقت الحضور</th> : null}
+              <th className="w-10">{tr("م")}</th>
+              <th>{tr("اليوم والتاريخ")}</th>
+              {historyKind === "late" ? <th>{tr("وقت الحضور")}</th> : null}
             </tr>
           </thead>
           <tbody>
             {historyDays.length === 0 ? (
               <tr>
-                <td colSpan={historyKind === "late" ? 3 : 2}>لا أيام مسجّلة.</td>
+                <td colSpan={historyKind === "late" ? 3 : 2}>{tr("لا أيام مسجّلة.")}</td>
               </tr>
             ) : (
               historyDays.map((row, index) => (

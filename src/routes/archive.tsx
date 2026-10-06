@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
@@ -103,10 +104,10 @@ function ArchiveBody() {
   }
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "notes", label: "الملاحظات", count: notes.length },
-    { key: "messages", label: "الرسائل", count: messages.length },
-    { key: "improvements", label: "تحسين السلوك", count: improvements.length },
-    { key: "cases", label: "حالات الإرشاد", count: cases.length },
+    { key: "notes", label: tr("الملاحظات"), count: notes.length },
+    { key: "messages", label: tr("الرسائل"), count: messages.length },
+    { key: "improvements", label: tr("تحسين السلوك"), count: improvements.length },
+    { key: "cases", label: tr("حالات الإرشاد"), count: cases.length },
   ];
 
   return (
@@ -115,9 +116,9 @@ function ArchiveBody() {
         <p className="text-sm text-fg-muted">
           كل ما سُجّل في المدرسة: صحّح الخطأ أو احذفه. يظهر زر التصحيح أيضاً في سجل الطالب وشؤون الطلاب والتقارير.
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">الأرشيف</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("الأرشيف")}</h1>
       </header>
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث باسم الطالب أو النص…" />
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("بحث باسم الطالب أو النص…")} />
       <div className="flex flex-wrap gap-1.5">
         {tabs.map((t) => (
           <button
@@ -145,7 +146,7 @@ function ArchiveBody() {
                   <Badge tone={noteTone(note.type as NoteType, note.status)}>
                     {NOTE_META[note.type as NoteType]?.label ?? note.type}
                   </Badge>
-                  {note.behaviorTypeName ? <span className="text-xs text-fg-muted">{note.behaviorTypeName}</span> : null}
+                  {note.behaviorTypeName ? <span className="text-xs text-fg-muted">{tr(note.behaviorTypeName)}</span> : null}
                 </div>
                 <p className="text-xs text-fg-subtle">
                   {classLabel(note.shortName, note.className)} · {note.teacherName} · {formatStamp(note.occurredAt || note.createdAt)}
@@ -156,7 +157,7 @@ function ArchiveBody() {
               <NoteRecordTools note={note} />
             </li>
           ))}
-          {notes.length === 0 ? <li className="px-4 py-10 text-center text-sm text-fg-muted">لا ملاحظات</li> : null}
+          {notes.length === 0 ? <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا ملاحظات")}</li> : null}
         </ul>
       ) : null}
 
@@ -177,7 +178,7 @@ function ArchiveBody() {
               <MessageRecordTools id={msg.id} body={msg.body} />
             </li>
           ))}
-          {messages.length === 0 ? <li className="px-4 py-10 text-center text-sm text-fg-muted">لا رسائل</li> : null}
+          {messages.length === 0 ? <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا رسائل")}</li> : null}
         </ul>
       ) : null}
 
@@ -199,7 +200,7 @@ function ArchiveBody() {
             </li>
           ))}
           {improvements.length === 0 ? (
-            <li className="px-4 py-10 text-center text-sm text-fg-muted">لا خطط تحسين</li>
+            <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا خطط تحسين")}</li>
           ) : null}
         </ul>
       ) : null}
@@ -222,7 +223,7 @@ function ArchiveBody() {
             </li>
           ))}
           {cases.length === 0 ? (
-            <li className="px-4 py-10 text-center text-sm text-fg-muted">لا حالات إرشادية</li>
+            <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا حالات إرشادية")}</li>
           ) : null}
         </ul>
       ) : null}

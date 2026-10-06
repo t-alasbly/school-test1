@@ -1,4 +1,5 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { tr } from "@/lib/school/i18n";
 import { X } from "lucide-react";
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,7 @@ function DialogContent({
         {hideClose ? null : (
         <DialogPrimitive.Close className="absolute top-3 left-3 z-10 grid size-11 place-items-center rounded-[var(--radius-xs)] text-fg-muted hover:bg-muted hover:text-fg">
           <X className="size-4" />
-          <span className="sr-only">إغلاق</span>
+          <span className="sr-only">{tr("إغلاق")}</span>
         </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>

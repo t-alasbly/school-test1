@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { cn } from "@/lib/utils";
 
 export type StatBucket = {
@@ -26,22 +27,22 @@ export type StatCardDef = {
 };
 
 export const BUILTIN_STAT_CARDS: (StatCardDef & { group: keyof FollowupStats; range: keyof StatBucket })[] = [
-  { id: "abs-today", label: "غياب اليوم", tone: "danger", href: "/admin/absence?range=today", group: "dailyAbsence", range: "today" },
-  { id: "abs-week", label: "غياب الأسبوع", tone: "danger", href: "/admin/absence?range=week", group: "dailyAbsence", range: "week" },
-  { id: "abs-month", label: "غياب الشهر", tone: "danger", href: "/admin/absence?range=month", group: "dailyAbsence", range: "month" },
-  { id: "abs-total", label: "مجموع الغياب", tone: "danger", href: "/admin/absence?range=all", group: "dailyAbsence", range: "total" },
-  { id: "late-today", label: "تأخر اليوم", tone: "warn", href: "/admin/late?range=today", group: "dailyLate", range: "today" },
-  { id: "late-week", label: "تأخر الأسبوع", tone: "warn", href: "/admin/late?range=week", group: "dailyLate", range: "week" },
-  { id: "late-month", label: "تأخر الشهر", tone: "warn", href: "/admin/late?range=month", group: "dailyLate", range: "month" },
-  { id: "late-total", label: "مجموع التأخر", tone: "warn", href: "/admin/late?range=all", group: "dailyLate", range: "total" },
-  { id: "beh-today", label: "مخالفات اليوم", tone: "danger", href: "/admin/behavior?type=behavior&range=today", group: "behavior", range: "today" },
-  { id: "beh-week", label: "مخالفات الأسبوع", tone: "danger", href: "/admin/behavior?type=behavior&range=week", group: "behavior", range: "week" },
-  { id: "beh-month", label: "مخالفات الشهر", tone: "danger", href: "/admin/behavior?type=behavior&range=month", group: "behavior", range: "month" },
-  { id: "beh-total", label: "مجموع المخالفات", tone: "danger", href: "/admin/behavior?type=behavior&range=all", group: "behavior", range: "total" },
-  { id: "hw-today", label: "واجبات اليوم", tone: "warn", href: "/admin/behavior?type=homework&range=today", group: "homework", range: "today" },
-  { id: "hw-week", label: "واجبات الأسبوع", tone: "warn", href: "/admin/behavior?type=homework&range=week", group: "homework", range: "week" },
-  { id: "hw-month", label: "واجبات الشهر", tone: "warn", href: "/admin/behavior?type=homework&range=month", group: "homework", range: "month" },
-  { id: "hw-total", label: "مجموع الواجبات", tone: "warn", href: "/admin/behavior?type=homework&range=all", group: "homework", range: "total" },
+  { id: "abs-today", label: tr("غياب اليوم"), tone: "danger", href: "/admin/absence?range=today", group: "dailyAbsence", range: "today" },
+  { id: "abs-week", label: tr("غياب الأسبوع"), tone: "danger", href: "/admin/absence?range=week", group: "dailyAbsence", range: "week" },
+  { id: "abs-month", label: tr("غياب الشهر"), tone: "danger", href: "/admin/absence?range=month", group: "dailyAbsence", range: "month" },
+  { id: "abs-total", label: tr("مجموع الغياب"), tone: "danger", href: "/admin/absence?range=all", group: "dailyAbsence", range: "total" },
+  { id: "late-today", label: tr("تأخر اليوم"), tone: "warn", href: "/admin/late?range=today", group: "dailyLate", range: "today" },
+  { id: "late-week", label: tr("تأخر الأسبوع"), tone: "warn", href: "/admin/late?range=week", group: "dailyLate", range: "week" },
+  { id: "late-month", label: tr("تأخر الشهر"), tone: "warn", href: "/admin/late?range=month", group: "dailyLate", range: "month" },
+  { id: "late-total", label: tr("مجموع التأخر"), tone: "warn", href: "/admin/late?range=all", group: "dailyLate", range: "total" },
+  { id: "beh-today", label: tr("مخالفات اليوم"), tone: "danger", href: "/admin/behavior?type=behavior&range=today", group: "behavior", range: "today" },
+  { id: "beh-week", label: tr("مخالفات الأسبوع"), tone: "danger", href: "/admin/behavior?type=behavior&range=week", group: "behavior", range: "week" },
+  { id: "beh-month", label: tr("مخالفات الشهر"), tone: "danger", href: "/admin/behavior?type=behavior&range=month", group: "behavior", range: "month" },
+  { id: "beh-total", label: tr("مجموع المخالفات"), tone: "danger", href: "/admin/behavior?type=behavior&range=all", group: "behavior", range: "total" },
+  { id: "hw-today", label: tr("واجبات اليوم"), tone: "warn", href: "/admin/behavior?type=homework&range=today", group: "homework", range: "today" },
+  { id: "hw-week", label: tr("واجبات الأسبوع"), tone: "warn", href: "/admin/behavior?type=homework&range=week", group: "homework", range: "week" },
+  { id: "hw-month", label: tr("واجبات الشهر"), tone: "warn", href: "/admin/behavior?type=homework&range=month", group: "homework", range: "month" },
+  { id: "hw-total", label: tr("مجموع الواجبات"), tone: "warn", href: "/admin/behavior?type=homework&range=all", group: "homework", range: "total" },
 ];
 
 function go(navigate: ReturnType<typeof useNavigate>, href: string) {
@@ -92,7 +93,7 @@ export function StatsGrid({
           onClick={() => go(navigate, tile.href)}
           className="rounded-xl border border-border bg-card px-2.5 py-2.5 text-right shadow-[var(--shadow-card)] transition-colors hover:border-primary"
         >
-          <p className="text-[11px] leading-4 text-fg-muted">{tile.label}</p>
+          <p className="text-[11px] leading-4 text-fg-muted">{tr(tile.label)}</p>
           <p
             className={cn(
               "mt-1 text-xl font-semibold tabular-nums sm:text-2xl",
@@ -118,7 +119,7 @@ export function StatsGrid({
           onClick={onAdd}
           className="rounded-xl border border-dashed border-border bg-card px-2.5 py-2.5 text-xs font-medium text-fg-muted hover:border-primary hover:text-fg"
         >
-          إضافة عداد
+          {tr("إضافة عداد")}
         </button>
       ) : null}
     </div>

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { MessageCircle } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -41,11 +42,11 @@ type Recipient = {
 };
 
 const SCOPES: { id: Scope; label: string; hint: string }[] = [
-  { id: "class", label: "فصل", hint: "أولياء فصل واحد" },
-  { id: "stage", label: "صف كامل", hint: "كل فصول الصف" },
-  { id: "absence", label: "غائبو اليوم", hint: "من سجل الغياب اليومي" },
-  { id: "late", label: "متأخرو اليوم", hint: "من سجل التأخر الصباحي" },
-  { id: "all", label: "كل الطلاب", hint: "من لهم جوال محفوظ" },
+  { id: "class", label: tr("فصل"), hint: tr("أولياء فصل واحد") },
+  { id: "stage", label: tr("صف كامل"), hint: tr("كل فصول الصف") },
+  { id: "absence", label: tr("غائبو اليوم"), hint: tr("من سجل الغياب اليومي") },
+  { id: "late", label: tr("متأخرو اليوم"), hint: tr("من سجل التأخر الصباحي") },
+  { id: "all", label: tr("كل الطلاب"), hint: tr("من لهم جوال محفوظ") },
 ];
 
 function todayISO() {
@@ -138,7 +139,7 @@ function MessagesBody() {
   const sendOne = useMutation({
     mutationFn: async (row: Recipient) => {
       const number = toWhatsAppNumber(row.parentPhone);
-      if (!number) throw new Error("لا يوجد جوال");
+      if (!number) throw new Error(tr("لا يوجد جوال"));
       const body = bodyFor(row);
       await logParentMessage({
         data: { studentId: row.id, kind: kindOf(), body, parentPhone: row.parentPhone },
@@ -150,11 +151,11 @@ function MessagesBody() {
       setSent((prev) => new Set(prev).add(row.id));
       setCursor(0);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر الإرسال"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإرسال")),
   });
 
   if (!can) {
-    return <p className="text-fg-muted">الرسائل الجماعية لمن مُنح صلاحية إرسال الرسائل.</p>;
+    return <p className="text-fg-muted">{tr("الرسائل الجماعية لمن مُنح صلاحية إرسال الرسائل.")}</p>;
   }
 
   function toggleAll(on: boolean) {
@@ -168,7 +169,7 @@ function MessagesBody() {
   function copyPhones() {
     const nums = selected.map((s) => s.parentPhone).filter(Boolean);
     if (!nums.length) {
-      toast.error("لا أرقام للنسخ");
+      toast.error(tr("لا أرقام للنسخ"));
       return;
     }
     void navigator.clipboard.writeText(nums.join("\n"));
@@ -178,8 +179,8 @@ function MessagesBody() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">واتساب لأولياء فصل أو صف أو غائبي اليوم — كل رسالة تُحفظ في السجل</p>
-        <h1 className="text-3xl font-semibold tracking-tight">رسائل جماعية</h1>
+        <p className="text-sm text-fg-muted">{tr("واتساب لأولياء فصل أو صف أو غائبي اليوم — كل رسالة تُحفظ في السجل")}</p>
+        <h1 className="text-3xl font-semibold tracking-tight">{tr("رسائل جماعية")}</h1>
       </header>
 
       <div className="flex flex-wrap gap-1.5">
@@ -200,7 +201,7 @@ function MessagesBody() {
               scope === item.id ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg-elevated text-fg-muted",
             )}
           >
-            {item.label}
+            {tr(item.label)}
           </button>
         ))}
       </div>
@@ -226,7 +227,7 @@ function MessagesBody() {
 
       <div className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <div className="space-y-1.5">
-          <Label htmlFor="bulk-tpl">القالب</Label>
+          <Label htmlFor="bulk-tpl">{tr("القالب")}</Label>
           <Select
             id="bulk-tpl"
             value={picker}
@@ -237,7 +238,7 @@ function MessagesBody() {
           >
             {KEYS.map((key) => (
               <option key={key} value={key}>
-                {key === "general" ? (school.messageTemplates.general?.title ?? "رسالة عامة") : NOTE_META[key].label}
+                {key === "general" ? (school.messageTemplates.general?.title ?? tr("رسالة عامة")) : tr(NOTE_META[key].label)}
               </option>
             ))}
             {custom.map((item) => (
@@ -252,7 +253,7 @@ function MessagesBody() {
           <Textarea
             id="bulk-details"
             className="min-h-20"
-            placeholder="مثال: الاجتماع مساء الأحد…"
+            placeholder={tr("مثال: الاجتماع مساء الأحد…")}
             value={details}
             onChange={(e) => setDetails(e.target.value)}
           />
@@ -294,7 +295,7 @@ function MessagesBody() {
             onClick={() => sendOne.mutate(current)}
           >
             <MessageCircle className="size-4" />
-            {sendOne.isPending ? "جارٍ الفتح…" : "افتح واتساب ثم التالي"}
+            {sendOne.isPending ? tr("جارٍ الفتح…") : tr("افتح واتساب ثم التالي")}
           </Button>
         </div>
       ) : selected.length > 0 && remaining.length === 0 ? (
@@ -305,10 +306,10 @@ function MessagesBody() {
 
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {query.isPending ? (
-          <li className="px-4 py-8 text-center text-sm text-fg-muted">جارٍ تحميل الأسماء…</li>
+          <li className="px-4 py-8 text-center text-sm text-fg-muted">{tr("جارٍ تحميل الأسماء…")}</li>
         ) : students.length === 0 ? (
           <li className="px-4 py-8 text-center text-sm text-fg-muted">
-            {scope === "absence" || scope === "late" ? "لا يوجد طلاب في هذا السجل اليوم." : "لا طلاب في هذا النطاق."}
+            {scope === "absence" || scope === "late" ? tr("لا يوجد طلاب في هذا السجل اليوم.") : tr("لا طلاب في هذا النطاق.")}
           </li>
         ) : (
           students.map((row) => {
@@ -335,8 +336,8 @@ function MessagesBody() {
                   <p className="font-semibold">{row.name}</p>
                   <p className="text-xs text-fg-muted">
                     {row.label}
-                    {number ? ` · ${row.parentPhone}` : " · بلا جوال"}
-                    {sent.has(row.id) ? " · أُرسلت" : ""}
+                    {number ? ` · ${row.parentPhone}` : tr(" · بلا جوال")}
+                    {sent.has(row.id) ? tr(" · أُرسلت") : ""}
                   </p>
                 </div>
                 {number ? (

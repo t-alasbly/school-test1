@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { studentLabel, tr, useLocale } from "@/lib/school/i18n";
 import { Mail, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,8 @@ export function StaffMailDialog({
   compact?: boolean;
 }) {
   const { staff } = useWorkspace();
+  const { locale } = useLocale();
+  const shownName = studentLabel(locale, studentName);
   const [open, setOpen] = useState(false);
   const [dest, setDest] = useState<MailDest>("counselor");
   const [assigneeId, setAssigneeId] = useState("");
@@ -61,7 +64,7 @@ export function StaffMailDialog({
       void queryClient.invalidateQueries({ queryKey: ["my-mail"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "تعذر إرسال المراسلة"),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال المراسلة")),
   });
 
   return (
@@ -73,19 +76,19 @@ export function StaffMailDialog({
           aria-label={`مراسلة عن ${studentName}`}
         >
           <Mail className="size-4" />
-          مراسلة
+          {tr("مراسلة")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>مراسلة داخلية</DialogTitle>
+          <DialogTitle>{tr("مراسلة داخلية")}</DialogTitle>
           <DialogDescription>
-            {studentName} — أرسل ملاحظة للمرشد أو الوكيل أو المرشد الصحي أو معلم آخر، ثم تابع الردود وحوّلها عند الحاجة
+            {shownName} — {tr("أرسل ملاحظة للمرشد أو الوكيل أو المرشد الصحي أو معلم آخر، ثم تابع الردود وحوّلها عند الحاجة")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>إرسال إلى</Label>
+            <Label>{tr("إرسال إلى")}</Label>
             <div className="grid grid-cols-2 gap-1.5">
               {MAIL_DEST.map((item) => (
                 <button
@@ -99,36 +102,36 @@ export function StaffMailDialog({
                       : "border-border bg-bg",
                   )}
                 >
-                  {item.label}
+                  {tr(item.label)}
                 </button>
               ))}
             </div>
           </div>
           {dest === "teacher" ? (
             <div className="space-y-1.5">
-              <Label htmlFor={`mail-teacher-${studentId}`}>اختر المعلم</Label>
+              <Label htmlFor={`mail-teacher-${studentId}`}>{tr("اختر المعلم")}</Label>
               <Select
                 id={`mail-teacher-${studentId}`}
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
               >
-                <option value="">اختر زميلاً…</option>
+                <option value="">{tr("اختر زميلاً…")}</option>
                 {peers.map((row) => (
                   <option key={row.userId} value={row.userId}>
                     {row.displayName}
                     {row.subject ? ` — ${row.subject}` : ""}
-                    {` · ${ROLE_LABEL[row.role as StaffRole] ?? row.role}`}
+                    {` · ${tr(ROLE_LABEL[row.role as StaffRole]) ?? row.role}`}
                   </option>
                 ))}
               </Select>
             </div>
           ) : null}
           <div className="space-y-1.5">
-            <Label htmlFor={`mail-body-${studentId}`}>نص المراسلة</Label>
+            <Label htmlFor={`mail-body-${studentId}`}>{tr("نص المراسلة")}</Label>
             <Textarea
               id={`mail-body-${studentId}`}
               className="min-h-28"
-              placeholder="اكتب الرسالة أو الملاحظة…"
+              placeholder={tr("اكتب الرسالة أو الملاحظة…")}
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />
@@ -143,7 +146,7 @@ export function StaffMailDialog({
             onClick={() => mutation.mutate()}
           >
             <Send className="size-4" />
-            {mutation.isPending ? "جارٍ الإرسال…" : "إرسال المراسلة"}
+            {mutation.isPending ? tr("جارٍ الإرسال…") : tr("إرسال المراسلة")}
           </Button>
         </div>
       </DialogContent>

@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Download, Plus, Save } from "lucide-react";
+import { tr } from "@/lib/school/i18n";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,11 +38,11 @@ export type RosterTemplate = {
 };
 
 const BUILTIN_META: { id: BuiltinCol; title: string; optional?: boolean }[] = [
-  { id: "seq", title: "م" },
-  { id: "name", title: "اسم الطالب" },
-  { id: "stage", title: "الصف / المرحلة", optional: true },
-  { id: "class", title: "الفصل", optional: true },
-  { id: "phone", title: "جوال ولي الأمر", optional: true },
+  { id: "seq", title: tr("م") },
+  { id: "name", title: tr("اسم الطالب") },
+  { id: "stage", title: tr("الصف / المرحلة"), optional: true },
+  { id: "class", title: tr("الفصل"), optional: true },
+  { id: "phone", title: tr("جوال ولي الأمر"), optional: true },
 ];
 
 export function clampMm(value: number, fallback = EXTRA_DEFAULT_MM) {
@@ -100,7 +101,7 @@ export function visibleColumns(payload: Pick<RosterPayload, "extraCols" | "width
       if (!extra) return null;
       return {
         id,
-        title: extra.title.trim() || "عمود",
+        title: extra.title.trim() || tr("عمود"),
         width: clampMm(extra.width, EXTRA_DEFAULT_MM),
       };
     })
@@ -196,21 +197,21 @@ export function RosterBuilder({
       widths: { ...DEFAULT_COL_MM },
       extraCols: extraCols.map((c) => ({ ...c, width: EXTRA_DEFAULT_MM })),
     });
-    toast.message("أُعيدت المقاسات الافتراضية");
+    toast.message(tr("أُعيدت المقاسات الافتراضية"));
   }
 
   return (
     <div className="no-print space-y-3">
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <Label htmlFor="roster-title" className="text-sm">
-          بيانات الطلاب
+          {tr("بيانات الطلاب")}
         </Label>
         <Input
           id="roster-title"
           className="mt-2"
           value={title}
           onChange={(e) => onTitle(e.target.value)}
-          placeholder="بيانات الطلاب"
+          placeholder={tr("بيانات الطلاب")}
           maxLength={80}
         />
       </div>
@@ -218,11 +219,11 @@ export function RosterBuilder({
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold">أعمدة إضافية (اسم مختصر لكل عمود)</p>
+            <p className="text-sm font-semibold">{tr("أعمدة إضافية (اسم مختصر لكل عمود)")}</p>
             {extraCols.length === 0 ? (
-              <p className="text-xs text-fg-muted">لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.</p>
+              <p className="text-xs text-fg-muted">{tr("لا أعمدة إضافية — أضف عموداً واكتب اسمه المختصر.")}</p>
             ) : (
-              <p className="text-xs text-fg-muted">يمكنك إضافة حتى 24 عموداً وتحديد عرض كل منها بالملم.</p>
+              <p className="text-xs text-fg-muted">{tr("يمكنك إضافة حتى 24 عموداً وتحديد عرض كل منها بالملم.")}</p>
             )}
           </div>
           <button
@@ -252,7 +253,7 @@ export function RosterBuilder({
                   }
                 />
                 <button type="button" className="text-xs text-danger" onClick={() => removeCol(col.id)}>
-                  حذف
+                  {tr("حذف")}
                 </button>
               </li>
             ))}
@@ -265,7 +266,7 @@ export function RosterBuilder({
               checked={showPhone}
               onChange={(e) => onChange({ showPhone: e.target.checked })}
             />
-            جوال ولي الأمر
+            {tr("جوال ولي الأمر")}
           </label>
           <label className="inline-flex items-center gap-2">
             <input
@@ -273,7 +274,7 @@ export function RosterBuilder({
               checked={showClass}
               onChange={(e) => onChange({ showClass: e.target.checked })}
             />
-            الفصل
+            {tr("الفصل")}
           </label>
           <label className="inline-flex items-center gap-2">
             <input
@@ -281,7 +282,7 @@ export function RosterBuilder({
               checked={showStage}
               onChange={(e) => onChange({ showStage: e.target.checked })}
             />
-            الصف / المرحلة
+            {tr("الصف / المرحلة")}
           </label>
         </div>
       </div>
@@ -289,8 +290,8 @@ export function RosterBuilder({
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold">عرض الأعمدة (مم)</p>
-            <p className="text-xs text-fg-muted">اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.</p>
+            <p className="text-sm font-semibold">{tr("عرض الأعمدة (مم)")}</p>
+            <p className="text-xs text-fg-muted">{tr("اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.")}</p>
           </div>
           <button type="button" className="text-sm font-medium text-primary" onClick={resetWidths}>
             إعادة المقاسات الافتراضية
@@ -308,7 +309,7 @@ export function RosterBuilder({
                   value={col.width}
                   onChange={(e) => setWidth(col.id, e.target.value)}
                 />
-                <span>مم</span>
+                <span>{tr("مم")}</span>
               </span>
             </label>
           ))}
@@ -316,12 +317,12 @@ export function RosterBuilder({
       </div>
 
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
-        <p className="text-sm font-semibold">حفظ القالب باسم</p>
+        <p className="text-sm font-semibold">{tr("حفظ القالب باسم")}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Input
             value={templateName}
             onChange={(e) => onTemplateName(e.target.value)}
-            placeholder={isAdmin ? "كشف الفصل الأول" : "اسم قالبك الشخصي"}
+            placeholder={isAdmin ? tr("كشف الفصل الأول") : tr("اسم قالبك الشخصي")}
             maxLength={60}
             className="max-w-xs"
           />
@@ -357,7 +358,7 @@ export function RosterBuilder({
                 >
                   {tpl.name}
                 </button>
-                <span className="text-xs text-fg-muted">{tpl.public ? "عام" : "حسابي"}</span>
+                <span className="text-xs text-fg-muted">{tpl.public ? tr("عام") : tr("حسابي")}</span>
                 <button type="button" className="text-xs text-primary" onClick={() => onApply(tpl)}>
                   تطبيق
                 </button>
@@ -368,7 +369,7 @@ export function RosterBuilder({
                 ) : null}
                 {isAdmin || !tpl.public ? (
                   <button type="button" className="text-xs text-danger" onClick={() => onDelete(tpl.id)}>
-                    حذف
+                    {tr("حذف")}
                   </button>
                 ) : null}
               </li>
@@ -378,7 +379,7 @@ export function RosterBuilder({
       </div>
 
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
-        <p className="mb-2 text-sm font-semibold">ترتيب الأعمدة</p>
+        <p className="mb-2 text-sm font-semibold">{tr("ترتيب الأعمدة")}</p>
         <div className="flex flex-wrap justify-end gap-2">
           {cols.map((col, i) => (
             <div
@@ -390,7 +391,7 @@ export function RosterBuilder({
                 className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-muted disabled:opacity-30"
                 disabled={i === cols.length - 1}
                 onClick={() => move(col.id, 1)}
-                aria-label="تحريك لليسار"
+                aria-label={tr("تحريك لليسار")}
               >
                 <ArrowDown className="size-3.5" />
               </button>
@@ -399,7 +400,7 @@ export function RosterBuilder({
                 className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-muted disabled:opacity-30"
                 disabled={i === 0}
                 onClick={() => move(col.id, -1)}
-                aria-label="تحريك لليمين"
+                aria-label={tr("تحريك لليمين")}
               >
                 <ArrowUp className="size-3.5" />
               </button>

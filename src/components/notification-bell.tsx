@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { tr } from "@/lib/school/i18n";
 import { useNavigate } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -96,7 +97,7 @@ export function NotificationBell() {
         <button
           type="button"
           className="relative grid size-11 place-items-center rounded-[var(--radius-sm)] text-fg hover:bg-muted"
-          aria-label="الإشعارات"
+          aria-label={tr("الإشعارات")}
         >
           <Bell className="size-5" />
           {unread > 0 ? (
@@ -107,10 +108,10 @@ export function NotificationBell() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-80">
-        <DropdownMenuLabel>التنبيهات</DropdownMenuLabel>
+        <DropdownMenuLabel>{tr("التنبيهات")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-fg-muted">لا توجد تنبيهات بعد</p>
+          <p className="px-3 py-6 text-center text-sm text-fg-muted">{tr("لا توجد تنبيهات بعد")}</p>
         ) : (
           items.slice(0, 8).map((item) => (
             <DropdownMenuItem
