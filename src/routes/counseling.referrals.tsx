@@ -6,6 +6,7 @@ import { NoteThread } from "@/components/note-thread";
 import { NoteRecordTools } from "@/components/record-actions";
 import { ReferralCompensation } from "@/components/referral-compensation";
 import { StudentSheet } from "@/components/student-sheet";
+import { PageHelp } from "@/components/page-help";
 import { Badge } from "@/components/ui/badge";
 import { getCounselingDesk } from "@/lib/school/api";
 import { COMPENSATION_OPTIONS, NOTE_META, degreeLabel, formatStamp, noteTone } from "@/lib/school/constants";
@@ -25,8 +26,10 @@ function ReferralsPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">{tr("يحيلها وكيل شؤون الطلاب من لوحة المخالفات")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("المخالفات المحالة للإرشاد")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("المخالفات المحالة للإرشاد")}
+          <PageHelp text={tr("يحيلها وكيل شؤون الطلاب من لوحة المخالفات")} />
+        </h1>
       </header>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">

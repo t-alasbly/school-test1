@@ -72,6 +72,10 @@ export function NotificationBell() {
       void navigate({ to: "/admin/late", search: { range: "today" } });
       return;
     }
+    if (item.kind === "login-help") {
+      void navigate({ to: "/staff" });
+      return;
+    }
     if (item.classId && item.studentId) {
       void navigate({
         to: "/class/$classId",
@@ -132,7 +136,7 @@ export function NotificationBell() {
                   )}
                 />
               </span>
-              <span className="text-xs leading-5 text-fg-muted">{item.body}</span>
+              <span className="text-xs leading-5 whitespace-pre-line text-fg-muted">{item.body}</span>
               <span className="text-xs text-fg-subtle">{formatStamp(item.createdAt)}</span>
             </DropdownMenuItem>
           ))

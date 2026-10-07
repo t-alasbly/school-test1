@@ -1,6 +1,7 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { AppGate } from "@/components/app-gate";
 import { SectionNav } from "@/components/section-nav";
+import { PageHelp } from "@/components/page-help";
 import { staffCan } from "@/lib/school/permissions";
 import { useLocale, tr } from "@/lib/school/i18n";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -29,8 +30,10 @@ function PrintFrame() {
   return (
     <div className="space-y-5">
       <header className="no-print">
-        <p className="text-sm text-fg-muted">{t("كشوف وإحصاءات رسمية، ونماذج الوزارة")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{t("الطباعة")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {t("الطباعة")}
+          <PageHelp text={t("كشوف وإحصاءات رسمية، ونماذج الوزارة")} />
+        </h1>
       </header>
       <SectionNav items={PRINT_NAV} />
       <Outlet />

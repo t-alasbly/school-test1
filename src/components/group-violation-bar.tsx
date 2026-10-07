@@ -1,5 +1,6 @@
 import { Check, ListChecks } from "lucide-react";
 import { tr } from "@/lib/school/i18n";
+import { PageHelp } from "@/components/page-help";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -23,30 +24,36 @@ export function GroupViolationBar({
   onApply: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" size="sm" variant={picking ? "default" : "secondary"} onClick={onTogglePicking}>
-        <ListChecks className="size-4" />
-        {tr("مخالفة جماعية")}
-      </Button>
+    <div className="contents">
+      <div className="flex items-center gap-0.5 justify-self-end">
+        <Button
+          type="button"
+          size="sm"
+          variant={picking ? "default" : "secondary"}
+          className="h-8 whitespace-nowrap px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
+          onClick={onTogglePicking}
+        >
+          <ListChecks className="size-3.5 sm:size-4" />
+          {tr("مخالفات جماعية")}
+        </Button>
+        <PageHelp
+          text={`${tr("حدد طلاباً من أكثر من مرحلة أو فصل، ثم سجّل عليهم مخالفة واحدة.")} ${tr("التحديد يبقى عند الانتقال بين المراحل والفصول حتى التسجيل أو المسح.")}`}
+        />
+      </div>
       {picking ? (
-        <>
-          <Button type="button" size="sm" variant="secondary" onClick={onSelectShown} disabled={shownCount === 0}>
+        <div className="col-span-2 flex gap-1.5 overflow-x-auto">
+          <Button type="button" size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs" onClick={onSelectShown} disabled={shownCount === 0}>
             {tr("تحديد الظاهر")} ({shownCount})
           </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={selected === 0}>
+          <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-xs" onClick={onClear} disabled={selected === 0}>
             {tr("مسح")}
           </Button>
-          <Button type="button" size="sm" onClick={onApply} disabled={selected === 0}>
+          <Button type="button" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={onApply} disabled={selected === 0}>
             {tr("تسجيل على")} {selected}
           </Button>
-          <p className="w-full text-xs text-fg-muted">
-            {tr("التحديد يبقى عند الانتقال بين المراحل والفصول حتى التسجيل أو المسح.")}
-            {elsewhere ? ` ${elsewhere}` : ""}
-          </p>
-        </>
-      ) : (
-        <p className="text-xs text-fg-muted">{tr("حدد طلاباً من أكثر من مرحلة أو فصل، ثم سجّل عليهم مخالفة واحدة.")}</p>
-      )}
+          {elsewhere ? <p className="self-center text-xs text-fg-muted">{elsewhere}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

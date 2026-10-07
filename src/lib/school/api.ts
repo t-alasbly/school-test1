@@ -498,7 +498,11 @@ async function listClassOptions(sql, schoolId) {
       (select count(*)::int from daily_attendance a
          join students s on s.id = a.student_id
          where s.class_id = c.id and a.school_id = c.school_id
-           and a.day = current_date and a.kind = 'absence') as absence_today
+           and a.day = current_date and a.kind = 'absence') as absence_today,
+      (select count(*)::int from daily_attendance a
+         join students s on s.id = a.student_id
+         where s.class_id = c.id and a.school_id = c.school_id
+           and a.day = current_date and a.kind = 'late') as late_today
     from classes c
     join stages st on st.id = c.stage_id
     where c.school_id = ${schoolId}
@@ -512,7 +516,8 @@ async function listClassOptions(sql, schoolId) {
 		shortName: r.short_name,
 		label: classLabel(r.short_name, r.name),
 		studentCount: r.student_count ?? 0,
-		absenceToday: r.absence_today ?? 0
+		absenceToday: r.absence_today ?? 0,
+		lateToday: r.late_today ?? 0
 	}));
 }
 async function seedSchool(sql, schoolId) {
@@ -602,6 +607,53 @@ export const ensureAppReady = createServerFn({ method: "GET" }).handler(async ()
 		logoUrl,
 		tagline
 	};
+});
+export const reportLoginHelp = createServerFn({ method: "POST" }).validator(z.object({
+	name: z.string().min(2).max(80),
+	phone: z.string().min(5).max(40)
+})).handler(async ({ data }) => {
+	const sql = await getSql();
+	await ensureSchoolAndAdmin(sql);
+	const school = (await sql`select id from schools order by id limit 1`)[0];
+	if (!school) throw new Error("تعذر الإرسال");
+	const name = data.name.trim();
+	const raw = data.phone.trim();
+	const phone = normalizeSaudiPhone(raw) || raw;
+	const email = phoneToLoginEmail(raw);
+	const recent = (await sql`
+    select id from notifications
+    where school_id = ${school.id} and kind = 'login-help'
+      and body like ${`%${phone.replace(/[%_]/g, "")}%`}
+      and created_at > now() - interval '15 minutes'
+    limit 1
+  `)[0];
+	if (recent) return { ok: true };
+	const found = (await sql`
+    select st.display_name, coalesce(st.active, true) as active
+    from staff st
+    left join "user" u on u.id = st.user_id
+    where st.school_id = ${school.id}
+      and (st.phone = ${phone} or u.email = ${email})
+    limit 1
+  `)[0];
+	const status = !found
+		? "غير مسجّل في النظام"
+		: found.active === false
+			? `مسجّل باسم ${found.display_name} والحساب موقوف`
+			: `مسجّل باسم ${found.display_name} وتعذر دخوله`;
+	const title = "تعذر دخول مستخدم";
+	const body = `الاسم: ${name}\nالجوال: ${phone}\n${status}`;
+	const admins = await sql`
+    select user_id from staff
+    where school_id = ${school.id} and role = 'admin' and coalesce(active, true) = true
+  `;
+	for (const admin of admins) {
+		await sql`
+      insert into notifications (school_id, user_id, kind, title, body, tone)
+      values (${school.id}, ${admin.user_id}, ${"login-help"}, ${title}, ${body}, ${"warn"})
+    `;
+	}
+	return { ok: true };
 });
 async function listStageSummaries(sql, schoolId, teacherId) {
 	return (teacherId ? await sql`

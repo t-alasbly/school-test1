@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { CaseRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { PageHelp } from "@/components/page-help";
 import { Badge } from "@/components/ui/badge";
 import { getCounselingDesk } from "@/lib/school/api";
 import { CASE_KINDS, formatStamp } from "@/lib/school/constants";
@@ -26,8 +27,10 @@ function MessagesPage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">{tr("حالة صحية أو نفسية أو صعوبات تعلم يرسلها المعلم من سجل الطالب")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("مراسلات المعلمين")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("مراسلات المعلمين")}
+          <PageHelp text={tr("حالة صحية أو نفسية أو صعوبات تعلم يرسلها المعلم من سجل الطالب")} />
+        </h1>
       </header>
       <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {cases.map((item) => (

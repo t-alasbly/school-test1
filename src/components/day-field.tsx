@@ -8,8 +8,7 @@ import "react-day-picker/style.css";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   dateFromIso,
-  formatAltDate,
-  formatPrimaryDate,
+  dateParts,
   isoFromDate,
   shiftIso,
   weekdayAr,
@@ -22,15 +21,19 @@ export function DayField({
   onChange,
   calendar,
   onCalendar,
+  showCalendarToggle = true,
 }: {
   value: string;
   onChange: (next: string) => void;
   calendar: CalendarKind;
   onCalendar?: (next: CalendarKind) => void;
+  showCalendarToggle?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = useMemo(() => dateFromIso(value), [value]);
   const hijri = calendar === "hijri";
+  const hijriDate = dateParts(value, "hijri");
+  const gregorianDate = dateParts(value, "gregorian");
 
   function pick(d: Date | undefined) {
     if (!d) return;
@@ -39,24 +42,30 @@ export function DayField({
   }
 
   return (
-    <div className="inline-flex max-w-full items-center gap-0.5">
+    <div className="flex w-full items-stretch overflow-hidden rounded-[var(--radius-md)] border border-border bg-bg-elevated shadow-[var(--shadow-card)]">
       <button
         type="button"
         aria-label={tr("اليوم السابق")}
         onClick={() => onChange(shiftIso(value, -1))}
-        className="grid size-8 shrink-0 place-items-center rounded-full text-fg-muted transition-colors hover:bg-muted hover:text-fg"
+        className="grid w-10 shrink-0 place-items-center text-fg-muted transition-colors hover:bg-muted hover:text-fg"
       >
-        <ChevronRight className="size-4" />
+        <ChevronRight className="size-5" />
       </button>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="min-w-0 rounded-full border border-border bg-bg-elevated px-3 py-1 text-right shadow-[var(--shadow-card)] transition-colors hover:border-primary"
+            className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 px-2 py-1.5 text-center transition-colors hover:bg-muted/60"
           >
-            <span className="block truncate text-[10px] leading-4 text-fg-muted">{weekdayAr(value)}</span>
-            <span className="block truncate text-[13px] font-semibold leading-5">{formatPrimaryDate(value, calendar, true)}</span>
-            <span className="block truncate text-[10px] leading-4 text-fg-subtle">{formatAltDate(value, calendar)}</span>
+            <span className="whitespace-nowrap text-sm font-bold leading-5 sm:text-base">{weekdayAr(value)}</span>
+            <span className="truncate whitespace-nowrap text-[13px] font-semibold leading-5 sm:text-sm">
+              {hijriDate.day} {hijriDate.month}
+              <span className="ms-1 text-[9px] font-normal text-fg-muted">{hijriDate.year} {hijriDate.era}</span>
+            </span>
+            <span className="truncate whitespace-nowrap text-[13px] leading-5 text-fg-muted sm:text-sm">
+              {gregorianDate.day} {gregorianDate.month}
+              <span className="ms-1 text-[9px]">{gregorianDate.year} {gregorianDate.era}</span>
+            </span>
           </button>
         </PopoverTrigger>
         <PopoverContent align="center" className="w-auto p-2" dir="rtl">
@@ -85,28 +94,43 @@ export function DayField({
         type="button"
         aria-label={tr("اليوم التالي")}
         onClick={() => onChange(shiftIso(value, 1))}
-        className="grid size-8 shrink-0 place-items-center rounded-full text-fg-muted transition-colors hover:bg-muted hover:text-fg"
+        className="grid w-10 shrink-0 place-items-center text-fg-muted transition-colors hover:bg-muted hover:text-fg"
       >
-        <ChevronLeft className="size-4" />
+        <ChevronLeft className="size-5" />
       </button>
-      {onCalendar ? (
-        <div className="ms-1 grid shrink-0 grid-cols-2 overflow-hidden rounded-full border border-border text-[10px] font-semibold">
-          <button
-            type="button"
-            onClick={() => onCalendar("hijri")}
-            className={cn("h-7 px-2.5 transition-colors", hijri ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted")}
-          >
-            هـ
-          </button>
-          <button
-            type="button"
-            onClick={() => onCalendar("gregorian")}
-            className={cn("h-7 px-2.5 transition-colors", !hijri ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted")}
-          >
-            {tr("م")}
-          </button>
-        </div>
+      {showCalendarToggle && onCalendar ? (
+        <CalendarSwitch calendar={calendar} onCalendar={onCalendar} />
       ) : null}
+    </div>
+  );
+}
+
+export function CalendarSwitch({
+  calendar,
+  onCalendar,
+}: {
+  calendar: CalendarKind;
+  onCalendar: (next: CalendarKind) => void;
+}) {
+  const hijri = calendar === "hijri";
+  return (
+    <div className="grid shrink-0 grid-cols-2 overflow-hidden rounded-full border border-border text-xs font-semibold">
+      <button
+        type="button"
+        onClick={() => onCalendar("hijri")}
+        className={cn("h-8 px-2.5 transition-colors", hijri ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted")}
+        aria-label={tr("هجري")}
+      >
+        هـ
+      </button>
+      <button
+        type="button"
+        onClick={() => onCalendar("gregorian")}
+        className={cn("h-8 px-2.5 transition-colors", !hijri ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted")}
+        aria-label={tr("ميلادي")}
+      >
+        م
+      </button>
     </div>
   );
 }

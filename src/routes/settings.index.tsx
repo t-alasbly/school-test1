@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { staffCan } from "@/lib/school/permissions";
+import { PageHelp } from "@/components/page-help";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/settings/")({ component: SettingsHub });
@@ -145,8 +146,10 @@ function SettingsHub() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm text-fg-muted">{tr("كل بطاقة تفتح صفحتها فقط")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("الإعدادات")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("الإعدادات")}
+          <PageHelp text={tr("كل بطاقة تفتح صفحتها فقط")} />
+        </h1>
       </header>
       <section className="rounded-[var(--radius-xl)] border border-border bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex flex-wrap items-center justify-between gap-4">

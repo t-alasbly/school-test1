@@ -5,6 +5,7 @@ import { MessageCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
+import { PageHelp } from "@/components/page-help";
 import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -179,8 +180,10 @@ function MessagesBody() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">{tr("واتساب لأولياء فصل أو صف أو غائبي اليوم — كل رسالة تُحفظ في السجل")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("رسائل جماعية")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("رسائل جماعية")}
+          <PageHelp text={tr("واتساب لأولياء فصل أو صف أو غائبي اليوم — كل رسالة تُحفظ في السجل")} />
+        </h1>
       </header>
 
       <div className="flex flex-wrap gap-1.5">

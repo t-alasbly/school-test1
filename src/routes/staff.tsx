@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { SettingsBack } from "@/components/settings-back";
+import { PageHelp } from "@/components/page-help";
 import { StaffManager } from "@/components/staff-manager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateSchoolPermissions } from "@/lib/school/api";
@@ -31,10 +32,10 @@ function StaffBody() {
     <div className="space-y-6">
       <header>
         <SettingsBack />
-        <p className="text-sm text-fg-muted">
-          اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف الدخول دون حذف السجل. «حذف نهائي» يزيل الحساب تماماً.
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("شؤون الموظفين")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("شؤون الموظفين")}
+          <PageHelp text={tr("اختر المسمى الوظيفي، ثم «صلاحيات» أمام الاسم. «إلغاء» يوقف الدخول دون حذف السجل. «حذف نهائي» يزيل الحساب تماماً.")} />
+        </h1>
       </header>
       {staff.role === "admin" ? <TeacherDefaults school={school} /> : null}
       <StaffManager />

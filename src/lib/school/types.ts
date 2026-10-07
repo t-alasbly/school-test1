@@ -149,6 +149,7 @@ export type ClassOption = {
   label: string;
   studentCount?: number;
   absenceToday?: number;
+  lateToday?: number;
 };
 
 export type TodayNote = {

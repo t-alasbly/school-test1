@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ImprovementRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { PageHelp } from "@/components/page-help";
 import { Badge } from "@/components/ui/badge";
 import { listImprovements } from "@/lib/school/api";
 import { IMPROVEMENT_STATUS, formatStamp } from "@/lib/school/constants";
@@ -20,8 +21,10 @@ function ImprovePage() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">{tr("الخطط المفتوحة المرسلة من المعلمين")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("خطط تحسين السلوك")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("خطط تحسين السلوك")}
+          <PageHelp text={tr("الخطط المفتوحة المرسلة من المعلمين")} />
+        </h1>
       </header>
       <ul className="space-y-2">
         {(improvements.data ?? []).map((item: any) => (

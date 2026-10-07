@@ -5,6 +5,7 @@ import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { Button } from "@/components/ui/button";
+import { PageHelp } from "@/components/page-help";
 import {
   Dialog,
   DialogContent,
@@ -319,12 +320,16 @@ export function AttendanceRoster({
     <div className="space-y-5">
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-fg-muted">
-            {kind === "absence"
-              ? tr("الغياب اليومي فقط. كل طالب يظهر مرة مع عدد أيام غيابه في المدة.")
-              : tr("التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة.")}
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+            {title}
+            <PageHelp
+              text={
+                kind === "absence"
+                  ? tr("الغياب اليومي فقط. كل طالب يظهر مرة مع عدد أيام غيابه في المدة.")
+                  : tr("التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة.")
+              }
+            />
+          </h1>
         </div>
         <Button
           variant="secondary"

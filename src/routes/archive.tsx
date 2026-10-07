@@ -10,6 +10,7 @@ import {
   NoteRecordTools,
 } from "@/components/record-actions";
 import { Badge } from "@/components/ui/badge";
+import { PageHelp } from "@/components/page-help";
 import { Input } from "@/components/ui/input";
 import { getReport, listCounselingCases, listImprovements, listParentMessages } from "@/lib/school/api";
 import {
@@ -113,10 +114,10 @@ function ArchiveBody() {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-sm text-fg-muted">
-          كل ما سُجّل في المدرسة: صحّح الخطأ أو احذفه. يظهر زر التصحيح أيضاً في سجل الطالب وشؤون الطلاب والتقارير.
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("الأرشيف")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("الأرشيف")}
+          <PageHelp text={tr("كل ما سُجّل في المدرسة: صحّح الخطأ أو احذفه. يظهر زر التصحيح أيضاً في سجل الطالب وشؤون الطلاب والتقارير.")} />
+        </h1>
       </header>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("بحث باسم الطالب أو النص…")} />
       <div className="flex flex-wrap gap-1.5">

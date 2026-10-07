@@ -3,6 +3,7 @@ import { placeLabel, studentLabel, tr, useLocale } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { PageHelp } from "@/components/page-help";
 import { AppGate } from "@/components/app-gate";
 import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
 import { NoteComposer } from "@/components/note-actions";
@@ -139,20 +140,11 @@ function ClassesBody() {
           });
         }}
       />
-      <header className="space-y-1">
-        <p className="text-sm text-fg-muted">{tr("اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("الفصول")}</h1>
-      </header>
-      <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={tr("ابحث عن طالب…")}
-          className="pr-10"
-        />
-      </div>
-      <div className={cn(picking && "sticky top-14 z-20 -mx-4 border-y border-border bg-bg/95 px-4 py-2 backdrop-blur-sm")}>
+      <header className="mx-[calc(2mm-1rem)] grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 sm:mx-0">
+        <h1 className="flex items-center gap-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+          {tr("الفصول")}
+          <PageHelp text={tr("اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب")} />
+        </h1>
         <GroupViolationBar
           picking={picking}
           selected={targets.length}
@@ -174,8 +166,17 @@ function ClassesBody() {
           onClear={clearGroupStudents}
           onApply={() => setGroupOpen(true)}
         />
+      </header>
+      <div className="relative mx-[calc(2mm-1rem)] sm:mx-0">
+        <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={tr("ابحث عن طالب…")}
+          className="pr-10"
+        />
       </div>
-      <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+      <ul className="mx-[calc(2mm-1rem)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-card sm:mx-0 sm:rounded-[var(--radius-lg)]">
         {shown.map((student) => (
           <li
             key={student.id}

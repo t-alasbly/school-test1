@@ -1,6 +1,7 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { AppGate } from "@/components/app-gate";
 import { SectionNav } from "@/components/section-nav";
+import { PageHelp } from "@/components/page-help";
 import { canFollowup } from "@/lib/school/permissions";
 import { useLocale, tr } from "@/lib/school/i18n";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -32,13 +33,15 @@ function AdminFrame() {
   return (
     <div className="space-y-5">
       <header className="no-print">
-        <p className="text-sm text-fg-muted">
-          {isCounselor
-            ? t("متابعة الغياب والتأخر والمخالفات الواردة من المعلمين")
-            : t("رقابة لحظية على الملاحظات والغياب")}
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           {isCounselor ? t("شؤون الطلاب") : t("لوحة الإدارة")}
+          <PageHelp
+            text={
+              isCounselor
+                ? t("متابعة الغياب والتأخر والمخالفات الواردة من المعلمين")
+                : t("رقابة لحظية على الملاحظات والغياب")
+            }
+          />
         </h1>
       </header>
       <SectionNav items={ADMIN_NAV} />

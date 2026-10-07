@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SettingsBack } from "@/components/settings-back";
+import { PageHelp } from "@/components/page-help";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,8 +45,10 @@ function ProfileSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("حسابك")}</h1>
-        <p className="text-sm text-fg-muted">{tr("الاسم الظاهر، رقم الجوال، كلمة المرور، والمادة")}</p>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("حسابك")}
+          <PageHelp text={tr("الاسم الظاهر، رقم الجوال، كلمة المرور، والمادة")} />
+        </h1>
       </div>
       <Card>
         <CardHeader>

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { ensureAppReady } from "@/lib/school/api";
+import { ensureAppReady, reportLoginHelp } from "@/lib/school/api";
 import { APP_NAME, DEFAULT_APP_PHRASE, phoneToLoginEmail, schoolLogoSrc } from "@/lib/school/constants";
 
 export const Route = createFileRoute("/login")({ component: Login });
@@ -28,6 +28,12 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [helpName, setHelpName] = useState("");
+  const [helpPhone, setHelpPhone] = useState("");
+  const [helpBusy, setHelpBusy] = useState(false);
+  const [helpSent, setHelpSent] = useState(false);
+  const [helpError, setHelpError] = useState<string | null>(null);
   const [brand, setBrand] = useState<{ name: string; logoUrl: string; tagline: string }>({
     name: "",
     logoUrl: "",
@@ -64,8 +70,23 @@ function LoginForm() {
       await navigate({ to: "/" });
     } catch (err) {
       setError(err instanceof Error ? tr(err.message) : tr("حدث خطأ غير متوقع"));
+      setHelpOpen(true);
+      setHelpPhone((current) => current || email);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendHelp() {
+    setHelpError(null);
+    setHelpBusy(true);
+    try {
+      await reportLoginHelp({ data: { name: helpName.trim(), phone: helpPhone.trim() } });
+      setHelpSent(true);
+    } catch (err) {
+      setHelpError(err instanceof Error ? err.message : "تعذر الإرسال");
+    } finally {
+      setHelpBusy(false);
     }
   }
 
@@ -130,6 +151,69 @@ function LoginForm() {
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? tr("جارٍ التنفيذ…") : "دخول · Sign in"}
                 </Button>
+                <button
+                  type="button"
+                  className="w-full text-center text-sm font-medium text-primary"
+                  onClick={() => {
+                    setHelpOpen(true);
+                    setHelpPhone((current) => current || email);
+                  }}
+                >
+                  تعذر الدخول؟ أرسل اسمك ورقم جوالك
+                  <span className="mt-0.5 block text-xs font-normal text-fg-muted">Could not sign in? Send your name and mobile number</span>
+                </button>
+                {helpOpen ? (
+                  <div className="space-y-3 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+                    {helpSent ? (
+                      <p className="text-sm leading-6 text-ok">
+                        تم الإرسال إلى مدير النظام.
+                        <span className="mt-0.5 block text-fg-muted">Sent to the administrator.</span>
+                      </p>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="help-name">
+                            الاسم
+                            <span className="ms-2 font-normal text-fg-muted">Name</span>
+                          </Label>
+                          <Input
+                            id="help-name"
+                            value={helpName}
+                            onChange={(e) => setHelpName(e.target.value)}
+                            required
+                            minLength={2}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="help-phone">
+                            رقم الجوال
+                            <span className="ms-2 font-normal text-fg-muted">Mobile number</span>
+                          </Label>
+                          <Input
+                            id="help-phone"
+                            type="tel"
+                            inputMode="tel"
+                            value={helpPhone}
+                            onChange={(e) => setHelpPhone(e.target.value)}
+                            dir="ltr"
+                            placeholder="05xxxxxxxx"
+                            required
+                          />
+                        </div>
+                        {helpError ? <p className="text-sm text-danger">{helpError}</p> : null}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="w-full"
+                          disabled={helpBusy || helpName.trim().length < 2 || helpPhone.trim().length < 5}
+                          onClick={() => void sendHelp()}
+                        >
+                          {helpBusy ? "جارٍ الإرسال…" : "إرسال · Send"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ) : null}
               </form>
             ) : (
               <p className="text-sm text-fg-muted">{tr("تسجيل الدخول غير مفعّل.")}</p>

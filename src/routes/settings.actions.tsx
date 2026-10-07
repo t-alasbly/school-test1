@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SettingsBack } from "@/components/settings-back";
+import { PageHelp } from "@/components/page-help";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,8 +50,10 @@ function ActionsSettings() {
     <div className="space-y-6">
       <div>
         <SettingsBack />
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("الإجراءات")}</h1>
-        <p className="text-sm text-fg-muted">{tr("خيارات إضافية تظهر عند اتخاذ الإجراء إلى جانب السلم الرسمي لكل مخالفة.")}</p>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("الإجراءات")}
+          <PageHelp text={tr("خيارات إضافية تظهر عند اتخاذ الإجراء إلى جانب السلم الرسمي لكل مخالفة.")} />
+        </h1>
       </div>
       <Card>
         <CardHeader>

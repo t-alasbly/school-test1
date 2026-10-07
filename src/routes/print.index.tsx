@@ -16,6 +16,7 @@ import {
   type RosterTemplate,
 } from "@/components/roster-builder";
 import { Button } from "@/components/ui/button";
+import { PageHelp } from "@/components/page-help";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -295,10 +296,10 @@ function ReportsBody() {
     <div className="space-y-6">
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-fg-muted">
-            مخالفات ورسائل أولياء الأمور، أو كشف أسماء لفصل أو صف كامل
-          </p>
-          <h1 className="text-xl font-semibold tracking-tight">{tr("التقارير")}</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            {tr("التقارير")}
+            <PageHelp text={tr("مخالفات ورسائل أولياء الأمور، أو كشف أسماء لفصل أو صف كامل")} />
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border">

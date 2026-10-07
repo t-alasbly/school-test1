@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { tr } from "@/lib/school/i18n";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { PageHelp } from "@/components/page-help";
 import { NoteThread } from "@/components/note-thread";
 import { NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
@@ -72,11 +73,11 @@ export function TeacherCases() {
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <p className="text-sm text-fg-muted">
-          صفحة خاصة بك وبطلابك — المخالفات التي حرّرتها، وما أُحيل للإرشاد أو لوكيل شؤون الطلاب، والإجراء المتخذ عليها
-        </p>
-        <h2 className="font-display text-xl font-semibold tracking-tight">{tr("حالات طلابي")}</h2>
+      <header>
+        <h2 className="flex items-center gap-2 font-display text-xl font-semibold tracking-tight">
+          {tr("حالات طلابي")}
+          <PageHelp text={tr("صفحة خاصة بك وبطلابك — المخالفات التي حرّرتها، وما أُحيل للإرشاد أو لوكيل شؤون الطلاب، والإجراء المتخذ عليها")} />
+        </h2>
       </header>
       <nav className="flex flex-wrap gap-1.5">
         {filters.map((item) => (

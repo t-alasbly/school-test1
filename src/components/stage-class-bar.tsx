@@ -47,6 +47,7 @@ export function StageClassBar({
   onChange,
   onSort,
   actions,
+  shortSort = false,
 }: {
   stages: StageSummary[];
   classes: ClassOption[];
@@ -57,6 +58,7 @@ export function StageClassBar({
   onSort: (sort: ClassSort) => void;
   studentCount?: number;
   actions?: ReactNode;
+  shortSort?: boolean;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const scope = selectedClassId
@@ -64,7 +66,8 @@ export function StageClassBar({
     : classes.filter((cls) => cls.stageId === selectedStageId);
   const classSize = scope.reduce((sum, cls) => sum + (cls.studentCount ?? 0), 0);
   const absentToday = scope.reduce((sum, cls) => sum + (cls.absenceToday ?? 0), 0);
-  const presentToday = Math.max(0, classSize - absentToday);
+  const lateToday = scope.reduce((sum, cls) => sum + (cls.lateToday ?? 0), 0);
+  const presentToday = Math.max(0, classSize - absentToday - lateToday);
 
   return (
     <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-2 border-b border-border bg-bg-elevated px-3 py-1 sm:px-4 sm:py-1.5">
@@ -107,7 +110,7 @@ export function StageClassBar({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-64 p-2">
-                    <p className="px-2 pb-2 text-xs text-fg-muted">{placeLabel(stage.name)} — {tr("اختر الفصل")} · {tr("الحضور")} · {tr("غياب اليوم")}</p>
+                    <p className="px-2 pb-2 text-xs text-fg-muted">{placeLabel(stage.name)} — {tr("اختر الفصل")} · {tr("الحضور")} · {tr("غياب اليوم")} · {tr("المتأخرون")}</p>
                     <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
                       <button
                         type="button"
@@ -141,9 +144,11 @@ export function StageClassBar({
                         >
                           <span className="min-w-0 truncate">{placeLabel(cls.label || classLabel(cls.shortName, cls.name))}</span>
                           <span className={cn("shrink-0 text-[11px] tabular-nums", selectedClassId === cls.id ? "text-primary-fg/80" : "text-fg-muted")}>
-                            {Math.max(0, (cls.studentCount ?? 0) - (cls.absenceToday ?? 0))}
+                            {Math.max(0, (cls.studentCount ?? 0) - (cls.absenceToday ?? 0) - (cls.lateToday ?? 0))}
                             {" · "}
                             {cls.absenceToday ?? 0}
+                            {" · "}
+                            {cls.lateToday ?? 0}
                           </span>
                         </button>
                       ))}
@@ -165,8 +170,10 @@ export function StageClassBar({
                     "h-7 px-1.5 text-[10px] font-medium leading-none sm:h-8 sm:px-2 sm:text-xs",
                     sort === "order" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
                   )}
+                  title={tr("تسلسل")}
+                  aria-label={tr("تسلسل")}
                 >
-                  {tr("تسلسل")}
+                  {shortSort ? "م" : tr("تسلسل")}
                 </button>
                 <button
                   type="button"
@@ -175,19 +182,23 @@ export function StageClassBar({
                     "h-7 px-1.5 text-[10px] font-medium leading-none sm:h-8 sm:px-2 sm:text-xs",
                     sort === "alpha" ? "bg-primary text-primary-fg" : "bg-bg text-fg-muted hover:text-fg",
                   )}
+                  title={tr("أبجدي")}
+                  aria-label={tr("أبجدي")}
                 >
-                  {tr("أبجدي")}
+                  {shortSort ? "أ" : tr("أبجدي")}
                 </button>
               </div>
               {actions}
             </div>
           </div>
-          <p className="mt-1 text-xs text-fg-muted">
+          <p className="mt-0.5 text-xs leading-5 text-fg-muted">
             {selectedClassId ? tr("عدد الفصل") : tr("الطلاب")} <span className="font-semibold text-fg">{classSize}</span>
             <span className="mx-1.5">·</span>
             {tr("الحضور")} <span className="font-semibold text-ok">{presentToday}</span>
             <span className="mx-1.5">·</span>
             {tr("غياب اليوم")} <span className={cn("font-semibold", absentToday > 0 ? "text-danger" : "text-fg")}>{absentToday}</span>
+            <span className="mx-1.5">·</span>
+            {tr("المتأخرون")} <span className={cn("font-semibold", lateToday > 0 ? "text-warn" : "text-fg")}>{lateToday}</span>
           </p>
           </>
         )}

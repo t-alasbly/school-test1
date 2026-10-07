@@ -12,6 +12,7 @@ import {
   type FormOverrides,
 } from "@/components/print-forms";
 import { Button } from "@/components/ui/button";
+import { PageHelp } from "@/components/page-help";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { getReport, getStudentNotes } from "@/lib/school/api";
@@ -66,8 +67,10 @@ function FormsBody() {
     <div className="space-y-6">
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-fg-muted">{tr("نماذج الوزارة — قواعد السلوك والمواظبة 1447هـ")}</p>
-          <h1 className="text-xl font-semibold tracking-tight">{tr("النماذج")}</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            {tr("النماذج")}
+            <PageHelp text={tr("نماذج الوزارة — قواعد السلوك والمواظبة 1447هـ")} />
+          </h1>
         </div>
         <div className="flex gap-2">
           <Button

@@ -1,8 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BookOpen,
+  ChevronDown,
   ClipboardCheck,
   HeartHandshake,
+  Languages,
   LayoutDashboard,
   LogOut,
   MessageCircle,
@@ -21,6 +23,14 @@ import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
 import { SchoolMark } from "./school-mark";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const NAV: {
   to: string;
@@ -39,7 +49,6 @@ const NAV: {
   { to: "/messages", label: tr("الرسائل"), icon: MessageCircle },
   { to: "/counseling", label: tr("الإرشاد"), icon: HeartHandshake },
   { to: "/print", label: tr("الطباعة"), icon: Printer },
-  { to: "/settings", label: tr("الإعدادات"), icon: Settings },
 ];
 
 function navActive(pathname: string, to: string) {
@@ -83,7 +92,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh bg-bg text-fg">
       <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
         <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-3 px-4 py-2">
-          <Link to="/" className="flex min-w-0 items-center gap-3">
+          <Link to="/" className="flex min-w-0 items-center gap-2">
+            <SchoolMark size="sm" src={schoolLogo || undefined} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
               <span className="block truncate text-xs text-fg-muted">
@@ -117,38 +127,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="ms-auto flex items-center gap-1">
             <p className="hidden text-xs text-fg-muted lg:block">{formatToday(calendar)}</p>
-            <button
-              type="button"
-              className="h-9 rounded-full border border-border px-2.5 text-xs font-semibold"
-              onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
-              aria-label={locale === "ar" ? "English" : tr("العربية")}
-            >
-              {locale === "ar" ? "English" : tr("العربية")}
-            </button>
             <NotificationBell />
-            <div className="hidden min-w-0 items-center gap-2 pe-1 sm:flex">
-              <span className="max-w-28 truncate text-sm font-medium">
-                {staff.displayName}
-              </span>
-              <span className="hidden text-xs text-fg-subtle lg:inline">
-                · {t(tr(ROLE_LABEL[staff.role]))}
-              </span>
-            </div>
-            {user && !user.isDevFallback ? (
-              <button
-                type="button"
-                disabled={signingOut}
-                onClick={() => {
-                  setSigningOut(true);
-                  void signOut().catch(() => setSigningOut(false));
-                }}
-                className="grid size-11 place-items-center rounded-[var(--radius-sm)] text-fg-muted hover:bg-muted hover:text-fg"
-                aria-label={t("تسجيل الخروج")}
-              >
-                <LogOut className="size-4" />
-              </button>
-            ) : null}
-            {schoolLogo ? <SchoolMark size="sm" src={schoolLogo} /> : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-10 max-w-40 items-center gap-1 rounded-full px-2 text-sm font-medium hover:bg-muted sm:max-w-56"
+                >
+                  <span className="min-w-0 truncate">{staff.displayName}</span>
+                  <ChevronDown className="size-4 shrink-0 text-fg-muted" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-sm text-fg">
+                  <span className="block truncate font-semibold">{staff.displayName}</span>
+                  <span className="block truncate font-normal text-fg-muted">{t(tr(ROLE_LABEL[staff.role]))}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setLocale(locale === "ar" ? "en" : "ar")}>
+                  <Languages className="size-4" />
+                  {locale === "ar" ? "English" : tr("العربية")}
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/settings">
+                    <Settings className="size-4" />
+                    {t("الإعدادات")}
+                  </Link>
+                </DropdownMenuItem>
+                {user && !user.isDevFallback ? (
+                  <DropdownMenuItem
+                    disabled={signingOut}
+                    onSelect={() => {
+                      setSigningOut(true);
+                      void signOut().catch(() => setSigningOut(false));
+                    }}
+                    className="text-danger focus:text-danger"
+                  >
+                    <LogOut className="size-4" />
+                    {t("تسجيل الخروج")}
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

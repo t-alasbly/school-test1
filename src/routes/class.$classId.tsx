@@ -187,7 +187,7 @@ function ClassBody() {
           onApply={() => setGroupOpen(true)}
         />
       </div>
-      <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+      <ul className="mx-[calc(2mm-1rem)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-card sm:mx-0 sm:rounded-[var(--radius-lg)]">
         {students.map((student: StudentRow) => {
           const latest = student.todayNotes[0];
           const extra = student.todayNotes.length - 1;

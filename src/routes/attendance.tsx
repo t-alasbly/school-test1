@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { Clock, Printer } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
 import { AppGate } from "@/components/app-gate";
-import { DayField } from "@/components/day-field";
+import { PageHelp } from "@/components/page-help";
+import { DayField, CalendarSwitch } from "@/components/day-field";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -465,13 +466,14 @@ function AttendanceBody() {
   const sheetLateCount = sheetRows.filter((s) => s.kind === "late").length;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-2">
       <StageClassBar
         stages={stages}
         classes={classes}
         selectedStageId={stageId}
         selectedClassId={classId}
         sort={sort}
+        shortSort
         onSort={setSort}
         onChange={(nextStage, nextClass) => {
           setStageId(nextStage);
@@ -491,29 +493,25 @@ function AttendanceBody() {
           </>
         }
       />
-      <header className="no-print space-y-1">
-        <p className="text-sm text-fg-muted">{tr("غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.")}</p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{tr("الغياب اليومي")}</h1>
+      <header className="no-print flex items-center gap-2">
+        <h1 className="flex min-w-0 items-center gap-1 text-xl font-semibold tracking-tight sm:text-3xl">
+          <span className="truncate">{tr("الغياب اليومي")}</span>
+          <PageHelp text={tr("غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.")} />
+        </h1>
+        <div className="ms-auto shrink-0">
+          <CalendarSwitch calendar={calendar} onCalendar={(next) => saveCalendar.mutate(next)} />
+        </div>
       </header>
-      <div className="no-print">
+      <div className="no-print mx-[calc(2mm-1rem)] sm:mx-0">
         <DayField
           value={day}
           onChange={setDay}
           calendar={calendar}
-          onCalendar={(next) => saveCalendar.mutate(next)}
+          showCalendarToggle={false}
         />
       </div>
-      <div className="no-print flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-danger-soft px-2.5 py-1 font-medium text-danger">
-          غائب {marked.filter((s) => statusOf(s) === "absence").length}
-        </span>
-        <span className="rounded-full bg-warn-soft px-2.5 py-1 font-medium text-warn">
-          متأخر {marked.filter((s) => statusOf(s) === "late").length}
-        </span>
-        <span className="rounded-full bg-muted px-2.5 py-1 text-fg-muted">طالب {shown.length}</span>
-      </div>
 
-      <ul className="no-print divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+      <ul className="no-print mx-[calc(2mm-1rem)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-card sm:mx-0 sm:rounded-[var(--radius-lg)]">
         {shown.map((s) => {
           const kind = statusOf(s);
           const saving = pendingIds.includes(s.studentId);
@@ -537,7 +535,47 @@ function AttendanceBody() {
                     {studentLabel(locale, s.studentName, s.nameEn)}
                     {saving ? <span className="ms-2 text-xs font-normal text-fg-muted">{tr("يُحفظ…")}</span> : null}
                   </button>
-                  <p className="truncate text-xs text-fg-muted">{s.classLabel}</p>
+                  <p className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xs text-fg-muted">{s.classLabel}</span>
+                    {kind === "late" ? (
+                      <label className="flex h-6 shrink-0 items-center gap-1 rounded-full bg-warn px-2 text-[10px] font-bold text-primary-fg">
+                        <button
+                          type="button"
+                          className="grid place-items-center"
+                          aria-label={tr("وقت الحضور")}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            const input = e.currentTarget.parentElement?.querySelector("input");
+                            input?.focus();
+                            try {
+                              input?.showPicker();
+                            } catch {
+                              /* المتصفح لا يدعم فتح الساعة مباشرة */
+                            }
+                          }}
+                        >
+                          <Clock className="size-3.5 shrink-0 text-primary-fg" />
+                        </button>
+                        {tr("وقت الحضور")}
+                        <input
+                          type="time"
+                          value={timeFromIso(arrivedOf(s))}
+                          onChange={(e) =>
+                            void persist(s, "late", { arrivedAt: isoFromDayTime(day, e.target.value) })
+                          }
+                          onClick={(e) => {
+                            try {
+                              e.currentTarget.showPicker();
+                            } catch {
+                              /* المتصفح يفتح الساعة بنفسه */
+                            }
+                          }}
+                          className="bg-transparent text-[11px] font-bold text-primary-fg scheme-dark [&::-webkit-calendar-picker-indicator]:hidden"
+                          dir="ltr"
+                        />
+                      </label>
+                    ) : null}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
                   {(
@@ -572,20 +610,6 @@ function AttendanceBody() {
                   ))}
                 </div>
               </div>
-              {kind === "late" ? (
-                <label className="mt-2 flex h-10 w-fit items-center gap-1.5 rounded-full border border-warn bg-warn-soft px-3 text-xs text-warn">
-                  {tr("وقت الحضور")}
-                  <input
-                    type="time"
-                    value={timeFromIso(arrivedOf(s))}
-                    onChange={(e) =>
-                      void persist(s, "late", { arrivedAt: isoFromDayTime(day, e.target.value) })
-                    }
-                    className="bg-transparent text-sm text-warn"
-                    dir="ltr"
-                  />
-                </label>
-              ) : null}
             </li>
           );
         })}

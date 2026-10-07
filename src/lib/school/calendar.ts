@@ -47,6 +47,18 @@ function formatCalendar(d: Date, calendar: CalendarKind, compact: boolean): stri
   return compact ? `${day}/${month}/${year}` : `${day} ${month} ${year}`;
 }
 
+export function dateParts(iso: string, calendar: CalendarKind): { day: string; month: string; year: string; era: string } {
+  const d = dateFromIso(iso);
+  const locale = calendar === "hijri" ? "ar-SA-u-ca-islamic-umalqura" : "ar-EG-u-ca-gregory";
+  const parts = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).formatToParts(d);
+  return {
+    day: cleanPart(parts.find((p) => p.type === "day")?.value ?? ""),
+    month: cleanPart(parts.find((p) => p.type === "month")?.value ?? ""),
+    year: cleanPart(parts.find((p) => p.type === "year")?.value ?? ""),
+    era: calendar === "hijri" ? "هـ" : "م",
+  };
+}
+
 export function formatPrimaryDate(iso: string, calendar: CalendarKind, compact = false): string {
   const d = dateFromIso(iso);
   const era = calendar === "hijri" ? "هـ" : "م";

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { NoteSession } from "@/components/note-session";
+import { PageHelp } from "@/components/page-help";
 import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
 import { ImprovementRecordTools, NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
@@ -155,15 +156,16 @@ function AdminBody() {
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold">{typeLabel ?? tr("المخالفات الواردة من المعلمين")}</h2>
-            <p className="text-xs text-fg-muted">
-              غياب الحصة وتأخرها هنا مع المخالفات السلوكية، وليس في الغياب اليومي.
-            </p>
-            {periodMode ? (
-              <p className="text-xs text-fg-muted">
-                {bounds.label}: كل طالب مرة واحدة مع عدد أيام {typeParam === "absence" ? tr("غيابه عن الحصة") : tr("تأخره عن الحصة")}.
-              </p>
-            ) : null}
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              {typeLabel ?? tr("المخالفات الواردة من المعلمين")}
+              <PageHelp
+                text={
+                  periodMode
+                    ? `${tr("غياب الحصة وتأخرها هنا مع المخالفات السلوكية، وليس في الغياب اليومي.")} ${bounds.label}: ${tr("كل طالب مرة واحدة مع عدد أيام")} ${typeParam === "absence" ? tr("غيابه عن الحصة") : tr("تأخره عن الحصة")}.`
+                    : tr("غياب الحصة وتأخرها هنا مع المخالفات السلوكية، وليس في الغياب اليومي.")
+                }
+              />
+            </h2>
           </div>
           {periodMode ? (
             <Button type="button" variant="secondary" onClick={() => sheetRef.current && printElement(sheetRef.current)}>

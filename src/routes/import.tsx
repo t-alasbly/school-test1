@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { SettingsBack } from "@/components/settings-back";
+import { PageHelp } from "@/components/page-help";
 import { StaffManager } from "@/components/staff-manager";
 import {
   AddStudentButton,
@@ -93,10 +94,10 @@ function ImportBody() {
     <div className="space-y-6">
       <header>
         <SettingsBack />
-        <p className="text-sm text-fg-muted">
-          كل البيانات المضافة ظاهرة هنا: الفصول والطلاب والمعلمون — مع التعديل والحذف والاستيراد من إكسل
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{tr("البيانات والاستيراد")}</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          {tr("البيانات والاستيراد")}
+          <PageHelp text={tr("كل البيانات المضافة ظاهرة هنا: الفصول والطلاب والمعلمون — مع التعديل والحذف والاستيراد من إكسل")} />
+        </h1>
       </header>
       <div className="flex gap-2">
         <Button
