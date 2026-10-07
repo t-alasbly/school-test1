@@ -32,6 +32,20 @@ const TYPE_HINT: Record<NoteType, string> = {
   behavior: "اختر نوع المخالفة من الدليل ثم أرسل",
 };
 
+function minutesAfterStart(startMin: number, occurredAt: string): number {
+  const time = occurredAt.slice(11, 16);
+  const [hour, minute] = time.split(":").map(Number);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return 0;
+  return Math.max(0, hour * 60 + minute - startMin);
+}
+
+function lateMinutesLine(minutes: number): string {
+  if (minutes === 1) return "تأخر دقيقة واحدة عن بداية الحصة";
+  if (minutes === 2) return "تأخر دقيقتين عن بداية الحصة";
+  if (minutes >= 3 && minutes <= 10) return `تأخر ${minutes} دقائق عن بداية الحصة`;
+  return `تأخر ${minutes} دقيقة عن بداية الحصة`;
+}
+
 export type NoteTarget = {
   studentId: number;
   studentName: string;
@@ -431,6 +445,8 @@ export function NoteComposer({
   const [occurredAt, setOccurredAt] = useState(toDatetimeLocalValue());
   const [sent, setSent] = useState(0);
   const [shared, setShared] = useState(false);
+  const [lateMinutes, setLateMinutes] = useState("");
+  const [lateTouched, setLateTouched] = useState(false);
   const wasOpen = useRef(false);
   const queryClient = useQueryClient();
   const selectedBehavior = behaviorTypes.find((bt) => bt.id === behaviorTypeId);
@@ -451,6 +467,12 @@ export function NoteComposer({
     }
     wasOpen.current = open;
   }, [open, school.season, school.schedules]);
+  useEffect(() => {
+    if (shortcut !== "late" || lateTouched) return;
+    const slot = slots.find((item) => item.key === periodKey);
+    if (!slot) return;
+    setLateMinutes(String(minutesAfterStart(slot.startMin, occurredAt)));
+  }, [shortcut, lateTouched, periodKey, occurredAt, slots]);
   const namePreview =
     targets.length <= 4
       ? targets.map((t) => t.studentName).join(tr("، "))
@@ -458,6 +480,19 @@ export function NoteComposer({
           .slice(0, 3)
           .map((t) => t.studentName)
           .join(tr("، "))} و${targets.length - 3} آخرين`;
+
+  function composeDetails() {
+    const extra = details.trim();
+    const minutes = Number(lateMinutes);
+    const late = shortcut === "late" && Number.isFinite(minutes) && minutes > 0 ? lateMinutesLine(minutes) : "";
+    if (many && shared) {
+      const base = sharedDetails();
+      const text = late ? `${late}. ${base}` : base;
+      return text.length > 500 ? text.slice(0, 500) : text;
+    }
+    const text = [late, extra].filter(Boolean).join(". ");
+    return text.length > 500 ? text.slice(0, 500) : text;
+  }
 
   function sharedDetails() {
     const extra = details.trim();
@@ -481,6 +516,8 @@ export function NoteComposer({
       if (targets.length === 0) throw new Error(tr("لم يُحدد طلاب"));
       if (type === "behavior" && !behaviorTypeId) throw new Error(tr("اختر نوع المخالفة السلوكية"));
       if (otherBehavior && details.trim().length < 2) throw new Error(tr("صف المخالفة يدوياً"));
+      if (shortcut === "late" && !(Number(lateMinutes) >= 1)) throw new Error(tr("أدخل دقائق التأخر عن بداية الحصة"));
+      const noteDetails = composeDetails();
       const saved: SavedBehavior[] = [];
       const failedIds: number[] = [];
       const failedNames: string[] = [];
@@ -494,7 +531,7 @@ export function NoteComposer({
             data: {
               studentId: target.studentId,
               type,
-              details: many && shared ? sharedDetails() : details,
+              details: noteDetails,
               behaviorTypeId: type === "behavior" ? behaviorTypeId ?? undefined : undefined,
               periodKey,
               occurredAt: fromDatetimeLocalValue(occurredAt),
@@ -526,7 +563,7 @@ export function NoteComposer({
               occurrence: result.occurrence ?? 1,
               behaviorName: result.behaviorName || selectedBehavior?.name || "",
               degree: result.behaviorDegree ?? selectedBehavior?.degree ?? 1,
-              details: many && shared ? sharedDetails() : details,
+              details: noteDetails,
               periodKey,
             });
           }
@@ -601,6 +638,8 @@ export function NoteComposer({
     setWhenOpen(false);
     setSent(0);
     setShared(false);
+    setLateMinutes("");
+    setLateTouched(false);
     setFollow(null);
   }
 
@@ -620,6 +659,7 @@ export function NoteComposer({
     type != null &&
     (type !== "behavior" || behaviorTypeId != null) &&
     (!otherBehavior || details.trim().length >= 2) &&
+    (shortcut !== "late" || Number(lateMinutes) >= 1) &&
     !mutation.isPending;
   const iso = fromDatetimeLocalValue(occurredAt);
 
@@ -754,6 +794,7 @@ export function NoteComposer({
                       setType("behavior");
                       setBehaviorTypeId(found?.id ?? null);
                       setPicking(false);
+                      if (item === "late") setLateTouched(false);
                       if (!found) toast.error(tr("المخالفة غير جاهزة بعد. حدّث الصفحة ثم أعد المحاولة."));
                       return;
                     }
@@ -802,6 +843,26 @@ export function NoteComposer({
                     {" "}— {tr("اضغط لتغيير المخالفة")}
                   </p>
                 </button>
+                {shortcut === "late" ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`late-minutes-${formKey}`}>{tr("دقائق التأخر عن بداية الحصة")}</Label>
+                    <Input
+                      id={`late-minutes-${formKey}`}
+                      type="number"
+                      min={1}
+                      max={90}
+                      inputMode="numeric"
+                      value={lateMinutes}
+                      onChange={(e) => {
+                        setLateTouched(true);
+                        setLateMinutes(e.target.value);
+                      }}
+                    />
+                    <p className="text-xs text-fg-muted">
+                      {tr("تُحسب من بداية الحصة ويمكن تعديلها قبل الإرسال.")}
+                    </p>
+                  </div>
+                ) : null}
                 {otherBehavior ? (
                   <div className="space-y-1.5">
                     <Label htmlFor={`other-${formKey}`}>{tr("صف المخالفة يدوياً")}</Label>
