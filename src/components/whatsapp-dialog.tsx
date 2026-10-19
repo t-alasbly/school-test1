@@ -1,6 +1,6 @@
 import { MessageCircle } from "lucide-react";
 import { tr } from "@/lib/school/i18n";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ import {
   NOTE_META,
   WHATSAPP_TEMPLATES,
   classLabel,
+  degreeDeductionLabel,
   fillTemplate,
   formatDay,
   sharedParticipantNames,
@@ -48,6 +49,12 @@ export function WhatsAppDialog({
   createdAt,
   periodKey,
   label,
+  noteId,
+  embedded = false,
+  occurrenceText = "",
+  deductionText = "",
+  behaviorDegree = null,
+  initialDraft = "",
 }: {
   studentId: number;
   studentName: string;
@@ -62,6 +69,15 @@ export function WhatsAppDialog({
   createdAt?: string;
   periodKey?: string;
   label?: string;
+  noteId?: number;
+  /** Render the composer in place, for the action step before closing a violation. */
+  embedded?: boolean;
+  occurrenceText?: string;
+  deductionText?: string;
+  /** درجة المخالفة السلوكية؛ تُظهر درجات الخصم حتى لو خلا نص الإجراء من كلمة حسم. */
+  behaviorDegree?: number | null;
+  /** Ready message for one required send, instead of the generic template. */
+  initialDraft?: string;
 }) {
   const { school, staff } = useWorkspace();
   const custom = school.customMessages ?? [];
@@ -97,6 +113,15 @@ export function WhatsAppDialog({
     [sharedText, details],
   );
 
+  const degreePhrase = degreeDeductionLabel(behaviorDegree);
+  const marksLine = deductionText
+    ? deductionText.includes("الدرجات المخصومة")
+      ? deductionText
+      : `الدرجات المخصومة من السلوك: ${deductionText}.`
+    : degreePhrase
+      ? `الدرجات المخصومة من السلوك: ${degreePhrase}.`
+      : "";
+
   const vars = useMemo(
     () => ({
       name: studentName,
@@ -107,14 +132,22 @@ export function WhatsAppDialog({
       details: violationTextForMessage(details, sharedText) || "—",
       subjectLine: subjectName ? ` مادة ${subjectName}` : "",
       session: session ? ` (${session})` : "",
+      repeat: occurrenceText || "—",
+      deductionLine: marksLine,
     }),
-    [studentName, className, shortName, school.name, details, sharedText, subjectName, stamp, session],
+    [studentName, className, shortName, school.name, details, sharedText, subjectName, stamp, session, occurrenceText, marksLine],
   );
 
-  if (!allowed) return null;
+  function withCaseFacts(body: string) {
+    const extra: string[] = [];
+    if (occurrenceText && !body.includes("تكرار المخالفة:")) extra.push(`تكرار المخالفة: ${occurrenceText}.`);
+    if (marksLine && !body.includes("الدرجات المخصومة") && !body.includes("الخصم من درجات السلوك")) extra.push(marksLine);
+    return extra.length ? `${body.trim()}\n${extra.join("\n")}` : body;
+  }
 
   function draftFrom(key: string, withNames: boolean) {
-    const filled = fillTemplate(templateOf(key).body, vars);
+    const source = initialDraft.trim() || fillTemplate(templateOf(key).body, vars);
+    const filled = withCaseFacts(source);
     return withNames ? withParticipantLine(filled, participants) : withoutParticipantLine(filled);
   }
 
@@ -132,6 +165,13 @@ export function WhatsAppDialog({
     }
   }
 
+  useEffect(() => {
+    if (!embedded || !allowed) return;
+    setPicker(defaultType);
+    setIncludeParticipants(true);
+    setDraft(draftFrom(defaultType, true));
+  }, [embedded, allowed, defaultType, initialDraft, occurrenceText, deductionText, behaviorDegree, marksLine]);
+
   async function send() {
     if (!number) return;
     try {
@@ -141,6 +181,7 @@ export function WhatsAppDialog({
           kind: logKind(picker),
           body: draft,
           parentPhone,
+          noteId,
         },
       });
     } catch (err) {
@@ -152,6 +193,75 @@ export function WhatsAppDialog({
     toast.success(tr("فُتحت واتساب وحُفظت الرسالة في السجل"));
     setOpen(false);
   }
+
+  if (!allowed) {
+    if (!embedded) return null;
+    return <p className="text-sm text-fg-muted">{tr("صلاحية الرسائل غير مفعّلة، ولا يمكن فتح واتساب من هذا الحساب.")}</p>;
+  }
+
+  const composer = (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor={`tpl-${studentId}`}>{tr("نوع الرسالة")}</Label>
+        <Select
+          id={`tpl-${studentId}`}
+          value={picker}
+          onChange={(e) => applyKind(e.target.value)}
+          disabled={Boolean(initialDraft)}
+        >
+          {KEYS.map((key) => (
+            <option key={key} value={key}>
+              {key === "general"
+                ? (school.messageTemplates.general?.title ?? tr("رسالة عامة"))
+                : tr(NOTE_META[key].label)}
+            </option>
+          ))}
+          {custom.map((item) => (
+            <option key={item.id} value={`c:${item.id}`}>
+              {item.title}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`msg-${studentId}`}>{tr("نص الرسالة")}</Label>
+        <Textarea
+          id={`msg-${studentId}`}
+          className="min-h-40"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </div>
+      {participants.length > 0 ? (
+        <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 size-4 accent-primary"
+            checked={includeParticipants}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setIncludeParticipants(on);
+              setDraft((current) =>
+                on ? withParticipantLine(current, participants) : withoutParticipantLine(current),
+              );
+            }}
+          />
+          <span>
+            <span className="block font-semibold">{tr("إضافة أسماء المشاركين في الرسالة")}</span>
+            <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
+              تُذكر أسماء من اشتركوا في المخالفة الجماعية داخل نص الرسالة. ألغِ الخيار لإرسال الرسالة عن الطالب وحده.
+            </span>
+          </span>
+        </label>
+      ) : null}
+      {!number ? <p className="text-sm text-danger">{tr("لا يوجد رقم جوال محفوظ")}</p> : null}
+      <Button className="w-full" onClick={send} disabled={!number || !draft.trim()}>
+        {tr("إرسال عبر واتساب")}
+      </Button>
+    </div>
+  );
+
+  if (embedded) return composer;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,63 +284,7 @@ export function WhatsAppDialog({
             {number ? `جوال ولي الأمر: ${parentPhone}` : tr("لا يوجد رقم جوال محفوظ")}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="tpl">{tr("نوع الرسالة")}</Label>
-            <Select
-              id="tpl"
-              value={picker}
-              onChange={(e) => applyKind(e.target.value)}
-            >
-              {KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key === "general"
-                    ? (school.messageTemplates.general?.title ?? tr("رسالة عامة"))
-                    : tr(NOTE_META[key].label)}
-                </option>
-              ))}
-              {custom.map((item) => (
-                <option key={item.id} value={`c:${item.id}`}>
-                  {item.title}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="msg">{tr("نص الرسالة")}</Label>
-            <Textarea
-              id="msg"
-              className="min-h-40"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-          </div>
-          {participants.length > 0 ? (
-            <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1 size-4 accent-primary"
-                checked={includeParticipants}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setIncludeParticipants(on);
-                  setDraft((current) =>
-                    on ? withParticipantLine(current, participants) : withoutParticipantLine(current),
-                  );
-                }}
-              />
-              <span>
-                <span className="block font-semibold">{tr("إضافة أسماء المشاركين في الرسالة")}</span>
-                <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
-                  تُذكر أسماء من اشتركوا في المخالفة الجماعية داخل نص الرسالة. ألغِ الخيار لإرسال الرسالة عن الطالب وحده.
-                </span>
-              </span>
-            </label>
-          ) : null}
-          <Button className="w-full" onClick={send} disabled={!number || !draft.trim()}>
-            إرسال عبر واتساب
-          </Button>
-        </div>
+        {composer}
       </DialogContent>
     </Dialog>
   );

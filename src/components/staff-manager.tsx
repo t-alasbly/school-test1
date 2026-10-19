@@ -15,8 +15,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
-import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp } from "@/lib/school/constants";
+import { SubjectEditor } from "@/components/subject-editor";
+import { bulkDeleteStaff, createStaffUser, deleteStaffPermanent, listStaff, saveSubjectPlan, setStaffActive, updateStaffMember, updateStaffPermissions } from "@/lib/school/api";
+import { ASSIGNABLE_ROLES, CREATE_ROLES, ROLE_LABEL, formatStamp, formatSubjects, parseSubjects } from "@/lib/school/constants";
 import { PERMISSION_META, staffCan, type StaffPermissions } from "@/lib/school/permissions";
 import type { StaffRole } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -45,7 +46,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("1234");
-  const [subject, setSubject] = useState("");
+  const [subjects, setSubjects] = useState<string[]>([]);
   const [role, setRole] = useState<Exclude<StaffRole, "pending">>("teacher");
   const [locale, setLocalePref] = useState<Locale>("ar");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -65,7 +66,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
   const createMutation = useMutation({
     mutationFn: () =>
       createStaffUser({
-        data: { name, email, phone, password, role, subject, locale },
+        data: { name, email, phone, password, role, subject: formatSubjects(subjects), locale },
       }),
     onSuccess: () => {
       toast.success(tr("تم إضافة المستخدم"));
@@ -73,7 +74,7 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
       setEmail("");
       setPhone("");
       setPassword("1234");
-      setSubject("");
+      setSubjects([]);
       setRole("teacher");
       setLocalePref("ar");
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
@@ -215,14 +216,9 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 className="text-left"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-subject">{tr("المادة")}</Label>
-              <Input
-                id="new-subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder={tr("رياضيات، لغتي…")}
-              />
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>{tr("المواد")}</Label>
+              <SubjectEditor subjects={subjects} onChange={setSubjects} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-pass">{tr("كلمة المرور")}</Label>
@@ -459,12 +455,24 @@ export function StaffManager({ compact = false }: { compact?: boolean }) {
                 />
                 <p className="text-xs text-fg-muted">{tr("إن كُتبت بالخطأ يمكنك تصحيحها هنا دون إنشاء حساب جديد.")}</p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-subject">{tr("المادة")}</Label>
-                <Input
-                  id="edit-subject"
-                  value={editing.subject}
-                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>{tr("المواد")}</Label>
+                <SubjectEditor
+                  subjects={parseSubjects(editing.subject)}
+                  onChange={(next) => setEditing({ ...editing, subject: formatSubjects(next) })}
+                  onAdded={(name, combine) => {
+                    void saveSubjectPlan({
+                      data: {
+                        staffId: editing.userId,
+                        subject: name,
+                        combine,
+                        periods: [
+                          { title: "الفترة الأولى", tasksMax: 20, examMax: 10 },
+                          { title: "الفترة الثانية", tasksMax: 20, examMax: 10 },
+                        ],
+                      },
+                    });
+                  }}
                 />
               </div>
               <div className="space-y-1.5">

@@ -70,14 +70,14 @@ function ViolationsSettings() {
         <button
           type="button"
           onClick={() => { setAudience("students"); setDegree(1); }}
-          className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "students" ? "border-primary bg-primary text-primary-fg" : "border-border bg-card"}`}
+          className={`min-h-10 rounded-2xl border px-3 text-base font-bold ${audience === "students" ? "border-primary bg-primary text-primary-fg" : "border-border bg-card"}`}
         >
           {tr("مخالفات الطلبة")}
         </button>
         <button
           type="button"
           onClick={() => { setAudience("staff"); setDegree(4); }}
-          className={`min-h-14 rounded-2xl border px-3 text-base font-bold ${audience === "staff" ? "border-[#7f1d1d] bg-[#7f1d1d] text-white" : "border-border bg-card"}`}
+          className={`min-h-10 rounded-2xl border px-3 text-base font-bold ${audience === "staff" ? "border-[#7f1d1d] bg-[#7f1d1d] text-white" : "border-border bg-card"}`}
         >
           {tr("تجاه المعلمين ومن في حكمهم")}
         </button>
@@ -125,16 +125,16 @@ function ViolationsSettings() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={tr("اسم المخالفة…")}
-              className="min-h-12 min-w-48 flex-1 text-base"
+              className="min-h-9 min-w-48 flex-1 text-base"
             />
-            <Select value={newDegree} onChange={(e) => setNewDegree(e.target.value)} className="min-h-12 w-full text-base sm:w-36">
+            <Select value={newDegree} onChange={(e) => setNewDegree(e.target.value)} className="min-h-9 w-full text-base sm:w-36">
               <option value="1">{tr("الدرجة الأولى")}</option>
               <option value="2">{tr("الدرجة الثانية")}</option>
               <option value="3">{tr("الدرجة الثالثة")}</option>
               <option value="4">{tr("الدرجة الرابعة")}</option>
               <option value="5">{tr("الدرجة الخامسة")}</option>
             </Select>
-            <Button type="submit" className="min-h-12" disabled={createMutation.isPending || newName.trim().length < 2}>
+            <Button type="submit" className="min-h-9" disabled={createMutation.isPending || newName.trim().length < 2}>
               {tr("إضافة")}
             </Button>
           </form>

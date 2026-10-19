@@ -234,7 +234,7 @@ export function FollowupStatsPanel({ allowAdd = false }: { allowAdd?: boolean })
                   </button>
                   <button
                     type="button"
-                    onClick={() => removeExtra(item.id)}
+                    onClick={() => { if (window.confirm(tr("حذف هذا العداد؟"))) removeExtra(item.id); }}
                     className="grid size-9 place-items-center rounded-[var(--radius-sm)] text-danger hover:bg-danger-soft"
                     aria-label={tr("حذف العداد")}
                   >

@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { updateStaffName } from "@/lib/school/api";
-import { ROLE_LABEL } from "@/lib/school/constants";
+import { SubjectEditor } from "@/components/subject-editor";
+import { updateStaffName, saveSubjectPlan } from "@/lib/school/api";
+import { ROLE_LABEL, formatSubjects, parseSubjects } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/settings/profile")({ component: ProfileSettings });
@@ -19,7 +20,7 @@ function ProfileSettings() {
   const { staff } = useWorkspace();
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState(staff.displayName);
-  const [subject, setSubject] = useState(staff.subject);
+  const [subjects, setSubjects] = useState(() => parseSubjects(staff.subject));
   const [phone, setPhone] = useState(staff.phone);
   const [password, setPassword] = useState("");
 
@@ -28,7 +29,7 @@ function ProfileSettings() {
       updateStaffName({
         data: {
           name: displayName,
-          subject,
+          subject: formatSubjects(subjects),
           phone,
           password: password.trim() ? password : undefined,
         },
@@ -47,7 +48,7 @@ function ProfileSettings() {
         <SettingsBack />
         <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           {tr("حسابك")}
-          <PageHelp text={tr("الاسم الظاهر، رقم الجوال، كلمة المرور، والمادة")} />
+          <PageHelp text={tr("الاسم الظاهر، رقم الجوال، كلمة المرور، والمواد. يمكن إضافة أكثر من مادة.")} />
         </h1>
       </div>
       <Card>
@@ -85,12 +86,22 @@ function ProfileSettings() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="subject">{tr("المادة الدراسية")}</Label>
-            <Input
-              id="subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder={tr("مثال: لغتي، رياضيات، علوم")}
+            <Label>{tr("المواد الدراسية")}</Label>
+            <SubjectEditor
+              subjects={subjects}
+              onChange={setSubjects}
+              onAdded={(name, combine) => {
+                void saveSubjectPlan({
+                  data: {
+                    subject: name,
+                    combine,
+                    periods: [
+                      { title: "الفترة الأولى", tasksMax: 20, examMax: 10 },
+                      { title: "الفترة الثانية", tasksMax: 20, examMax: 10 },
+                    ],
+                  },
+                });
+              }}
             />
           </div>
           <Button

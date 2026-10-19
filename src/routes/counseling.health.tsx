@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StudentSheet } from "@/components/student-sheet";
-import { PageHelp } from "@/components/page-help";
+import { ExitPermitBadge } from "@/components/exit-permit";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -78,12 +78,6 @@ function HealthPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          {tr("الملاحظات الصحية")}
-          <PageHelp text={tr("تظهر أسفل اسم الطالب في كشف الفصل")} />
-        </h1>
-      </header>
       <Card>
         <CardHeader>
           <CardTitle>{tr("تسجيل ملاحظة صحية")}</CardTitle>
@@ -175,6 +169,7 @@ function HealthPage() {
                 <li key={s.id} className="px-3 py-2">
                   <button type="button" className="font-medium" onClick={() => setActiveStudent(s.id)}>
                     {s.name} <span className="text-xs text-fg-muted">{s.classLabel}</span>
+                    <ExitPermitBadge studentId={s.id} className="ms-1.5" />
                   </button>
                   <p className="text-sm text-warn">{s.healthNote}</p>
                 </li>

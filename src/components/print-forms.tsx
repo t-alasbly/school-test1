@@ -67,6 +67,7 @@ export type PrintableNote = {
 export const FORM_ORDER = [
   "pledge",
   "notice",
+  "deduction",
   "invite",
   "referral",
   "teacher-log",
@@ -112,6 +113,10 @@ export const FORM_META: Record<string, { title: string; confidential?: boolean }
   },
   notice: {
     title: tr("إشعار ولي الأمر بمشكلة سلوكية"),
+    confidential: true,
+  },
+  deduction: {
+    title: tr("إشعار خصم درجات السلوك"),
     confidential: true,
   },
   invite: {
@@ -172,6 +177,7 @@ export function PrintFormsButton({
   size = "sm",
   studentId,
   className,
+  appointment,
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -194,6 +200,7 @@ export function PrintFormsButton({
         notes={notes}
         defaultKind={defaultKind}
         studentId={studentId}
+        appointment={appointment}
       />
     </Fragment>
   );
@@ -205,6 +212,7 @@ function PrintFormsDialog({
   notes,
   defaultKind,
   studentId,
+  appointment,
 }) {
   const { school } = useWorkspace();
   const [kind, setKind] = useState(defaultKind ?? "pledge");
@@ -406,6 +414,7 @@ function PrintFormsDialog({
           showCompensation={showCompensation && Boolean(selected?.compensation)}
           showParticipants={kind === "pledge" && showParticipants}
           participants={participants}
+          appointment={kind === "invite" ? appointment : undefined}
         />
       </DialogContent>
     </Dialog>
@@ -421,6 +430,7 @@ export function OfficialForm({
   showCompensation = false,
   showParticipants = false,
   participants = [],
+  appointment,
   ref,
 }) {
   const { behaviorTypes } = useWorkspace();
@@ -441,8 +451,8 @@ export function OfficialForm({
     "……………………";
   const degree =
     overrides?.degree || degreeLabel(focus?.behaviorDegree) || "…………";
-  const weekday = overrides?.weekday || (stamp ? weekdayName(stamp) : "…………");
-  const day = overrides?.day || (stamp ? formatDay(stamp) : "…………");
+  const weekday = appointment?.weekday || overrides?.weekday || (stamp ? weekdayName(stamp) : "…………");
+  const day = appointment?.day || overrides?.day || (stamp ? formatDay(stamp) : "…………");
   const hijri = stamp ? hijriDate(stamp) : "…………";
   const studentWord = studentNoun(school.studentGender);
   const principal = principalTitle(school.leadershipGender);
@@ -513,6 +523,7 @@ export function OfficialForm({
     showCompensation: Boolean(showCompensation && focus?.compensation),
     showParticipants: Boolean(showParticipants && participants.length),
     participants,
+    appointmentTime: appointment?.time || "",
   };
   return (
     <article
@@ -550,6 +561,7 @@ export function OfficialForm({
       {kind === "receipt" ? <ReceiptBody ctx={ctx} /> : null}
       {kind === "commitment" ? <CommitmentBody ctx={ctx} /> : null}
       {kind === "notice" ? <NoticeBody ctx={ctx} /> : null}
+      {kind === "deduction" ? <DeductionBody ctx={ctx} /> : null}
       {kind === "invite" ? <InviteBody ctx={ctx} /> : null}
       {kind === "referral" ? <ReferralBody ctx={ctx} /> : null}
       {kind === "attendance" ? <AttendanceBody ctx={ctx} /> : null}
@@ -831,7 +843,7 @@ function ProcedureList({ ctx }) {
         {ctx.occurrence > 1 ? ` — ${occurrenceLabel(ctx.occurrence)}` : ""}:
       </p>
       <ol className="list-decimal pr-5 leading-7">
-        {list.slice(0, 6).map((s, i) => (
+        {list.map((s) => (
           <li>{s}</li>
         ))}
       </ol>
@@ -1011,6 +1023,47 @@ function NoticeBody({ ctx }) {
     </div>
   );
 }
+function DeductionBody({ ctx }) {
+  const cuts = ctx.actionSteps.filter((step) => /خصم|حسم/.test(step));
+  return (
+    <div className="space-y-2 text-[13.5px] leading-8">
+      <p>
+        المكرم ولي أمر {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
+        <Dotted value={ctx.classLine} />
+      </p>
+      <p>{tr("السلام عليكم ورحمة الله وبركاته")}</p>
+      <p>
+        نشعركم بأنه تقرر خصم من درجات سلوك {ctx.studentWord} بسبب مشكلة سلوكية من الدرجة{" "}
+        <Dotted value={ctx.degree} /> {tr("وهي")}
+        <Dotted value={ctx.violation} />.
+      </p>
+      {cuts.length > 0 ? (
+        <div className="my-2 rounded-sm border border-black px-3 py-2">
+          <p className="font-semibold">{tr("إشعار الخصم")}</p>
+          <ul className="list-disc pr-5 leading-7">
+            {cuts.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <ProcedureList ctx={ctx} />
+      )}
+      <CompensationLine ctx={ctx} />
+      <p>{tr("لذا يرجى المتابعة والتعاون مع المدرسة، ويمكن للطالب تعويض الدرجات وفق الفرص المتاحة.")}</p>
+      <NamesTail note={ctx.actionNote}>
+        <div className="mt-6 flex justify-between">
+          <p className="text-[12px]">{tr("الختم")}</p>
+          <div className="text-center text-[12px] leading-6">
+            <p className="font-semibold">{ctx.principal}</p>
+            <p>الاسم: {ctx.principalName || "………………"}</p>
+            <p>{tr("التوقيع: ………………")}</p>
+          </div>
+        </div>
+      </NamesTail>
+    </div>
+  );
+}
 function InviteBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
@@ -1021,7 +1074,14 @@ function InviteBody({ ctx }) {
       <p>{tr("السلام عليكم ورحمة الله وبركاته")}</p>
       <p>
         نأمل منكم الحضور إلى المدرسة في يوم <Dotted value={ctx.weekday} />{" "}
-        الموافق <Dotted value={ctx.day} /> {tr("هجريًا")}<Dotted value={ctx.hijri} />{" "}
+        الموافق <Dotted value={ctx.day} />
+        {ctx.appointmentTime ? (
+          <Fragment>
+            {" "}
+            الساعة <Dotted value={ctx.appointmentTime} />
+          </Fragment>
+        ) : null}{" "}
+        {tr("هجريًا")}<Dotted value={ctx.hijri} />{" "}
         لمقابلة {ctx.principal}، وذلك بهدف مناقشة مشكلة سلوكية ({ctx.violation}
         ).
       </p>
@@ -1149,7 +1209,15 @@ function RecordBody({ ctx }) {
                 {n ? `${degreeLabel(n.behaviorDegree) || "—"}` : ""}
               </td>
               <td>{n ? formatDay(n.createdAt) : ""}</td>
-              <td />
+              <td>
+                {n?.behaviorDegree === 4
+                  ? "10"
+                  : n?.behaviorDegree === 5
+                    ? "15"
+                    : n?.behaviorDegree
+                      ? String(n.behaviorDegree)
+                      : ""}
+              </td>
               <td>{actionDisplay(n?.actionTaken)}</td>
               <td>{n?.actionTaken ? formatDay(n.createdAt) : ""}</td>
               <td />
@@ -1185,11 +1253,12 @@ function TeacherLogBody({ ctx }) {
         <thead>
           <tr>
             {[
+              tr("اسم الطالب"),
               tr("المشكلة السلوكية"),
               tr("درجة المشكلة"),
               tr("الإجراء المتخذ"),
               tr("مدى الاستجابة"),
-              tr("عدد مرات التكرار"),
+              tr("التكرار"),
               tr("التاريخ"),
               tr("الحصة"),
             ].map((h) => (
@@ -1198,8 +1267,9 @@ function TeacherLogBody({ ctx }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((n, i) => (
+          {rows.map((n) => (
             <tr>
+              <td>{ctx.name}</td>
               <td>{n?.behaviorTypeName || n?.details || ""}</td>
               <td>{n ? degreeLabel(n.behaviorDegree) : ""}</td>
               <td>{actionDisplay(n?.actionTaken)}</td>
@@ -1224,24 +1294,41 @@ function TeacherLogBody({ ctx }) {
 function PlanBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-7">
-      <p className="font-semibold">{tr("أولاً: تحديد المشكلة السلوكية")}</p>
+      <p className="font-semibold">{tr("أولاً: البيانات والمشكلة")}</p>
       <p>
         المشكلة: <Dotted value={ctx.violation} /> درجتها:{" "}
         <Dotted value={ctx.degree} />
       </p>
+      <p>وصف المشكلة والمظاهر التي تبدو عند الطالب: {ctx.focus?.details || "…………………………………………"}</p>
       <RepeatBox ctx={ctx} />
-      <p>وصف المشكلة / المظاهر: {ctx.focus?.details || "—"}</p>
-      <p className="font-semibold">{tr("ثالثاً: الإجراءات المستخدمة")}</p>
-      {ctx.actionSteps.filter((s) => s.trim()).length ? (
-        <ol className="list-decimal pr-5">
-          {ctx.actionSteps
-            .filter((s) => s.trim())
-            .slice(0, 6)
-            .map((s, i) => (
-              <li>{s}</li>
+      <p className="font-semibold">{tr("ثانياً: قياس التكرار")}</p>
+      <table className="official-table">
+        <thead>
+          <tr>
+            {[tr("اليوم"), tr("التاريخ"), tr("فترة الملاحظة"), "1", "2", "3", "4", "5", tr("المجموع")].map((h) => (
+              <th>{h}</th>
             ))}
-        </ol>
-      ) : null}
+          </tr>
+        </thead>
+        <tbody>
+          {[0, 1].map((row) => (
+            <tr>
+              {Array.from({ length: 9 }).map(() => (
+                <td className="h-6" />
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="font-semibold">{tr("ثالثاً: الإجراءات المستخدمة لإكساب السلوك المرغوب")}</p>
+      <ol className="list-decimal pr-5">
+        {(ctx.actionSteps.filter((s) => s.trim()).length
+          ? ctx.actionSteps.filter((s) => s.trim())
+          : [1, 2, 3, 4, 5, 6].map(() => "…………………………………………")
+        ).map((s) => (
+          <li>{s}</li>
+        ))}
+      </ol>
       <p className="font-semibold">{tr("رابعاً: تقييم فاعلية الخطة")}</p>
       <p>رأي {ctx.counselor}: …………………………………………</p>
       <p>{tr("رأي معلم الفصل: …………………………………………")}</p>
@@ -1373,9 +1460,7 @@ function IncidentBody({ ctx }) {
           </tr>
         </thead>
         <tbody>
-          {Array.from({
-            length: 5,
-          }).map((_, i) => (
+          {Array.from({ length: 7 }).map((_, i) => (
             <tr>
               <td>{i + 1}</td>
               <td />
@@ -1420,8 +1505,7 @@ function CommitteeBody({ ctx }) {
         <ol className="list-decimal pr-5">
           {ctx.actionSteps
             .filter((s) => s.trim())
-            .slice(0, 4)
-            .map((s, i) => (
+            .map((s) => (
               <li>{s}</li>
             ))}
         </ol>
@@ -1467,27 +1551,75 @@ function ViolenceBody({ ctx }) {
     <div className="space-y-2 text-[12.5px] leading-7">
       <p className="text-center text-[11px] font-semibold">{tr("(سري للغاية)")}</p>
       <p>
-        اليوم: {ctx.weekday} — التاريخ: {ctx.day} — الساعة: ………………
+        اليوم: {ctx.weekday} — الساعة: ……………… — التاريخ: {ctx.day}
       </p>
       <table className="official-table">
         <tbody>
           <tr>
-            <th className="w-1/3">{tr("ملخص المشكلة")}</th>
-            <td>{ctx.violation}</td>
+            <th colSpan={4}>{tr("بيانات الحالة المتعرضة للعنف")}</th>
+          </tr>
+          <tr>
+            <th>{tr("الاسم")}</th>
+            <td>{ctx.name}</td>
+            <th>{tr("العمر")}</th>
+            <td>………………</td>
+          </tr>
+          <tr>
+            <th>{tr("الحالة الاجتماعية")}</th>
+            <td>………………</td>
+            <th>{tr("الجنس")}</th>
+            <td>{ctx.studentWord}</td>
+          </tr>
+          <tr>
+            <th>{tr("رقم السجل المدني")}</th>
+            <td>………………</td>
+            <th>{tr("الجنسية")}</th>
+            <td>………………</td>
+          </tr>
+          <tr>
+            <th>{tr("رقم الهاتف")}</th>
+            <td>{ctx.parentPhone || "………………"}</td>
+            <th>{tr("رقم الجوال")}</th>
+            <td>{ctx.parentPhone || "………………"}</td>
+          </tr>
+          <tr>
+            <th>{tr("العنوان")}</th>
+            <td colSpan={3}>{ctx.classLine}</td>
+          </tr>
+          <tr>
+            <th colSpan={4}>{tr("اسم الجهة المبلغة")}</th>
+          </tr>
+          <tr>
+            <th>{tr("اسم المبلغ")}</th>
+            <td>{ctx.focus?.teacherName || ctx.counselorName || "………………"}</td>
+            <th>{tr("رقم السجل المدني")}</th>
+            <td>………………</td>
+          </tr>
+          <tr>
+            <th>{tr("الجنسية")}</th>
+            <td>………………</td>
+            <th>{tr("رقم الهاتف")}</th>
+            <td>………………</td>
+          </tr>
+          <tr>
+            <th>{tr("ملخص المشكلة")}</th>
+            <td colSpan={3}>{ctx.violation}</td>
           </tr>
           <tr>
             <th>{tr("أبرز الإجراءات المتخذة")}</th>
-            <td>{ctx.actionSteps.join(" — ") || "………………"}</td>
+            <td colSpan={3}>{ctx.actionSteps.join(" — ") || "………………"}</td>
           </tr>
         </tbody>
       </table>
       {ctx.actionNote ? <ActionNoteBox note={ctx.actionNote} /> : null}
-      <div className="pt-3 text-center text-[12px] leading-6">
-        <p className="font-semibold">{ctx.principal}</p>
-        <p>
-          الاسم: {ctx.principalName || "………………"} — التوقيع: ……………… — الختم
-          المدرسي
-        </p>
+      <div className="flex items-end justify-between pt-3 text-[12px] leading-6">
+        <p>{tr("الختم المدرسي")}</p>
+        <div className="text-center">
+          <p className="font-semibold">{ctx.principal}</p>
+          <p>الاسم: {ctx.principalName || "………………"}</p>
+          <p>{tr("التوقيع: ………………")}</p>
+          <p>التاريخ: {ctx.day}</p>
+        </div>
       </div>
     </div>
   );

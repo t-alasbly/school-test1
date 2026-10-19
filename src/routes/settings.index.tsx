@@ -5,6 +5,7 @@ import {
   Award,
   Gavel,
   HeartPulse,
+  NotebookPen,
   Languages,
   Layers,
   MessageCircle,
@@ -14,6 +15,8 @@ import {
   ShieldAlert,
   Smartphone,
   Sprout,
+  CalendarDays,
+  SlidersHorizontal,
   Upload,
   UserRound,
   Users,
@@ -29,6 +32,13 @@ function SettingsHub() {
   const { locale, setLocale } = useLocale();
   const admin = staff.role === "admin";
   const cards = [
+    {
+      to: "/settings/subject" as const,
+      title: tr("إعدادات المادة"),
+      body: tr("فترات أعمال السنة ودرجة كل فترة واختبارها الشهري، من فترة واحدة حتى ثلاث."),
+      icon: SlidersHorizontal,
+      show: true,
+    },
     {
       to: "/settings/profile" as const,
       title: tr("حسابك"),
@@ -49,6 +59,13 @@ function SettingsHub() {
       body: tr("صفوف المدرسة وأقسامها كما في ملف الطلاب. احذف الأقسام الفارغة القديمة من هنا."),
       icon: Layers,
       show: staffCan(staff, "editClasses"),
+    },
+    {
+      to: "/settings/timetable" as const,
+      title: tr("جدول المدرسة"),
+      body: tr("توزيع حصص كل فصل ومعلم ومادة، فتظهر في جدول المعلم."),
+      icon: CalendarDays,
+      show: admin,
     },
     {
       to: "/settings/app" as const,
@@ -128,11 +145,11 @@ function SettingsHub() {
       show: admin || staffCan(staff, "counseling") || staffCan(staff, "acceptImprovements"),
     },
     {
-      to: "/messages" as const,
-      title: tr("رسائل جماعية"),
-      body: tr("إرسال واتساب لفصل أو صف كامل أو غائبي اليوم ومتأخريه، بالقالب الذي تختاره."),
-      icon: MessageCircle,
-      show: staffCan(staff, "sendMessages"),
+      to: "/settings/study" as const,
+      title: tr("الملاحظات الدراسية"),
+      body: tr("قائمة الملاحظات الدراسية السبع، وإجراءاتها المتدرجة من التنبيه حتى إحالة الموجه الطلابي."),
+      icon: NotebookPen,
+      show: admin,
     },
     {
       to: "/settings/messages" as const,

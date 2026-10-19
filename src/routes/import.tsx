@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { bulkDeleteStudents, importStudents, importTeachers, listRoster } from "@/lib/school/api";
+import { bulkDeleteStudents, importStudents, importTeachers, listRoster, previewNoorPdf } from "@/lib/school/api";
 import { DEFAULT_TEACHER_PASSWORD } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,9 @@ export const Route = createFileRoute("/import")({ component: ImportPage });
 type StudentMapping = {
   name: string;
   parentPhone: string;
+  parentPhone2: string;
+  nationalId: string;
+  nationality: string;
   stageName: string;
   className: string;
 };
@@ -42,7 +45,10 @@ type TeacherMapping = {
 
 const STUDENT_FIELDS: { key: keyof StudentMapping; label: string }[] = [
   { key: "name", label: tr("اسم الطالب") },
+  { key: "nationalId", label: tr("السجل المدني") },
   { key: "parentPhone", label: tr("جوال ولي الأمر") },
+  { key: "parentPhone2", label: tr("جوال آخر") },
+  { key: "nationality", label: tr("الجنسية") },
   { key: "stageName", label: tr("المرحلة") },
   { key: "className", label: tr("الفصل") },
 ];
@@ -57,6 +63,9 @@ type RosterStudent = {
   id: number;
   name: string;
   parentPhone: string;
+  parentPhone2?: string;
+  nationalId?: string;
+  nationality?: string;
   classId: number;
 };
 
@@ -173,6 +182,12 @@ function StudentImport() {
           {showExcel ? tr("إخفاء ملف الإكسل") : tr("استيراد من إكسل")}
         </Button>
       </div>
+      <NoorImport
+        onImported={() => {
+          void queryClient.invalidateQueries({ queryKey: ["roster"] });
+          void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+        }}
+      />
       {showExcel ? (
         <StudentExcelForm
           onImported={() => {
@@ -299,6 +314,7 @@ function StudentImport() {
                                     <p className="font-medium">{student.name}</p>
                                     <p className="text-xs text-fg-subtle" dir="ltr">
                                       {student.parentPhone || tr("بدون جوال ولي الأمر")}
+                                      {student.nationalId ? ` · ${student.nationalId}` : ""}
                                     </p>
                                   </div>
                                   <EditStudentButton student={student} showLabel />
@@ -320,20 +336,137 @@ function StudentImport() {
   );
 }
 
+function NoorImport({ onImported }: { onImported: () => void }) {
+  const [preview, setPreview] = useState<{
+    total: number;
+    withPhone: number;
+    withId: number;
+    classes: { label: string; count: number }[];
+    rows: {
+      name: string;
+      parentPhone: string;
+      parentPhone2: string;
+      nationalId: string;
+      nationality: string;
+      stageName: string;
+      className: string;
+    }[];
+  } | null>(null);
+  const [fileName, setFileName] = useState("");
+
+  const read = useMutation({
+    mutationFn: (pdfBase64: string) => previewNoorPdf({ data: { pdfBase64 } }),
+    onSuccess: (data) => setPreview(data),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر قراءة الكشف")),
+  });
+
+  const commit = useMutation({
+    mutationFn: () => {
+      if (!preview) throw new Error("اختر ملف الكشف أولًا");
+      return importStudents({
+        data: { rows: preview.rows, replaceEmpty: false, preserveRecords: true },
+      });
+    },
+    onSuccess: (result) => {
+      const conflict = result.ambiguous
+        ? `، وتُرك ${result.ambiguous} لأن السجل المدني لا يطابق الاسم`
+        : "";
+      toast.success(
+        `تم سحب الكشف: ${result.updated} محدّث، ${result.inserted} جديد، ${result.skipped} متجاوز${conflict}. المخالفات المسجّلة بقيت كما هي.`,
+      );
+      setPreview(null);
+      setFileName("");
+      onImported();
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر سحب البيانات")),
+  });
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setFileName(file.name);
+    setPreview(null);
+    const dataUrl = await file.arrayBuffer();
+    const bytes = new Uint8Array(dataUrl);
+    let binary = "";
+    const chunk = 0x2000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    read.mutate(btoa(binary));
+  }
+
+  return (
+    <Card>
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-lg">سحب كشف الطلاب من نور</CardTitle>
+        <p className="text-sm text-fg-muted">
+          ارفع ملف PDF «كشف الطلاب» كما يخرجه نور. يُحدَّث الطالب في مكانه بالسجل المدني، ثم بالاسم.
+          المخالفات والملاحظات والرسائل لا تُحذف ولا تُنقل، ومن ليس في الملف يبقى كما هو.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-border bg-bg-elevated px-4 text-center">
+          <span className="font-medium">{fileName || "اختر ملف PDF"}</span>
+          <span className="mt-1 text-sm text-fg-muted">السجل المدني هو المفتاح. الجوال الأساسي من رقم جوال الطالب، والمنزل جوال ثانٍ.</span>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="sr-only"
+            onChange={(e) => void onFile(e.target.files?.[0])}
+          />
+        </label>
+        {read.isPending ? <Skeleton className="h-24 rounded-[var(--radius-lg)]" /> : null}
+        {preview ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              {preview.total} طالب مستمر · {preview.withId} بسجل مدني · {preview.withPhone} بجوال
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {preview.classes.map((item) => (
+                <Badge key={item.label}>
+                  {item.label} · {item.count}
+                </Badge>
+              ))}
+            </div>
+            <PreviewTable
+              labels={["الاسم", "السجل", "الجوال", "جوال آخر", "الجنسية", "الصف", "الفصل"]}
+              rows={preview.rows.slice(0, 5).map((row) => [
+                row.name,
+                row.nationalId,
+                row.parentPhone,
+                row.parentPhone2,
+                row.nationality,
+                row.stageName,
+                row.className,
+              ])}
+            />
+            <Button disabled={commit.isPending} onClick={() => commit.mutate()}>
+              {commit.isPending ? "جارٍ السحب…" : "سحب البيانات دون المساس بالمخالفات"}
+            </Button>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function StudentExcelForm({ onImported }: { onImported: () => void }) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
-  const [keepEmpty, setKeepEmpty] = useState(false);
+  const [keepEmpty, setKeepEmpty] = useState(true);
   const [mapping, setMapping] = useState<StudentMapping>({
     name: "",
     parentPhone: "",
+    parentPhone2: "",
+    nationalId: "",
+    nationality: "",
     stageName: "",
     className: "",
   });
 
   const mutation = useMutation({
     mutationFn: (payload: Parameters<typeof importStudents>[0]["data"]["rows"]) =>
-      importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty } }),
+      importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty, preserveRecords: keepEmpty } }),
     onSuccess: (result) => {
       const extra =
         result.removedClasses || result.removedStages
@@ -352,11 +485,15 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     if (!parsed) return;
     setHeaders(parsed.headers);
     setRows(parsed.rows);
+    const phone = guess(parsed.headers, ["جوال ولي", "هاتف ولي", "جوال", "هاتف", "phone", "ولي"]);
     setMapping({
-      name: guess(parsed.headers, [tr("اسم"), "name", tr("الطالب")]),
-      parentPhone: guess(parsed.headers, [tr("جوال"), tr("هاتف"), "phone", tr("واتس"), tr("ولي")]),
-      stageName: guess(parsed.headers, [tr("مرحلة"), tr("صف"), "stage"]),
-      className: guess(parsed.headers, [tr("فصل"), tr("شعبة"), "class"]),
+      name: guess(parsed.headers, ["اسم", "name", "الطالب"]),
+      parentPhone: phone,
+      parentPhone2: guess(parsed.headers.filter((header) => header !== phone), ["جوال", "هاتف", "phone", "آخر", "ثاني"]),
+      nationalId: guess(parsed.headers, ["سجل", "هوية", "وطني", "national"]),
+      nationality: guess(parsed.headers, ["جنسية", "nationality"]),
+      stageName: guess(parsed.headers, ["مرحلة", "صف", "stage"]),
+      className: guess(parsed.headers, ["فصل", "شعبة", "class"]),
     });
   }
 
@@ -364,12 +501,18 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     const index = {
       name: headers.indexOf(mapping.name),
       parentPhone: headers.indexOf(mapping.parentPhone),
+      parentPhone2: headers.indexOf(mapping.parentPhone2),
+      nationalId: headers.indexOf(mapping.nationalId),
+      nationality: headers.indexOf(mapping.nationality),
       stageName: headers.indexOf(mapping.stageName),
       className: headers.indexOf(mapping.className),
     };
     return rows.map((row) => ({
       name: index.name >= 0 ? row[index.name] ?? "" : "",
       parentPhone: index.parentPhone >= 0 ? row[index.parentPhone] ?? "" : "",
+      parentPhone2: index.parentPhone2 >= 0 ? row[index.parentPhone2] ?? "" : "",
+      nationalId: index.nationalId >= 0 ? row[index.nationalId] ?? "" : "",
+      nationality: index.nationality >= 0 ? row[index.nationality] ?? "" : "",
       stageName: index.stageName >= 0 ? row[index.stageName] ?? "" : "",
       className: index.className >= 0 ? row[index.className] ?? "" : "",
     }));
@@ -380,7 +523,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4">
       <DropZone
-        hint={tr("الأعمدة: الاسم، جوال ولي الأمر، المرحلة/الصف، الفصل. يُعتمد تقسيم الملف وتُحذف الأقسام الفارغة القديمة.")}
+        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، الجنسية، المرحلة، الفصل. السجل المدني هو مفتاح الطالب. إن خلا الجوال الأول يُستخدم الثاني.")}
         onFile={onFile}
       />
       {headers.length > 0 ? (
@@ -400,7 +543,15 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
           </div>
           <PreviewTable
             labels={STUDENT_FIELDS.map((f) => f.label)}
-            rows={preview.map((row) => [row.name, row.parentPhone, row.stageName, row.className])}
+            rows={preview.map((row) => [
+              row.name,
+              row.nationalId,
+              row.parentPhone,
+              row.parentPhone2,
+              row.nationality,
+              row.stageName,
+              row.className,
+            ])}
           />
           <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد</p>
           <label className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
@@ -410,7 +561,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
               checked={keepEmpty}
               onChange={(e) => setKeepEmpty(e.target.checked)}
             />
-            الإبقاء على الأقسام الفارغة من التقسيم القديم
+            حماية السجلات: لا تُحذف الفصول ولا يُدمج الطلاب، وتبقى المخالفات كما هي
           </label>
           <Button
             disabled={mutation.isPending || !mapping.name || !mapping.stageName || !mapping.className}

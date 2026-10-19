@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { tr } from "@/lib/school/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { CaseRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
-import { PageHelp } from "@/components/page-help";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
 import { getCounselingDesk } from "@/lib/school/api";
 import { CASE_KINDS, formatStamp } from "@/lib/school/constants";
@@ -25,14 +25,8 @@ function MessagesPage() {
   const cases: CounselingCase[] = desk.data?.cases ?? [];
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          {tr("مراسلات المعلمين")}
-          <PageHelp text={tr("حالة صحية أو نفسية أو صعوبات تعلم يرسلها المعلم من سجل الطالب")} />
-        </h1>
-      </header>
-      <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
+    <>
+    <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         {cases.map((item) => (
           <li key={item.id} className="space-y-1.5 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -41,8 +35,9 @@ function MessagesPage() {
                 className="text-right text-base font-semibold"
                 onClick={() => setActiveStudent(item.studentId)}
               >
-                {item.studentName}
+                <DayName studentId={item.studentId}>{item.studentName}</DayName>
               </button>
+              <ExitPermitBadge studentId={item.studentId} />
               <span className="text-xs text-fg-muted">{item.classLabel}</span>
               <Badge tone={item.kind === "health" ? "warn" : item.kind === "psych" ? "danger" : "primary"}>
                 {caseKindLabel(item.kind)}
@@ -70,6 +65,6 @@ function MessagesPage() {
           if (!open) setActiveStudent(null);
         }}
       />
-    </div>
+    </>
   );
 }

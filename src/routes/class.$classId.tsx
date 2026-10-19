@@ -1,38 +1,40 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { ClassSwitcher } from "@/components/class-switcher";
-import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
-import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { AddStudentButton } from "@/components/student-editor";
-import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
-import { Badge } from "@/components/ui/badge";
+import { ClassBoard, ClassRecords } from "@/components/teacher-studio";
+import { NoteComposer, NoteActions } from "@/components/note-actions";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getClassPage } from "@/lib/school/api";
-import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
+import { claimClassSubjectNotes, getClassPage } from "@/lib/school/api";
 import {
   addGroupStudents,
   clearGroupStudents,
-  elsewhereLabel,
   finishGroupPick,
   setGroupPicking,
   toggleGroupStudent,
   useGroupPick,
 } from "@/lib/school/group-pick";
-import { NOTE_META, formatTime, noteTone } from "@/lib/school/constants";
-import type { DailyKind, StudentRow } from "@/lib/school/types";
+import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
+import type { StudentRow } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
-import { NoteSession } from "@/components/note-session";
 
 export const Route = createFileRoute("/class/$classId")({
-  validateSearch: (search: Record<string, unknown>): { student?: number } => ({
+  validateSearch: (search: Record<string, unknown>): { student?: number; subject?: string; period?: string; from?: "desk" } => ({
     student: Number(search.student) > 0 ? Number(search.student) : undefined,
+    subject: typeof search.subject === "string" && search.subject.trim() ? search.subject.trim().slice(0, 40) : undefined,
+    period: typeof search.period === "string" && /^p\d+$/.test(search.period) ? search.period : undefined,
+    from: search.from === "desk" ? "desk" : undefined,
   }),
   component: ClassPage,
 });
@@ -45,28 +47,43 @@ function ClassPage() {
   );
 }
 
-function dailyRank(kind: DailyKind | null) {
-  if (kind === "absence") return 0;
-  if (kind === "late") return 1;
-  return 2;
+function arrivedClock(iso: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function ClassBody() {
   const { classId } = Route.useParams();
-  const { student: studentParam } = Route.useSearch();
+  const { student: studentParam, subject: lessonFromTable, period: periodFromTable, from } = Route.useSearch();
+  const fromDesk = from === "desk";
   const id = Number(classId);
-  const { school, staff, stages, classes } = useWorkspace();
+  const { stages, classes } = useWorkspace();
   const { locale } = useLocale();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
   const [groupOpen, setGroupOpen] = useState(false);
+  const [followMode, setFollowMode] = useState<"one" | "group" | "year" | "analysis" | "attendance" | "summary" | "roster">("one");
+  const [printTick, setPrintTick] = useState(0);
+  const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { picking, targets } = useGroupPick();
+  const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ["class", id],
-    queryFn: () => getClassPage({ data: { classId: id } }),
+    queryKey: ["class", id, periodFromTable ?? ""],
+    queryFn: () => getClassPage({ data: { classId: id, period: periodFromTable } }),
     enabled: Number.isFinite(id),
+  });
+  const claim = useMutation({
+    mutationFn: (subject: string) => claimClassSubjectNotes({ data: { classId: id, subject } }),
+    onSuccess: (res) => {
+      const count = (res as { count?: number }).count ?? 0;
+      toast.success(count ? tr(`نُقلت ${count} ملاحظة إليك`) : tr("لا توجد ملاحظات لنقلها"));
+      void queryClient.invalidateQueries({ queryKey: ["class", id] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر النقل")),
   });
 
   useEffect(() => {
@@ -82,22 +99,16 @@ function ClassBody() {
     if (sort === "alpha") {
       return [...filtered].sort((a: StudentRow, b: StudentRow) => a.name.localeCompare(b.name, "ar"));
     }
-    return [...filtered].sort((a: StudentRow, b: StudentRow) => {
-      const r = dailyRank(a.dailyKind) - dailyRank(b.dailyKind);
-      if (r !== 0) return r;
-      return a.name.localeCompare(b.name, "ar");
-    });
+    return filtered;
   }, [query.data, q, sort]);
 
   const pickedIds = useMemo(() => new Set(targets.map((item) => item.studentId)), [targets]);
-  const visibleIds = useMemo(() => new Set(students.map((student: StudentRow) => student.id)), [students]);
-  const kept = elsewhereLabel(targets, visibleIds);
 
   if (query.isPending) {
     const current = classes.find((c) => c.id === id);
     return (
       <div className="space-y-3">
-        {current ? (
+        {current && !fromDesk ? (
           <StageClassBar
             stages={stages}
             classes={classes}
@@ -107,7 +118,7 @@ function ClassBody() {
             onSort={setSort}
             onChange={(nextStage, nextClass) => {
               if (nextClass) {
-                void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+                void navigate({ to: "/class/$classId", params: { classId: String(nextClass) }, search: {} });
                 return;
               }
               void navigate({ to: "/classes", search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined } });
@@ -124,10 +135,13 @@ function ClassBody() {
     return <p className="text-danger">{tr("تعذر تحميل الفصل.")}</p>;
   }
 
-  const { classInfo } = query.data;
+  const { classInfo, subjectHandoff = [] } = query.data as typeof query.data & {
+    subjectHandoff?: { subject: string; count: number }[];
+  };
 
   return (
     <div className="space-y-5">
+      {fromDesk ? null : (
       <StageClassBar
         stages={stages}
         classes={classes}
@@ -137,12 +151,13 @@ function ClassBody() {
         onSort={setSort}
         onChange={(nextStage, nextClass) => {
           if (nextClass) {
-            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) }, search: {} });
             return;
           }
           void navigate({ to: "/classes", search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined } });
         }}
       />
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <ClassSwitcher
@@ -151,166 +166,240 @@ function ClassBody() {
             stageName={classInfo.stageName}
             shortName={classInfo.shortName}
             label={classInfo.label}
+            backTo={fromDesk ? "/desk" : undefined}
           />
         </div>
         <AddStudentButton classId={id} />
       </div>
-      <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={tr("ابحث عن طالب…")}
-          className="pr-10"
-        />
-      </div>
-      <div className={cn(picking && "sticky top-14 z-20 -mx-4 border-y border-border bg-bg/95 px-4 py-2 backdrop-blur-sm")}>
-        <GroupViolationBar
-          picking={picking}
-          selected={targets.length}
-          shownCount={students.length}
-          elsewhere={kept}
-          onTogglePicking={() => {
-            setGroupPicking(!picking);
-            setGroupOpen(false);
+      {lessonFromTable ? (
+        <p className="rounded-[var(--radius-md)] bg-primary/10 px-3 py-2 text-sm font-semibold">
+          {tr("مادة هذه الحصة")}: {lessonFromTable}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            ["one", "فردي"],
+            ["group", "جماعي"],
+            ["year", "كشف أعمال السنة"],
+            ["analysis", "التقرير الشامل"],
+            ["summary", "تحليل الدرجات"],
+            ["roster", "كشف الفصل"],
+            ["attendance", "الحضور والغياب"],
+          ] as const
+        ).map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setFollowMode(mode)}
+            className={cn(
+              "min-h-8 rounded-full border px-3 py-1 text-sm font-semibold",
+              followMode === mode ? "border-primary bg-primary/10 text-primary" : "border-border bg-card",
+            )}
+          >
+            {tr(label)}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            if (followMode === "one" || followMode === "group") setFollowMode("year");
+            setPrintTick((tick) => tick + 1);
           }}
-          onSelectShown={() => {
-            addGroupStudents(
-              students.map((student: StudentRow) => ({
-                studentId: student.id,
-                studentName: student.name,
-                classId: id,
-              })),
-            );
-          }}
-          onClear={clearGroupStudents}
-          onApply={() => setGroupOpen(true)}
-        />
-      </div>
-      <ul className="mx-[calc(2mm-1rem)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-card sm:mx-0 sm:rounded-[var(--radius-lg)]">
-        {students.map((student: StudentRow) => {
-          const latest = student.todayNotes[0];
-          const extra = student.todayNotes.length - 1;
-          const absent = student.dailyKind === "absence";
-          const late = student.dailyKind === "late";
-          const label = studentLabel(locale, student.name, student.nameEn);
-          return (
-            <li
-              key={student.id}
-              className={cn(
-                "px-3 py-3 sm:px-4",
-                absent && "bg-danger-soft/40",
-                late && "bg-warn-soft/40",
-                picking && pickedIds.has(student.id) && "bg-primary/5",
-              )}
-            >
-              <div className="flex items-start gap-1.5">
-                {picking ? (
-                  <PickMark
-                    checked={pickedIds.has(student.id)}
-                    label={label}
-                    onToggle={() =>
-                      toggleGroupStudent({
-                        studentId: student.id,
-                        studentName: label,
-                        classId: id,
-                      })
-                    }
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (picking) {
-                      toggleGroupStudent({
-                        studentId: student.id,
-                        studentName: label,
-                        classId: id,
-                      });
-                    } else setActiveStudent(student.id);
-                  }}
-                  className="min-w-0 flex-1 text-right"
-                >
-                  <span className="flex flex-wrap items-center gap-2">
-                    {student.healthNote ? (
-                      <span className="inline-flex max-w-full items-center gap-1.5">
-                        <Badge tone="warn" className="shrink-0">{tr("ملاحظة صحية")}</Badge>
-                        <span className="text-xs font-medium leading-5 text-warn">{student.healthNote}</span>
-                      </span>
-                    ) : null}
-                    <span
-                      className={cn(
-                        "min-w-0 flex-1 text-lg font-semibold leading-7 break-words",
-                        absent && "text-danger",
-                        late && "text-warn",
-                      )}
-                    >
-                      {label}
-                    </span>
-                    {student.todayNotes.length > 0 ? (
-                      <span
-                        className="mt-2 inline-block size-2 shrink-0 rounded-full bg-danger"
-                        title={staff.role === "teacher" ? tr("لديك ملاحظات اليوم") : tr("ملاحظات اليوم")}
-                      />
-                    ) : null}
-                  </span>
-                  {absent ? (
-                    <span className="mt-1 inline-flex items-center">
-                      <Badge tone="danger">{tr("غائب اليوم — مسجّل في الكشف اليومي")}</Badge>
-                    </span>
-                  ) : late ? (
-                    <span className="mt-1 inline-flex flex-wrap items-center gap-1.5">
-                      <Badge tone="warn">
-                        {tr("متأخر")}
-                        {student.arrivedAt ? ` · ${tr("حضر الساعة")} ${formatTime(student.arrivedAt)}` : ""}
-                      </Badge>
-                    </span>
-                  ) : null}
-                  <span className="mt-1 block">
-                    {student.todayNotes.length === 0 ? (
-                      <span className="text-xs text-fg-subtle">
-                        {tr("اضغط الاسم للرسائل والطباعة والتعديل")}
-                      </span>
-                    ) : (
-                      <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border border-border bg-bg-elevated px-2 py-0.5">
-                        <Badge tone={noteTone(latest.type, latest.status)}>
-                          {latest.behaviorTypeName
-                            ? `${tr(NOTE_META[latest.type as keyof typeof NOTE_META].short)} · ${tr(latest.behaviorTypeName)}`
-                            : tr(NOTE_META[latest.type as keyof typeof NOTE_META].short)}
-                        </Badge>
-                        <NoteSession
-                          periodKey={latest.periodKey}
-                          subject={latest.teacherSubject}
-                          season={school.season}
-                        />
-                        {extra > 0 ? (
-                          <span className="text-[11px] text-fg-muted">{tr("و")}{extra} {tr("أخرى — اضغط الاسم")}</span>
-                        ) : null}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                <StudentQuickActions
-                  studentId={student.id}
-                  studentName={label}
-                  classId={id}
-                  parentPhone={student.parentPhone}
-                  className={classInfo.name}
-                  shortName={classInfo.shortName}
-                />
-              </div>
-            </li>
-          );
-        })}
-        {students.length === 0 ? (
-          <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا يوجد طلاب مطابقون")}</li>
+          className="min-h-8 rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold"
+        >
+          {tr("طباعة")}
+        </button>
+        {followMode === "group" ? (
+          <button
+            type="button"
+            onClick={() => setGroupPicking(!picking)}
+            className={cn(
+              "min-h-8 rounded-full border px-3 py-1 text-sm font-semibold",
+              picking ? "border-danger bg-danger text-white" : "border-danger bg-danger-soft text-danger",
+            )}
+          >
+            {tr("إضافة مخالفة")}
+          </button>
         ) : null}
-      </ul>
+      </div>
+      {subjectHandoff.length > 0 ? (
+        <div className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
+          <p className="text-sm font-semibold">{tr("ملاحظات مادة لدى معلم آخر")}</p>
+          <div className="flex flex-wrap gap-2">
+            {subjectHandoff.map((item) => (
+              <Button
+                key={item.subject}
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={claim.isPending}
+                onClick={() => claim.mutate(item.subject)}
+              >
+                {tr("نقل ملاحظات")} {item.subject} ({item.count})
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {followMode === "group" && picking ? (
+        <div className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                addGroupStudents(students.map((student: StudentRow) => ({
+                  studentId: student.id,
+                  studentName: studentLabel(locale, student.name, student.nameEn),
+                  classId: id,
+                })));
+                setGroupOpen(true);
+              }}
+            >
+              {tr("الجميع")}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" disabled={targets.length === 0} onClick={() => setGroupOpen(true)}>
+              {tr("تسجيل على المحدد")} {targets.length ? `(${targets.length})` : ""}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                clearGroupStudents();
+                setGroupPicking(false);
+              }}
+            >
+              {tr("إلغاء")}
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {students.map((student: StudentRow) => {
+              const label = studentLabel(locale, student.name, student.nameEn);
+              const on = pickedIds.has(student.id);
+              return (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => toggleGroupStudent({ studentId: student.id, studentName: label, classId: id })}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-sm",
+                    on ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      {followMode === "year" || followMode === "analysis" || followMode === "attendance" || followMode === "summary" || followMode === "roster" ? (
+        <ClassRecords classId={id} presetSubject={lessonFromTable} view={followMode} printTick={printTick} />
+      ) : null}
+      {followMode === "group" ? (
+        <div className="rounded-[var(--radius-lg)] border border-border bg-card">
+          <ClassBoard classId={id} presetSubject={lessonFromTable} presetPeriod={periodFromTable} onClose={() => setFollowMode("one")} />
+        </div>
+      ) : null}
+      {followMode === "one" ? (
+        <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={tr("ابحث عن طالب…")}
+              className="pr-10"
+            />
+          </div>
+          <ul className="divide-y divide-border rounded-[var(--radius-lg)] border border-border bg-card">
+            {students.map((student: StudentRow) => {
+              const label = studentLabel(locale, student.name, student.nameEn);
+              const open = followStudent === student.id;
+              const taps = student.todayTaps ?? [];
+              const marks = student.marks ?? [];
+              const chips = [...taps.reduce((map, tap) => {
+                const row = map.get(tap.label) ?? { label: tap.label, points: 0 };
+                row.points += tap.points;
+                map.set(tap.label, row);
+                return map;
+              }, new Map<string, { label: string; points: number }>()).values()];
+              const lesson = chips.length ? chips.reduce((sum, chip) => sum + chip.points, 0) : marks.reduce((sum, mark) => sum + mark.lesson, 0);
+              const absent = student.dailyKind === "absence";
+              const late = student.dailyKind === "late";
+              return (
+                <li key={student.id} className={cn("px-3 py-2", absent ? "bg-red-100" : late ? "bg-orange-50" : lesson > 0 ? "bg-emerald-50" : lesson < 0 ? "bg-orange-100" : "")}>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFollowStudent(open ? null : student.id)}
+                      className="min-w-0 flex-1 text-right"
+                    >
+                      <span className="block min-w-0">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <DayName studentId={student.id} className={cn("block truncate text-base font-semibold leading-6", lesson > 0 && !absent && "text-emerald-700", lesson < 0 && !absent && "text-orange-700")}>{label}</DayName>
+                          {absent ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">{tr("غائب")}</span> : null}
+                          {late ? <span className="text-xs font-bold text-orange-700">{tr("متأخر")} {arrivedClock(student.arrivedAt)}</span> : null}
+                        </span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <ExitPermitBadge studentId={student.id} />
+                          {student.healthNote ? <span className="rounded bg-fuchsia-200 px-1.5 py-0.5 text-[11px] font-bold text-fuchsia-900">{student.healthNote}</span> : null}
+                          {chips.map((tap) => (
+                            <span key={tap.label} className={cn("rounded px-1.5 py-0.5 text-[11px] font-bold", tap.points < 0 ? "bg-orange-500 text-white" : "bg-emerald-600 text-white")}>
+                              {tap.label} {tap.points > 0 ? "+" : ""}{tap.points}
+                            </span>
+                          ))}
+                          {marks.map((mark) => (
+                            <span key={mark.subject || "total"} className={cn("text-sm font-bold tabular-nums", mark.total < 0 ? "text-orange-700" : "text-emerald-700")}>
+                              {marks.length > 1 && mark.subject ? `${mark.subject} ` : `${tr("المجموع")} `}
+                              {mark.total > 0 ? "+" : ""}{mark.total}
+                            </span>
+                          ))}
+                          {lesson && chips.length === 0 ? <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-bold", lesson > 0 ? "bg-emerald-600 text-white" : "bg-orange-500 text-white")}>{lesson > 0 ? `+${lesson}` : lesson}</span> : null}
+                          <span className="text-xs text-fg-muted">{tr("متابعة تحصيلية")}</span>
+                        </span>
+                      </span>
+                    </button>
+                    {open ? (
+                      <button
+                        type="button"
+                        onClick={() => setFollowStudent(null)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-lg leading-none"
+                        aria-label={tr("إغلاق")}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                    <Button type="button" size="sm" variant="secondary" onClick={() => setActiveStudent(student.id)}>
+                      {tr("السجل")}
+                    </Button>
+                    <NoteActions
+                      studentId={student.id}
+                      studentName={label}
+                      classId={id}
+                      presetSubject={lessonFromTable}
+                      presetPeriod={periodFromTable}
+                    />
+                  </div>
+                  {open ? <ClassBoard classId={id} onlyStudentId={student.id} compact presetSubject={lessonFromTable} presetPeriod={periodFromTable} lessonTaps={taps} onClose={() => setFollowStudent(null)} /> : null}
+                </li>
+              );
+            })}
+            {students.length === 0 ? (
+              <li className="px-4 py-10 text-center text-sm text-fg-muted">{tr("لا يوجد طلاب مطابقون")}</li>
+            ) : null}
+          </ul>
+        </>
+      ) : null}
       <NoteComposer
         targets={targets}
         open={groupOpen}
         onOpenChange={setGroupOpen}
         onSubmitted={(result) => finishGroupPick(result.failedIds)}
+        presetSubject={lessonFromTable}
+        presetPeriod={periodFromTable}
       />
       <StudentSheet
         studentId={activeStudent}
@@ -318,6 +407,8 @@ function ClassBody() {
         onOpenChange={(open) => {
           if (!open) setActiveStudent(null);
         }}
+        presetSubject={lessonFromTable}
+        presetPeriod={periodFromTable}
       />
     </div>
   );

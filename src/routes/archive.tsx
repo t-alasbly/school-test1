@@ -116,7 +116,7 @@ function ArchiveBody() {
       <header>
         <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           {tr("الأرشيف")}
-          <PageHelp text={tr("كل ما سُجّل في المدرسة: صحّح الخطأ أو احذفه. يظهر زر التصحيح أيضاً في سجل الطالب وشؤون الطلاب والتقارير.")} />
+          <PageHelp text={tr("للتصحيح والحذف فقط، وليس للمتابعة اليومية. المتابعة من الإدارة والإرشاد.")} />
         </h1>
       </header>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr("بحث باسم الطالب أو النص…")} />

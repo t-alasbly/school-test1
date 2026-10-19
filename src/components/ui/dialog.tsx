@@ -35,19 +35,19 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-lg)] border border-border bg-bg-elevated p-5 text-fg shadow-[var(--shadow-card)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          "fixed inset-x-4 top-4 z-50 mx-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-border bg-bg-elevated p-5 text-fg shadow-[var(--shadow-card)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
         dir="rtl"
         {...props}
       >
-        {children}
         {hideClose ? null : (
         <DialogPrimitive.Close className="absolute top-3 left-3 z-10 grid size-11 place-items-center rounded-[var(--radius-xs)] text-fg-muted hover:bg-muted hover:text-fg">
           <X className="size-4" />
           <span className="sr-only">{tr("إغلاق")}</span>
         </DialogPrimitive.Close>
         )}
+        {children}
       </DialogPrimitive.Content>
     </DialogPortal>
   );

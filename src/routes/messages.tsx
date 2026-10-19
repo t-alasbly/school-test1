@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { listMessageRecipients, logParentMessage } from "@/lib/school/api";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { isoFromDate } from "@/lib/school/calendar";
 import {
   NOTE_META,
@@ -200,7 +202,7 @@ function MessagesBody() {
               else if (picker === "absence" || picker === "late") setPicker("general");
             }}
             className={cn(
-              "min-h-11 rounded-full border px-3 text-sm font-semibold",
+              "min-h-8 rounded-full border px-3 text-sm font-semibold",
               scope === item.id ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg-elevated text-fg-muted",
             )}
           >
@@ -336,7 +338,10 @@ function MessagesBody() {
                   aria-label={`تحديد ${row.name}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{row.name}</p>
+                  <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+                    <DayName studentId={row.id}>{row.name}</DayName>
+                    <ExitPermitBadge studentId={row.id} />
+                  </p>
                   <p className="text-xs text-fg-muted">
                     {row.label}
                     {number ? ` · ${row.parentPhone}` : tr(" · بلا جوال")}

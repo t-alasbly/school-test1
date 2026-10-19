@@ -95,12 +95,15 @@ ${collectedStyles()}
   }
   .ksa-diwani { height: 35px; width: auto; }
   img { max-height: 62px; width: auto; object-fit: contain; }
-  table, .official-table {
+  table, .official-table, .grade-equal {
     width: 100%;
     border-collapse: collapse;
     text-align: center;
     margin: 8px 0 12px;
+    table-layout: fixed;
   }
+  .grade-name, td.grade-name, th.grade-name { text-align: right !important; width: 34%; }
+  .grade-no { width: 2rem; }
   body.printing-form #school-print-mount .official-table th,
   body.printing-form #school-print-mount .official-table td,
   body.printing-form #school-print-mount table th,

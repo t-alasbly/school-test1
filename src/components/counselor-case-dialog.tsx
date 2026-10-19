@@ -63,7 +63,7 @@ export function CounselorCaseDialog({
                 type="button"
                 onClick={() => setKind(item.key)}
                 className={cn(
-                  "min-h-11 rounded-[var(--radius-md)] border px-2 text-sm font-semibold",
+                  "min-h-8 rounded-[var(--radius-md)] border px-2 text-sm font-semibold",
                   kind === item.key
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border bg-bg",

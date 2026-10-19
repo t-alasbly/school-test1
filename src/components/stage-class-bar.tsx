@@ -27,15 +27,7 @@ export function sortedStudents<T extends { studentName?: string; name?: string; 
       return an.localeCompare(bn, "ar");
     });
   }
-  return copy.sort((a, b) => {
-    const ac = a.classLabel || a.label || "";
-    const bc = b.classLabel || b.label || "";
-    const c = ac.localeCompare(bc, "ar", { numeric: true });
-    if (c) return c;
-    const an = a.studentName || a.name || "";
-    const bn = b.studentName || b.name || "";
-    return an.localeCompare(bn, "ar");
-  });
+  return copy;
 }
 
 export function StageClassBar({

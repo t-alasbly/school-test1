@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImproveDialog } from "@/components/improve-dialog";
 import { NoteSession } from "@/components/note-session";
 import { NoteActions } from "@/components/note-actions";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { StaffMailDialog } from "@/components/staff-mail-dialog";
 import { StaffMailInbox } from "@/components/staff-mail-inbox";
-import { PrintFormsButton } from "@/components/print-forms";
+import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
+import { StudentDossier } from "@/components/student-dossier";
 import { NoteRecordTools, ImprovementRecordTools, MessageRecordTools } from "@/components/record-actions";
 import { EditStudentButton } from "@/components/student-editor";
 import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
@@ -15,31 +18,248 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { followImprovement, getStudentNotes, listImprovements, listParentMessages } from "@/lib/school/api";
+import { followImprovement, getStudentNotes, getTeacherStudentReport, listImprovements, listParentMessages, requestClassMove, deleteNote, createStudentMail } from "@/lib/school/api";
+import { getStudentAttendanceDays } from "@/lib/school/attendance-totals";
 import {
   IMPROVEMENT_STATUS,
   NOTE_META,
   degreeLabel,
   formatStamp,
+  hijriDate,
   messageKindLabel,
   noteTone,
   occurrenceLabel,
 } from "@/lib/school/constants";
 import { NoteThread } from "@/components/note-thread";
+import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
 import type { BehaviorImprovement, ImprovementStatus, MessageKind, NoteDest } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
+
+function Ring({ label, value, color }: { label: string; value: string; color: string }) {
+  const numeric = value.endsWith("%") ? Number(value.slice(0, -1)) : null;
+  const pct = numeric == null || Number.isNaN(numeric) ? 0 : Math.max(0, Math.min(100, numeric));
+  const radius = 28;
+  const length = 2 * Math.PI * radius;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width="78" height="78" viewBox="0 0 78 78" aria-hidden>
+        <circle cx="39" cy="39" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="8" />
+        {numeric != null ? (
+          <circle
+            cx="39"
+            cy="39"
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth="8"
+            strokeDasharray={`${(pct / 100) * length} ${length}`}
+            strokeLinecap="round"
+            transform="rotate(-90 39 39)"
+          />
+        ) : null}
+        <text x="39" y="44" textAnchor="middle" fontSize="13" fill="#111827">{value}</text>
+      </svg>
+      <span className="text-xs">{label}</span>
+    </div>
+  );
+}
+
+function TeacherReport({ studentId }: { studentId: number }) {
+  const { school } = useWorkspace();
+  const printRef = useRef<HTMLDivElement>(null);
+  const [note, setNote] = useState("");
+  const [shown, setShown] = useState(false);
+  const query = useQuery({
+    queryKey: ["teacher-student-report", studentId],
+    queryFn: () => getTeacherStudentReport({ data: { studentId } }),
+    enabled: studentId > 0,
+  });
+  const send = useMutation({
+    mutationFn: async () => {
+      const data = query.data as {
+        student: { name: string; classLabel: string };
+        teacher: string;
+        notes: { type: string; details: string; subject: string }[];
+        grades: { subject: string; combine: string; total: number; periods: { title: string; total: number }[] }[];
+      } | undefined;
+      if (!data) throw new Error("افتح التقرير أولاً");
+      const lines = [
+        `تقرير لإرساله لولي الأمر عبر واتساب`,
+        `المعلم ${data.teacher} — ${data.student.name} — ${data.student.classLabel}`,
+        ...data.grades.map((grade) => `${grade.subject}: ${grade.combine === "avg" ? "متوسط" : "مجموع"} ${grade.total} (${grade.periods.map((period) => `${period.title} ${period.total}`).join("، ")})`),
+        ...data.notes.map((item) => `${NOTE_META[item.type as keyof typeof NOTE_META]?.label || item.type}${item.subject ? ` · ${item.subject}` : ""}: ${item.details || "—"}`),
+        note.trim() ? `ملاحظة المعلم: ${note.trim()}` : "",
+      ].filter(Boolean).join("\n").slice(0, 7500);
+      await createStudentMail({ data: { studentId, dest: "vp", body: lines } });
+    },
+    onSuccess: () => toast.success(tr("أُرسل التقرير كاملاً إلى الوكيل ليرسله لولي الأمر")),
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الإرسال")),
+  });
+  const data = query.data as {
+    student: { name: string; classLabel: string; stageName?: string };
+    teacher: string;
+    subject?: string;
+    stats?: {
+      points: number;
+      count: number;
+      positive: number;
+      negative: number;
+      days: number;
+      badges: number;
+      lastLabel: string;
+      frequentLabel: string;
+      summary: string;
+    };
+    indicators?: { positive: number | null; negative: number | null; attendance: number };
+    evals?: { label: string; points: number; subject: string; createdAt: string }[];
+    attendance?: { percent: number; rows: { status: string; days: number; dates: string }[] };
+    notes: { id: number; type: string; details: string; subject: string; createdAt: string }[];
+    grades: { subject: string; combine: string; total: number; periods: { no: number; title: string; participation: number; exam: number; evalPoints: number; total: number }[] }[];
+  } | undefined;
+  const stats = data?.stats ?? { points: 0, count: 0, positive: 0, negative: 0, days: 0, badges: 0, lastLabel: "—", frequentLabel: "—", summary: "" };
+  const issued = `${hijriDate()} — ${new Intl.DateTimeFormat("ar-SA", { hour: "numeric", minute: "2-digit" }).format(new Date())}`;
+  const statRow = (label: string, value: string | number) => (
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 flex-1 rounded-lg border border-[#d7e3dc] bg-[#f7fbf8] px-2 py-1 text-xs">{label}</span>
+      <span className="w-14 rounded-lg border border-[#d7e3dc] bg-white px-2 py-1 text-center text-sm">{value}</span>
+    </div>
+  );
+  return (
+    <section className="space-y-2 rounded-[var(--radius-md)] border border-border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">{tr("تقرير المعلم")}</h2>
+        <Button type="button" size="sm" variant="secondary" onClick={() => setShown(true)}>{tr("عرض التقرير")}</Button>
+        <Button type="button" size="sm" variant="secondary" disabled={!data} onClick={() => printRef.current && printElement(printRef.current)}>{tr("طباعة")}</Button>
+      </div>
+      {shown && query.isPending ? <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p> : null}
+      {data ? (
+        <>
+          <div ref={printRef} className="space-y-3 rounded-[var(--radius-md)] bg-white p-3 text-sm text-black">
+            <OfficialLetterhead school={school} />
+            <div className="mx-auto max-w-xl border border-[#1f8a4c] px-3 py-2 text-center text-sm font-semibold">
+              تقرير الطالب/ة [{data.student.name}]
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["اسم الطالب/ة", data.student.name],
+                ["المرحلة الدراسية / الصف", `${data.student.stageName || "—"} - ${data.student.classLabel}`],
+                ["المادة", data.subject || data.grades[0]?.subject || "—"],
+                ["تاريخ الإصدار", issued],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-[#1f8a4c] px-2 py-2 text-center">
+                  <p className="text-[11px] text-[#1f8a4c]">{label}</p>
+                  <p className="text-xs font-semibold">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <section className="space-y-2 rounded-xl border border-[#d7e3dc] p-2">
+                <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">الإحصائيات العامة</h3>
+                {statRow("نقاط التقييمات", stats.points)}
+                {statRow("عدد التقييمات", stats.count)}
+                {statRow("تقييمات إيجابية", stats.positive)}
+                {statRow("تقييمات سلبية", stats.negative)}
+                {statRow("أيام تقييمه", stats.days)}
+                {statRow("الأوسمة", stats.badges)}
+              </section>
+              <section className="space-y-2 rounded-xl border border-[#d7e3dc] p-2">
+                <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">ملخص الأداء</h3>
+                <p className="rounded-lg bg-[#4b5563] px-2 py-2 text-center text-xs text-white">{stats.summary}</p>
+                <div className="grid grid-cols-[1fr_auto] gap-1 text-xs">
+                  <span className="rounded bg-[#e5e7eb] px-2 py-1 text-center">المؤشر</span>
+                  <span className="rounded bg-[#e5e7eb] px-2 py-1 text-center">القيمة</span>
+                  <span className="rounded bg-[#1f8a4c] px-2 py-1 text-center text-white">التقييمات الإيجابية</span>
+                  <span className="rounded border px-2 py-1 text-center">{stats.positive}</span>
+                  <span className="rounded bg-[#2563eb] px-2 py-1 text-center text-white">آخر تقييم</span>
+                  <span className="rounded border px-2 py-1 text-center">{stats.lastLabel}</span>
+                  <span className="rounded bg-[#f59e0b] px-2 py-1 text-center text-white">أكثر تقييم تكراراً</span>
+                  <span className="rounded border px-2 py-1 text-center">{stats.frequentLabel}</span>
+                  <span className="rounded bg-[#dc2626] px-2 py-1 text-center text-white">التقييمات السلبية</span>
+                  <span className="rounded border px-2 py-1 text-center">{stats.negative}</span>
+                </div>
+              </section>
+            </div>
+            <div className="flex justify-center">
+              <span className="rounded-full bg-[#1f8a4c] px-4 py-1 text-sm font-semibold text-white">التحليل البياني</span>
+            </div>
+            <p className="text-center text-xs">مؤشرات الطالب</p>
+            <div className="flex flex-wrap items-start justify-around gap-3 rounded-xl border border-[#d7e3dc] py-3">
+              <Ring label="الحضور" value={`%${data.indicators?.attendance ?? data.attendance?.percent ?? 100}`} color="#2563eb" />
+              <Ring label="التقييمات السلبية" value={data.indicators?.negative == null ? "—" : `%${data.indicators.negative}`} color="#dc2626" />
+              <Ring label="التقييمات الإيجابية" value={data.indicators?.positive == null ? "—" : `%${data.indicators.positive}`} color="#1f8a4c" />
+            </div>
+            <div className="flex justify-center">
+              <span className="rounded-full bg-[#1f8a4c] px-4 py-1 text-sm font-semibold text-white">سجل التقييمات ({stats.count})</span>
+            </div>
+            {(data.evals ?? []).length === 0 ? <p className="text-center text-xs">لا توجد تقييمات بعد</p> : (
+              <ul className="space-y-1 text-xs">
+                {(data.evals ?? []).map((item, index) => (
+                  <li key={`${item.createdAt}-${index}`} className="flex justify-between gap-2 border-b border-[#e5e7eb] py-1">
+                    <span>{formatStamp(item.createdAt)}{item.subject ? ` · ${item.subject}` : ""}</span>
+                    <span>{item.label} ({item.points > 0 ? "+" : ""}{item.points})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex justify-center">
+              <span className="rounded-full bg-[#1f8a4c] px-4 py-1 text-sm font-semibold text-white">الحضور والغياب</span>
+            </div>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr>
+                  {["الحالة", "عدد الأيام", "التواريخ"].map((label) => (
+                    <th key={label} className="border border-[#1f8a4c] bg-[#1f8a4c] px-2 py-1 text-white">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(data.attendance?.rows ?? []).map((row) => (
+                  <tr key={row.status}>
+                    <td className="border border-[#d7e3dc] px-2 py-1 text-center">{row.status}</td>
+                    <td className="border border-[#d7e3dc] px-2 py-1 text-center">{row.days}</td>
+                    <td className="border border-[#d7e3dc] px-2 py-1 text-center">{row.dates}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.grades.map((grade) => (
+              <p key={grade.subject} className="text-xs">{grade.subject}: {grade.combine === "avg" ? "متوسط" : "مجموع"} {grade.total}</p>
+            ))}
+            {note.trim() ? <p className="text-xs">{tr("ملاحظة الإرسال")}: {note.trim()}</p> : null}
+            <div className="mt-6 grid grid-cols-2 gap-4 text-center text-sm">
+              <div>
+                <p className="font-semibold">معلم/ة المادة</p>
+                <p className="mt-1">{data.teacher || "………………"}</p>
+              </div>
+              <div>
+                <p className="font-semibold">مدير/ة المدرسة</p>
+                <p className="mt-1">{school.principalName || "………………"}</p>
+              </div>
+            </div>
+          </div>
+          <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={tr("ملاحظة تُرفق مع الرسالة")} />
+          <Button type="button" size="sm" disabled={send.isPending || !data} onClick={() => send.mutate()}>{tr("إرسال للوكيل لولي الأمر")}</Button>
+        </>
+      ) : null}
+    </section>
+  );
+}
 
 export function StudentSheet({
   studentId,
   open,
   onOpenChange,
+  presetSubject,
+  presetPeriod,
 }: {
   studentId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  presetSubject?: string;
+  presetPeriod?: string;
 }) {
-  const { school, staff } = useWorkspace();
+  const { school, staff, classes } = useWorkspace();
   const { locale } = useLocale();
   const query = useQuery({
     queryKey: ["student", studentId],
@@ -56,6 +276,24 @@ export function StudentSheet({
     queryFn: () => listParentMessages({ data: { studentId: studentId! } }),
     enabled: open && studentId != null,
   });
+  const attendance = useQuery({
+    queryKey: ["student-attendance-days", studentId],
+    queryFn: () => getStudentAttendanceDays({ data: { studentId: studentId! } }),
+    enabled: open && studentId != null,
+  });
+  const queryClient = useQueryClient();
+  const [moveClassId, setMoveClassId] = useState("");
+  const move = useMutation({
+    mutationFn: () => requestClassMove({ data: { studentId: studentId!, classId: Number(moveClassId) } }),
+    onSuccess: () => {
+      toast.success(tr("أُضيف طلب النقل في مكتب الوكيل والمرشد ومن لديه صلاحية تعديل الطلاب"));
+      setMoveClassId("");
+      void queryClient.invalidateQueries({ queryKey: ["desk-inbox"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-desk"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال الطلب")),
+  });
 
   const student = query.data?.student;
   const shown = student ? studentLabel(locale, student.name, student.nameEn) : "";
@@ -69,7 +307,10 @@ export function StudentSheet({
       <SheetContent side="left" className="max-w-4xl overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0">{shown || tr("سجل الطالب")}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              {student ? <ExitPermitBadge studentId={student.id} /> : null}
+              {student ? <DayName studentId={student.id}>{shown || tr("سجل الطالب")}</DayName> : <span className="min-w-0">{tr("سجل الطالب")}</span>}
+            </span>
             {student ? (
               <StaffMailDialog studentId={student.id} studentName={student.name} compact />
             ) : null}
@@ -93,6 +334,8 @@ export function StudentSheet({
                 subject={notes[0]?.teacherSubject}
                 createdAt={notes[0]?.createdAt}
                 periodKey={notes[0]?.periodKey}
+                noteId={notes[0]?.id}
+                behaviorDegree={notes[0]?.type === "behavior" ? notes[0]?.behaviorDegree : null}
               />
               ) : null}
               <PrintFormsButton
@@ -113,6 +356,7 @@ export function StudentSheet({
                       : "record"
                 }
               />
+              <StudentDossier studentId={student.id} />
               <EditStudentButton
                 student={{
                   id: student.id,
@@ -132,6 +376,8 @@ export function StudentSheet({
                 studentId={student.id}
                 studentName={student.name}
                 classId={student.classId}
+                presetSubject={presetSubject}
+                presetPeriod={presetPeriod}
               />
             </div>
           ) : null}
@@ -141,6 +387,45 @@ export function StudentSheet({
             <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
           ) : (
             <div className="space-y-6">
+              {studentId ? <TeacherReport studentId={studentId} /> : null}
+              <section className="space-y-2">
+                <h2 className="text-sm font-semibold">{tr("الغياب والتأخر والانصراف")}</h2>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-danger-soft px-2 py-1 text-danger">
+                    {tr("غياب")} {(attendance.data?.days ?? []).filter((row) => row.kind === "absence").length}
+                  </span>
+                  <span className="rounded-full bg-warn-soft px-2 py-1 text-warn">
+                    {tr("تأخر")} {(attendance.data?.days ?? []).filter((row) => row.kind === "late").length}
+                  </span>
+                  <span className="rounded-full bg-[#1d4ed8]/10 px-2 py-1 text-[#1d4ed8]">
+                    {tr("انصراف")} {(attendance.data?.days ?? []).filter((row) => row.kind === "leave" || row.leave).length}
+                  </span>
+                </div>
+                {(attendance.data?.days ?? []).length > 0 ? (
+                  <ul className="max-h-36 space-y-1 overflow-y-auto text-xs text-fg-muted">
+                    {[...(attendance.data?.days ?? [])].reverse().slice(0, 12).map((row) => (
+                      <li key={`${row.kind}-${row.day}`}>
+                        {row.day} — {row.kind === "leave" || row.leave ? tr("انصراف") : row.kind === "late" ? tr("تأخر") : tr("غياب")}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      className="h-9 rounded-[var(--radius-md)] border border-border bg-bg px-2 text-sm"
+                      value={moveClassId}
+                      onChange={(e) => setMoveClassId(e.target.value)}
+                    >
+                      <option value="">{tr("طلب نقل إلى فصل")}</option>
+                      {classes.map((cls) => (
+                        <option key={cls.id} value={cls.id}>{cls.label}</option>
+                      ))}
+                    </select>
+                    <Button type="button" size="sm" disabled={!moveClassId || move.isPending} onClick={() => move.mutate()}>
+                      {tr("إرسال")}
+                    </Button>
+                  </div>
+                </section>
               {scoped ? (
                 <p className="rounded-[var(--radius-md)] border border-border bg-muted px-3 py-2 text-xs text-fg-muted">
                   يظهر سجل ملاحظاتك فقط. مخالفات المعلمين الآخرين تظهر لمن مُنح صلاحية الاطلاع على جميع المخالفات.
@@ -163,11 +448,9 @@ export function StudentSheet({
                     <th className="border-b border-border px-3 py-2 font-medium">{tr("التفاصيل")}</th>
                     <th className="border-b border-border px-3 py-2 font-medium">{tr("الحالة")}</th>
                     <th className="border-b border-border px-3 py-2 font-medium">{tr("الإجراء")}</th>
-                    {canEditRecords ? (
-                      <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
-                        تصحيح
-                      </th>
-                    ) : null}
+                    <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
+                      {tr("تصحيح")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,6 +492,9 @@ export function StudentSheet({
                           {note.teacherSubject ? (
                             <span className="block text-xs text-fg-subtle">{note.teacherSubject}</span>
                           ) : null}
+                          {note.enteredByName && note.enteredByName !== note.teacherName ? (
+                            <span className="block text-xs text-fg-muted">{tr("المسجل")}: {note.enteredByName}</span>
+                          ) : null}
                         </td>
                         <td className="border-b border-border px-3 py-2 text-fg-muted">
                           {note.details || "—"}
@@ -223,14 +509,14 @@ export function StudentSheet({
                         <td className="border-b border-border px-3 py-2">
                           {note.status === "closed" ? note.actionTaken || "—" : "—"}
                         </td>
-                        {canEditRecords ? (
-                          <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
-                            <NoteRecordTools note={note} />
-                          </td>
-                        ) : null}
+                        <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
+                          {canEditRecords || note.teacherId === staff.userId ? (
+                            <NoteRecordTools note={note} teacherId={note.teacherId} />
+                          ) : null}
+                        </td>
                       </tr>
                       <tr>
-                        <td colSpan={canEditRecords ? 11 : 10} className="border-b border-border px-3 pb-3">
+                        <td colSpan={11} className="border-b border-border px-3 pb-3">
                           <NoteThread noteId={note.id} dest={(note.dest as NoteDest | undefined) ?? (note.referCounselor ? "counselor" : "vp")} compact />
                         </td>
                       </tr>
@@ -260,6 +546,25 @@ export function StudentSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CancelOwnNote({ noteId }: { noteId: number }) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: () => deleteNote({ data: { noteId } }),
+    onSuccess: () => {
+      toast.success(tr("تم الحذف"));
+      void queryClient.invalidateQueries({ queryKey: ["student"] });
+      void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
+  });
+  return (
+    <Button type="button" size="sm" variant="ghost" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+      {tr("إلغاء المخالفة")}
+    </Button>
   );
 }
 

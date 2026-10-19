@@ -43,7 +43,7 @@ export function EditStudentButton({
   student,
   showLabel = false,
 }: {
-  student: { id: number; name: string; nameEn?: string; parentPhone: string; classId: number };
+  student: { id: number; name: string; nameEn?: string; parentPhone: string; parentPhone2?: string; nationalId?: string; nationality?: string; classId: number };
   showLabel?: boolean;
 }) {
   const { staff } = useWorkspace();
@@ -144,7 +144,7 @@ function StudentEditorDialog({
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   classId: number;
-  student?: { id: number; name: string; nameEn?: string; parentPhone: string; classId: number };
+  student?: { id: number; name: string; nameEn?: string; parentPhone: string; parentPhone2?: string; nationalId?: string; nationality?: string; classId: number };
 }) {
   const { classes } = useWorkspace();
   const { t } = useLocale();
@@ -153,6 +153,9 @@ function StudentEditorDialog({
   const [nameEn, setNameEn] = useState(student?.nameEn ?? "");
   const [enTouched, setEnTouched] = useState(false);
   const [phone, setPhone] = useState(student?.parentPhone ?? "");
+  const [phone2, setPhone2] = useState(student?.parentPhone2 ?? "");
+  const [nationalId, setNationalId] = useState(student?.nationalId ?? "");
+  const [nationality, setNationality] = useState(student?.nationality ?? "");
   const [targetClass, setTargetClass] = useState(String(student?.classId ?? classId));
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -162,6 +165,9 @@ function StudentEditorDialog({
     setNameEn(student?.nameEn?.trim() || transliterateArabicName(student?.name ?? ""));
     setEnTouched(Boolean(student?.nameEn?.trim()));
     setPhone(student?.parentPhone ?? "");
+    setPhone2(student?.parentPhone2 ?? "");
+    setNationalId(student?.nationalId ?? "");
+    setNationality(student?.nationality ?? "");
     setTargetClass(String(student?.classId ?? classId));
     setConfirmDelete(false);
   }, [open, student, classId]);
@@ -187,6 +193,9 @@ function StudentEditorDialog({
             name,
             nameEn,
             parentPhone: phone,
+            parentPhone2: phone2,
+            nationalId,
+            nationality,
           },
         });
       }
@@ -196,6 +205,9 @@ function StudentEditorDialog({
           name,
           nameEn,
           parentPhone: phone,
+          parentPhone2: phone2,
+          nationalId,
+          nationality,
           classId: Number(targetClass),
         },
       });
@@ -267,6 +279,26 @@ function StudentEditorDialog({
               inputMode="tel"
               placeholder="05xxxxxxxx"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="st-phone-2">{t("جوال آخر")}</Label>
+            <Input
+              id="st-phone-2"
+              value={phone2}
+              onChange={(e) => setPhone2(e.target.value)}
+              inputMode="tel"
+              placeholder="05xxxxxxxx"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="st-nid">{t("السجل المدني")}</Label>
+              <Input id="st-nid" value={nationalId} onChange={(e) => setNationalId(e.target.value)} inputMode="numeric" dir="ltr" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="st-nat">{t("الجنسية")}</Label>
+              <Input id="st-nat" value={nationality} onChange={(e) => setNationality(e.target.value)} />
+            </div>
           </div>
           {mode === "edit" ? (
             <div className="space-y-1.5">

@@ -76,6 +76,18 @@ export function NotificationBell() {
       void navigate({ to: "/staff" });
       return;
     }
+    if (item.kind === "class-move") {
+      void navigate({ to: "/desk/moves" });
+      return;
+    }
+    if (item.kind === "study-message" || item.kind === "action" || item.kind === "note" || item.kind === "repeat" || item.kind === "thread") {
+      void navigate({ to: "/desk/notes" });
+      return;
+    }
+    if (item.kind === "mail") {
+      void navigate({ to: "/desk/mail" });
+      return;
+    }
     if (item.classId && item.studentId) {
       void navigate({
         to: "/class/$classId",
@@ -85,14 +97,14 @@ export function NotificationBell() {
       return;
     }
     if (item.studentId && canAdmin) {
-      void navigate({ to: "/admin/behavior", search: { student: item.studentId } });
+      void navigate({ to: "/desk" });
       return;
     }
     if (canAdmin) {
-      void navigate({ to: "/admin" });
+      void navigate({ to: "/desk" });
       return;
     }
-    void navigate({ to: "/" });
+    void navigate({ to: "/desk" });
   }
 
   return (

@@ -22,7 +22,7 @@ export function rememberLocale(next: Locale) {
 
 const LocaleContext = createContext<{
   locale: Locale;
-  setLocale: (next: Locale) => void;
+  setLocale: (next: Locale, options?: { save?: boolean }) => void;
   t: (text: string) => string;
 }>({
   locale: "ar",
@@ -43,11 +43,17 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       locale,
-      setLocale: (next: Locale) => {
+      setLocale: (next: Locale, options?: { save?: boolean }) => {
         if (next === locale) return;
         rememberLocale(next);
         setLocaleState(next);
-        void setPreferredLocale({ data: { locale: next } }).finally(() => window.location.reload());
+        const finish = () => window.location.reload();
+        if (options?.save === false) {
+          if (typeof window !== "undefined") window.localStorage.setItem("school-locale-chosen", "1");
+          finish();
+          return;
+        }
+        void setPreferredLocale({ data: { locale: next } }).finally(finish);
       },
       t: (text: string) => (locale === "en" ? (EN_UI[text] ?? text) : text),
     }),

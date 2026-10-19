@@ -3,6 +3,7 @@ import {
   BookOpen,
   ChevronDown,
   ClipboardCheck,
+  ClipboardList,
   HeartHandshake,
   Languages,
   LayoutDashboard,
@@ -38,6 +39,7 @@ const NAV: {
   counselorLabel?: string;
   icon: typeof BookOpen;
 }[] = [
+  { to: "/desk", label: tr("مكتبي"), icon: ClipboardList },
   { to: "/classes", label: tr("الفصول"), icon: BookOpen },
   {
     to: "/admin",
@@ -51,9 +53,12 @@ const NAV: {
   { to: "/print", label: tr("الطباعة"), icon: Printer },
 ];
 
-function navActive(pathname: string, to: string) {
-  if (to === "/") return pathname === "/";
-  if (to === "/classes") return pathname.startsWith("/classes") || pathname.startsWith("/stage") || pathname.startsWith("/class");
+function navActive(pathname: string, to: string, fromDesk: boolean) {
+  if (to === "/desk") return pathname === "/desk" || pathname.startsWith("/desk/") || (fromDesk && pathname.startsWith("/class"));
+  if (to === "/classes") {
+    if (fromDesk && pathname.startsWith("/class")) return false;
+    return pathname.startsWith("/classes") || pathname.startsWith("/stage") || pathname.startsWith("/class");
+  }
   if (to === "/settings") return pathname.startsWith("/settings") || pathname === "/staff" || pathname === "/import" || pathname === "/archive";
   if (to === "/admin") return pathname === "/admin" || pathname.startsWith("/admin/");
   if (to === "/counseling") return pathname === "/counseling" || pathname.startsWith("/counseling/");
@@ -66,11 +71,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { t, locale, setLocale } = useLocale();
   const calendar = useCalendar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const fromDesk = useRouterState({
+    select: (s) => {
+      const search = s.location.search as { from?: string } | string;
+      if (typeof search === "string") return new URLSearchParams(search).get("from") === "desk";
+      return search?.from === "desk";
+    },
+  });
   const user = useCurrentUser();
   const [signingOut, setSigningOut] = useState(false);
   useEffect(() => {
     const preferred = staff.appearance?.locale;
     if (preferred !== "ar" && preferred !== "en") return;
+    if (window.localStorage.getItem("school-locale-chosen") === "1") {
+      window.localStorage.setItem("school-locale-user", staff.userId);
+      window.localStorage.removeItem("school-locale-chosen");
+      return;
+    }
     if (window.localStorage.getItem("school-locale-user") === staff.userId) return;
     window.localStorage.setItem("school-locale-user", staff.userId);
     rememberLocale(preferred);
@@ -92,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh bg-bg text-fg">
       <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
         <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-3 px-4 py-2">
-          <Link to="/" className="flex min-w-0 items-center gap-2">
+          <Link to="/desk" className="flex min-w-0 items-center gap-2">
             <SchoolMark size="sm" src={schoolLogo || undefined} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold">{school.name}</span>
@@ -103,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="mx-auto hidden items-center gap-1 md:flex">
             {items.map((item) => {
-              const active = navActive(pathname, item.to);
+              const active = navActive(pathname, item.to, fromDesk);
               const Icon = item.icon;
               const label = t(
                 staff.role === "counselor" && item.counselorLabel ? item.counselorLabel : item.label,
@@ -144,7 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <span className="block truncate font-normal text-fg-muted">{t(tr(ROLE_LABEL[staff.role]))}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setLocale(locale === "ar" ? "en" : "ar")}>
+                <DropdownMenuItem onSelect={() => setLocale(locale === "ar" ? "en" : "ar", { save: false })}>
                   <Languages className="size-4" />
                   {locale === "ar" ? "English" : tr("العربية")}
                 </DropdownMenuItem>
@@ -176,7 +193,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg-elevated/95 backdrop-blur-sm md:hidden">
         <div className="flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
           {items.map((item) => {
-            const active = navActive(pathname, item.to);
+            const active = navActive(pathname, item.to, fromDesk);
             const Icon = item.icon;
             const label = t(
               staff.role === "counselor" && item.counselorLabel ? item.counselorLabel : item.label,
@@ -186,11 +203,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 text-xs font-medium",
+                  "flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
                   active ? "text-primary" : "text-fg-muted",
                 )}
               >
-                <Icon className="size-5" />
+                <Icon className="size-4" />
                 <span className="truncate">{label}</span>
               </Link>
             );

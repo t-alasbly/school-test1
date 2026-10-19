@@ -312,7 +312,7 @@ function ClassesSettings() {
                           size="sm"
                           variant="ghost"
                           disabled={cls.studentCount > 0}
-                          onClick={() => deleteClassMutation.mutate(cls.id)}
+                          onClick={() => { if (window.confirm(tr("حذف هذا الفصل؟ لا يمكن التراجع."))) deleteClassMutation.mutate(cls.id); }}
                         >
                           {tr("حذف")}
                         </Button>

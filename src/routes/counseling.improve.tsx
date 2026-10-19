@@ -1,10 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { tr } from "@/lib/school/i18n";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ImprovementRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
-import { PageHelp } from "@/components/page-help";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
 import { listImprovements } from "@/lib/school/api";
 import { IMPROVEMENT_STATUS, formatStamp } from "@/lib/school/constants";
@@ -19,20 +19,15 @@ function ImprovePage() {
   });
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          {tr("خطط تحسين السلوك")}
-          <PageHelp text={tr("الخطط المفتوحة المرسلة من المعلمين")} />
-        </h1>
-      </header>
-      <ul className="space-y-2">
+    <>
+    <ul className="space-y-2">
         {(improvements.data ?? []).map((item: any) => (
           <li key={item.id} className="rounded-[var(--radius-md)] border border-border bg-card p-3">
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className="font-semibold" onClick={() => setActiveStudent(item.studentId)}>
-                {item.studentName}
+                <DayName studentId={item.studentId}>{item.studentName}</DayName>
               </button>
+              <ExitPermitBadge studentId={item.studentId} />
               <span className="text-xs text-fg-muted">{item.classLabel}</span>
               <Badge tone={item.status === "closed" ? "ok" : "warn"}>
                 {IMPROVEMENT_STATUS[item.status as keyof typeof IMPROVEMENT_STATUS]}
@@ -61,6 +56,6 @@ function ImprovePage() {
           if (!open) setActiveStudent(null);
         }}
       />
-    </div>
+    </>
   );
 }

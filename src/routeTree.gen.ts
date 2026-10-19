@@ -38,7 +38,11 @@ import { Route as CounselingReferralsRouteImport } from './routes/counseling.ref
 import { Route as DeskIndexRouteImport } from './routes/desk.index'
 import { Route as DeskClosedRouteImport } from './routes/desk.closed'
 import { Route as DeskCounselorRouteImport } from './routes/desk.counselor'
+import { Route as DeskFormatRouteImport } from './routes/desk.format'
+import { Route as DeskLedgerRouteImport } from './routes/desk.ledger'
 import { Route as DeskMailRouteImport } from './routes/desk.mail'
+import { Route as DeskMovesRouteImport } from './routes/desk.moves'
+import { Route as DeskNotesRouteImport } from './routes/desk.notes'
 import { Route as DeskWaitingRouteImport } from './routes/desk.waiting'
 import { Route as PrintIndexRouteImport } from './routes/print.index'
 import { Route as PrintFormsRouteImport } from './routes/print.forms'
@@ -55,6 +59,9 @@ import { Route as SettingsPermissionsRouteImport } from './routes/settings.permi
 import { Route as SettingsPrintRouteImport } from './routes/settings.print'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsSchoolRouteImport } from './routes/settings.school'
+import { Route as SettingsStudyRouteImport } from './routes/settings.study'
+import { Route as SettingsSubjectRouteImport } from './routes/settings.subject'
+import { Route as SettingsTimetableRouteImport } from './routes/settings.timetable'
 import { Route as SettingsViolationsRouteImport } from './routes/settings.violations'
 import { Route as StageStageIdRouteImport } from './routes/stage.$stageId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -204,9 +211,29 @@ const DeskCounselorRoute = DeskCounselorRouteImport.update({
   path: '/counselor',
   getParentRoute: () => DeskRoute,
 } as any)
+const DeskFormatRoute = DeskFormatRouteImport.update({
+  id: '/format',
+  path: '/format',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskLedgerRoute = DeskLedgerRouteImport.update({
+  id: '/ledger',
+  path: '/ledger',
+  getParentRoute: () => DeskRoute,
+} as any)
 const DeskMailRoute = DeskMailRouteImport.update({
   id: '/mail',
   path: '/mail',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskMovesRoute = DeskMovesRouteImport.update({
+  id: '/moves',
+  path: '/moves',
+  getParentRoute: () => DeskRoute,
+} as any)
+const DeskNotesRoute = DeskNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
   getParentRoute: () => DeskRoute,
 } as any)
 const DeskWaitingRoute = DeskWaitingRouteImport.update({
@@ -289,6 +316,21 @@ const SettingsSchoolRoute = SettingsSchoolRouteImport.update({
   path: '/school',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsStudyRoute = SettingsStudyRouteImport.update({
+  id: '/study',
+  path: '/study',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSubjectRoute = SettingsSubjectRouteImport.update({
+  id: '/subject',
+  path: '/subject',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsTimetableRoute = SettingsTimetableRouteImport.update({
+  id: '/timetable',
+  path: '/timetable',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsViolationsRoute = SettingsViolationsRouteImport.update({
   id: '/violations',
   path: '/violations',
@@ -332,7 +374,11 @@ export interface FileRoutesByFullPath {
   '/counseling/referrals': typeof CounselingReferralsRoute
   '/desk/closed': typeof DeskClosedRoute
   '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/format': typeof DeskFormatRoute
+  '/desk/ledger': typeof DeskLedgerRoute
   '/desk/mail': typeof DeskMailRoute
+  '/desk/moves': typeof DeskMovesRoute
+  '/desk/notes': typeof DeskNotesRoute
   '/desk/waiting': typeof DeskWaitingRoute
   '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
@@ -347,6 +393,9 @@ export interface FileRoutesByFullPath {
   '/settings/print': typeof SettingsPrintRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
+  '/settings/study': typeof SettingsStudyRoute
+  '/settings/subject': typeof SettingsSubjectRoute
+  '/settings/timetable': typeof SettingsTimetableRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -378,7 +427,11 @@ export interface FileRoutesByTo {
   '/counseling/referrals': typeof CounselingReferralsRoute
   '/desk/closed': typeof DeskClosedRoute
   '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/format': typeof DeskFormatRoute
+  '/desk/ledger': typeof DeskLedgerRoute
   '/desk/mail': typeof DeskMailRoute
+  '/desk/moves': typeof DeskMovesRoute
+  '/desk/notes': typeof DeskNotesRoute
   '/desk/waiting': typeof DeskWaitingRoute
   '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
@@ -393,6 +446,9 @@ export interface FileRoutesByTo {
   '/settings/print': typeof SettingsPrintRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
+  '/settings/study': typeof SettingsStudyRoute
+  '/settings/subject': typeof SettingsSubjectRoute
+  '/settings/timetable': typeof SettingsTimetableRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
   '/admin': typeof AdminIndexRoute
@@ -430,7 +486,11 @@ export interface FileRoutesById {
   '/counseling/referrals': typeof CounselingReferralsRoute
   '/desk/closed': typeof DeskClosedRoute
   '/desk/counselor': typeof DeskCounselorRoute
+  '/desk/format': typeof DeskFormatRoute
+  '/desk/ledger': typeof DeskLedgerRoute
   '/desk/mail': typeof DeskMailRoute
+  '/desk/moves': typeof DeskMovesRoute
+  '/desk/notes': typeof DeskNotesRoute
   '/desk/waiting': typeof DeskWaitingRoute
   '/print/forms': typeof PrintFormsRoute
   '/settings/actions': typeof SettingsActionsRoute
@@ -445,6 +505,9 @@ export interface FileRoutesById {
   '/settings/print': typeof SettingsPrintRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/school': typeof SettingsSchoolRoute
+  '/settings/study': typeof SettingsStudyRoute
+  '/settings/subject': typeof SettingsSubjectRoute
+  '/settings/timetable': typeof SettingsTimetableRoute
   '/settings/violations': typeof SettingsViolationsRoute
   '/stage/$stageId': typeof StageStageIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -483,7 +546,11 @@ export interface FileRouteTypes {
     | '/counseling/referrals'
     | '/desk/closed'
     | '/desk/counselor'
+    | '/desk/format'
+    | '/desk/ledger'
     | '/desk/mail'
+    | '/desk/moves'
+    | '/desk/notes'
     | '/desk/waiting'
     | '/print/forms'
     | '/settings/actions'
@@ -498,6 +565,9 @@ export interface FileRouteTypes {
     | '/settings/print'
     | '/settings/profile'
     | '/settings/school'
+    | '/settings/study'
+    | '/settings/subject'
+    | '/settings/timetable'
     | '/settings/violations'
     | '/stage/$stageId'
     | '/admin/'
@@ -529,7 +599,11 @@ export interface FileRouteTypes {
     | '/counseling/referrals'
     | '/desk/closed'
     | '/desk/counselor'
+    | '/desk/format'
+    | '/desk/ledger'
     | '/desk/mail'
+    | '/desk/moves'
+    | '/desk/notes'
     | '/desk/waiting'
     | '/print/forms'
     | '/settings/actions'
@@ -544,6 +618,9 @@ export interface FileRouteTypes {
     | '/settings/print'
     | '/settings/profile'
     | '/settings/school'
+    | '/settings/study'
+    | '/settings/subject'
+    | '/settings/timetable'
     | '/settings/violations'
     | '/stage/$stageId'
     | '/admin'
@@ -580,7 +657,11 @@ export interface FileRouteTypes {
     | '/counseling/referrals'
     | '/desk/closed'
     | '/desk/counselor'
+    | '/desk/format'
+    | '/desk/ledger'
     | '/desk/mail'
+    | '/desk/moves'
+    | '/desk/notes'
     | '/desk/waiting'
     | '/print/forms'
     | '/settings/actions'
@@ -595,6 +676,9 @@ export interface FileRouteTypes {
     | '/settings/print'
     | '/settings/profile'
     | '/settings/school'
+    | '/settings/study'
+    | '/settings/subject'
+    | '/settings/timetable'
     | '/settings/violations'
     | '/stage/$stageId'
     | '/admin/'
@@ -831,11 +915,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeskCounselorRouteImport
       parentRoute: typeof DeskRoute
     }
+    '/desk/format': {
+      id: '/desk/format'
+      path: '/format'
+      fullPath: '/desk/format'
+      preLoaderRoute: typeof DeskFormatRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/ledger': {
+      id: '/desk/ledger'
+      path: '/ledger'
+      fullPath: '/desk/ledger'
+      preLoaderRoute: typeof DeskLedgerRouteImport
+      parentRoute: typeof DeskRoute
+    }
     '/desk/mail': {
       id: '/desk/mail'
       path: '/mail'
       fullPath: '/desk/mail'
       preLoaderRoute: typeof DeskMailRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/moves': {
+      id: '/desk/moves'
+      path: '/moves'
+      fullPath: '/desk/moves'
+      preLoaderRoute: typeof DeskMovesRouteImport
+      parentRoute: typeof DeskRoute
+    }
+    '/desk/notes': {
+      id: '/desk/notes'
+      path: '/notes'
+      fullPath: '/desk/notes'
+      preLoaderRoute: typeof DeskNotesRouteImport
       parentRoute: typeof DeskRoute
     }
     '/desk/waiting': {
@@ -950,6 +1062,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsSchoolRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/study': {
+      id: '/settings/study'
+      path: '/study'
+      fullPath: '/settings/study'
+      preLoaderRoute: typeof SettingsStudyRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/subject': {
+      id: '/settings/subject'
+      path: '/subject'
+      fullPath: '/settings/subject'
+      preLoaderRoute: typeof SettingsSubjectRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/timetable': {
+      id: '/settings/timetable'
+      path: '/timetable'
+      fullPath: '/settings/timetable'
+      preLoaderRoute: typeof SettingsTimetableRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/violations': {
       id: '/settings/violations'
       path: '/violations'
@@ -1015,7 +1148,11 @@ const CounselingRouteWithChildren = CounselingRoute._addFileChildren(
 interface DeskRouteChildren {
   DeskClosedRoute: typeof DeskClosedRoute
   DeskCounselorRoute: typeof DeskCounselorRoute
+  DeskFormatRoute: typeof DeskFormatRoute
+  DeskLedgerRoute: typeof DeskLedgerRoute
   DeskMailRoute: typeof DeskMailRoute
+  DeskMovesRoute: typeof DeskMovesRoute
+  DeskNotesRoute: typeof DeskNotesRoute
   DeskWaitingRoute: typeof DeskWaitingRoute
   DeskIndexRoute: typeof DeskIndexRoute
 }
@@ -1023,7 +1160,11 @@ interface DeskRouteChildren {
 const DeskRouteChildren: DeskRouteChildren = {
   DeskClosedRoute: DeskClosedRoute,
   DeskCounselorRoute: DeskCounselorRoute,
+  DeskFormatRoute: DeskFormatRoute,
+  DeskLedgerRoute: DeskLedgerRoute,
   DeskMailRoute: DeskMailRoute,
+  DeskMovesRoute: DeskMovesRoute,
+  DeskNotesRoute: DeskNotesRoute,
   DeskWaitingRoute: DeskWaitingRoute,
   DeskIndexRoute: DeskIndexRoute,
 }
@@ -1055,6 +1196,9 @@ interface SettingsRouteChildren {
   SettingsPrintRoute: typeof SettingsPrintRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
   SettingsSchoolRoute: typeof SettingsSchoolRoute
+  SettingsStudyRoute: typeof SettingsStudyRoute
+  SettingsSubjectRoute: typeof SettingsSubjectRoute
+  SettingsTimetableRoute: typeof SettingsTimetableRoute
   SettingsViolationsRoute: typeof SettingsViolationsRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -1072,6 +1216,9 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsPrintRoute: SettingsPrintRoute,
   SettingsProfileRoute: SettingsProfileRoute,
   SettingsSchoolRoute: SettingsSchoolRoute,
+  SettingsStudyRoute: SettingsStudyRoute,
+  SettingsSubjectRoute: SettingsSubjectRoute,
+  SettingsTimetableRoute: SettingsTimetableRoute,
   SettingsViolationsRoute: SettingsViolationsRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }

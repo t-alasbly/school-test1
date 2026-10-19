@@ -2,10 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { tr } from "@/lib/school/i18n";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { PageHelp } from "@/components/page-help";
 import { NoteThread } from "@/components/note-thread";
 import { NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { getDeskNotes } from "@/lib/school/api";
 import { formatStampCalendar } from "@/lib/school/calendar";
 import { NOTE_META, classLabel, occurrenceLabel, periodShort } from "@/lib/school/constants";
@@ -73,12 +74,6 @@ export function TeacherCases() {
 
   return (
     <div className="space-y-4">
-      <header>
-        <h2 className="flex items-center gap-2 font-display text-xl font-semibold tracking-tight">
-          {tr("حالات طلابي")}
-          <PageHelp text={tr("صفحة خاصة بك وبطلابك — المخالفات التي حرّرتها، وما أُحيل للإرشاد أو لوكيل شؤون الطلاب، والإجراء المتخذ عليها")} />
-        </h2>
-      </header>
       <nav className="flex flex-wrap gap-1.5">
         {filters.map((item) => (
           <button
@@ -132,7 +127,10 @@ export function TeacherCases() {
                       </Badge>
                       {note.occurrence > 1 ? <Badge tone="danger">{occurrenceLabel(note.occurrence)}</Badge> : null}
                     </div>
-                    <p className="mt-2 text-lg font-semibold leading-6">{note.studentName}</p>
+                    <p className="mt-2 flex flex-wrap items-center gap-1.5 text-lg font-semibold leading-6">
+                      <DayName studentId={note.studentId}>{note.studentName}</DayName>
+                      <ExitPermitBadge studentId={note.studentId} />
+                    </p>
                     <p className="text-xs text-fg-muted">
                       {classLabel(note.shortName, note.className)}
                       {note.periodKey ? ` · ${periodShort(note.periodKey, school.season, school.schedules)}` : ""}
@@ -158,7 +156,7 @@ export function TeacherCases() {
                       </p>
                     ) : null}
                   </button>
-                  {canEdit ? <NoteRecordTools note={note} /> : null}
+                  {(canEdit || note.teacherId === staff.userId) ? <NoteRecordTools note={note} teacherId={note.teacherId} /> : null}
                 </div>
                 <NoteThread noteId={note.id} dest={dest === "health" ? "health" : dest === "counseling" ? "counselor" : "vp"} compact />
               </li>

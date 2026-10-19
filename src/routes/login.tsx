@@ -18,7 +18,7 @@ function Login() {
   if (isPending) {
     return <div className="min-h-dvh bg-bg" />;
   }
-  if (user) return <Navigate to="/" />;
+  if (user) return <Navigate to="/desk" />;
   return <LoginForm />;
 }
 
@@ -64,10 +64,10 @@ function LoginForm() {
       const res = await authClient.signIn.email({
         email: identifier,
         password,
-        callbackURL: "/",
+        callbackURL: "/desk",
       });
       if (res.error) throw new Error(res.error.message || tr("بيانات الدخول غير صحيحة"));
-      await navigate({ to: "/" });
+      await navigate({ to: "/desk" });
     } catch (err) {
       setError(err instanceof Error ? tr(err.message) : tr("حدث خطأ غير متوقع"));
       setHelpOpen(true);

@@ -96,7 +96,7 @@ export function StaffMailDialog({
                   type="button"
                   onClick={() => setDest(item.id)}
                   className={cn(
-                    "min-h-11 rounded-[var(--radius-md)] border px-2 text-sm font-semibold",
+                    "min-h-8 rounded-[var(--radius-md)] border px-2 text-sm font-semibold",
                     dest === item.id
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-border bg-bg",

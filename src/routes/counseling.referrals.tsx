@@ -6,7 +6,8 @@ import { NoteThread } from "@/components/note-thread";
 import { NoteRecordTools } from "@/components/record-actions";
 import { ReferralCompensation } from "@/components/referral-compensation";
 import { StudentSheet } from "@/components/student-sheet";
-import { PageHelp } from "@/components/page-help";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
 import { getCounselingDesk } from "@/lib/school/api";
 import { COMPENSATION_OPTIONS, NOTE_META, degreeLabel, formatStamp, noteTone } from "@/lib/school/constants";
@@ -24,14 +25,8 @@ function ReferralsPage() {
   const options = compensations.length > 0 ? compensations.map((c) => c.name) : COMPENSATION_OPTIONS;
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
-          {tr("المخالفات المحالة للإرشاد")}
-          <PageHelp text={tr("يحيلها وكيل شؤون الطلاب من لوحة المخالفات")} />
-        </h1>
-      </header>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
+    <>
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
           {(desk.data?.referrals ?? []).map((item: any) => (
             <li key={item.id} className="space-y-2 px-4 py-3">
@@ -41,8 +36,9 @@ function ReferralsPage() {
                   className="text-right text-base font-semibold"
                   onClick={() => setActiveStudent(item.studentId)}
                 >
-                  {item.studentName}
+                  <DayName studentId={item.studentId}>{item.studentName}</DayName>
                 </button>
+                <ExitPermitBadge studentId={item.studentId} />
                 <span className="text-xs text-fg-muted">{item.classLabel}</span>
                 <Badge tone={noteTone(item.type, item.status)}>
                   {NOTE_META[item.type as keyof typeof NOTE_META]?.short ?? item.type}
@@ -149,6 +145,6 @@ function ReferralsPage() {
           if (!open) setActiveStudent(null);
         }}
       />
-    </div>
+    </>
   );
 }

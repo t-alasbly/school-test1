@@ -16,19 +16,20 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createNote, closeNote, previewBehaviorOccurrence } from "@/lib/school/api";
-import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, toDatetimeLocalValue } from "@/lib/school/constants";
+import { createNote, closeNote, getMyTimetable, previewBehaviorOccurrence, previewStudyOccurrence } from "@/lib/school/api";
+import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, STUDY_ACTIONS, STUDY_NOTES, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, parseSubjects, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, studyActionFor, toDatetimeLocalValue, toWhatsAppNumber } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { PrintFormsButton } from "@/components/print-forms";
+import { EXIT_PERMITS, useGrantExitPermit, type ExitKind } from "@/components/exit-permit";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { cn } from "@/lib/utils";
 
 const TYPE_HINT: Record<NoteType, string> = {
   absence: "يسجّل غياب الطالب عن هذه الحصة",
   late: "يسجّل التأخر عن بداية الحصة",
-  homework: "يسجّل عدم حل الواجب المطلوب",
+  homework: "اختر الملاحظة الدراسية من القائمة",
   behavior: "اختر نوع المخالفة من الدليل ثم أرسل",
 };
 
@@ -56,14 +57,16 @@ function BehaviorPicker({
   items,
   audience,
   degree,
+  currentId,
   onAudience,
   onDegree,
   onPick,
   onClose,
 }: {
-  items: { id: number; name: string; degree?: number }[];
+  items: { id: number; name: string; degree?: number; procedures?: string[][] }[];
   audience: "students" | "staff";
   degree: number;
+  currentId: number | null;
   onAudience: (next: "students" | "staff") => void;
   onDegree: (degree: number) => void;
   onPick: (id: number) => void;
@@ -75,8 +78,13 @@ function BehaviorPicker({
   const active = degrees.includes(degree) ? degree : degrees[0]!;
   const list = pool.filter((item) => (item.degree ?? 1) === active);
   const deduct: Record<number, string> = { 1: tr("حسم 1"), 2: tr("حسم 2"), 3: tr("حسم 3"), 4: tr("حسم 10"), 5: tr("حسم 15") };
+  const [draft, setDraft] = useState<number | null>(currentId);
+  const [ask, setAsk] = useState(false);
+  const [help, setHelp] = useState<number | null>(null);
+  const helpLadder = help == null ? [] : procedureLadder(help);
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+    <>
+    <Dialog open onOpenChange={(next) => { if (!next) setAsk(true); }}>
       <DialogContent
         hideClose
         className={cn(
@@ -84,29 +92,23 @@ function BehaviorPicker({
           "!inset-0 !h-dvh !max-h-dvh !w-full !max-w-none !translate-x-0 !translate-y-0 !rounded-none",
         )}
       >
-        <DialogTitle className="sr-only">{tr("اختيار المخالفة")}</DialogTitle>
+        <DialogTitle className="sr-only">{tr("المخالفات")}</DialogTitle>
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" onClick={onClose} className="h-11 shrink-0 rounded-full border border-border px-4 text-sm font-semibold">
-            {tr("رجوع")}
+          <button type="button" onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-full border border-border px-4 text-sm font-semibold">
+            {tr("إغلاق")}
           </button>
           <div className="grid h-11 min-w-0 flex-1 grid-cols-2 rounded-full border border-border bg-card p-1">
             <button
               type="button"
               onClick={() => onAudience("students")}
-              className={cn(
-                "rounded-full text-sm font-bold",
-                audience === "students" ? "bg-primary text-primary-fg" : "text-fg",
-              )}
+              className={cn("rounded-full text-sm font-bold", audience === "students" ? "bg-primary text-primary-fg" : "text-fg")}
             >
-              {tr("طلبة")}
+              {tr("مخالفات الطلبة")}
             </button>
             <button
               type="button"
               onClick={() => onAudience("staff")}
-              className={cn(
-                "rounded-full text-sm font-bold",
-                audience === "staff" ? "bg-[#7f1d1d] text-white" : "text-fg",
-              )}
+              className={cn("rounded-full text-sm font-bold", audience === "staff" ? "bg-[#7f1d1d] text-white" : "text-fg")}
             >
               {tr("تجاه المعلمين")}
             </button>
@@ -114,28 +116,53 @@ function BehaviorPicker({
         </div>
         <div className={cn("grid shrink-0 gap-1.5", degrees.length === 2 ? "grid-cols-2" : "grid-cols-5")}>
           {degrees.map((value) => (
-            <button
+            <div
               key={value}
-              type="button"
-              onClick={() => onDegree(value)}
               className={cn(
-                "min-h-12 rounded-xl border-2 px-0.5 py-1 text-center leading-tight",
+                "relative min-h-12 rounded-xl border-2 px-0.5 py-1 text-center leading-tight",
                 degreeTone(value),
                 active === value ? "ring-2 ring-offset-1 ring-current" : "opacity-70",
               )}
             >
-              <span className="block text-[12px] font-bold">{degreeLabel(value)}</span>
-              <span className="block text-[10px] font-semibold">{deduct[value]}</span>
-            </button>
+              <button type="button" className="w-full" onClick={() => onDegree(value)}>
+                <span className="flex items-center justify-center gap-1 text-sm font-black">
+                  {value}
+                </span>
+                <span className="block text-[10px] font-semibold">{deduct[value]}</span>
+              </button>
+              <button
+                type="button"
+                aria-label={tr("إجراءات هذه الدرجة")}
+                className="absolute top-0.5 start-0.5 grid size-5 place-items-center rounded-full bg-white text-[12px] font-black leading-none text-[#111]"
+                onClick={() => setHelp((current) => current === value ? null : value)}
+              >
+                !
+              </button>
+            </div>
           ))}
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pb-2">
+          {help != null ? (
+            <section className={cn("space-y-2 rounded-2xl border-2 p-3", degreeTone(help))}>
+              <h2 className="text-sm font-bold">{tr("الإجراءات")} — {degreeLabel(help)}</h2>
+              {helpLadder.map((stage, index) => (
+                <div key={index} className="rounded-xl bg-white/80 px-3 py-2 text-[#111]">
+                  <p className="text-xs font-semibold">{procedureStageLabel(index + 1)}</p>
+                  <p className="text-sm">{stage.join(" — ")}</p>
+                </div>
+              ))}
+            </section>
+          ) : null}
           {list.map((bt) => (
             <button
               key={bt.id}
               type="button"
-              onClick={() => onPick(bt.id)}
-              className={cn("min-h-16 w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(bt.degree ?? 1))}
+              onClick={() => setDraft(bt.id)}
+              className={cn(
+                "min-h-10 w-full rounded-2xl border-2 px-3 py-3 text-right",
+                degreeTone(bt.degree ?? 1),
+                draft === bt.id ? "ring-2 ring-offset-1 ring-current" : "",
+              )}
             >
               <p className="text-base font-semibold leading-7">{tr(bt.name)}</p>
             </button>
@@ -143,18 +170,32 @@ function BehaviorPicker({
           {audience === "students" && active === 1 && other ? (
             <button
               type="button"
-              onClick={() => onPick(other.id)}
-              className="min-h-16 w-full rounded-2xl border-2 border-border bg-card px-3 py-3 text-right"
+              onClick={() => setDraft(other.id)}
+              className={cn("min-h-10 w-full rounded-2xl border-2 border-border bg-card px-3 py-3 text-right", draft === other.id && "ring-2 ring-primary")}
             >
               <p className="text-base font-semibold leading-7">{tr("أخرى")}</p>
             </button>
           ) : null}
-          {list.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-fg-muted">{tr("لا مخالفات في هذه الدرجة.")}</p>
-          ) : null}
+          {list.length === 0 ? <p className="px-2 py-6 text-center text-sm text-fg-muted">{tr("لا مخالفات في هذه الدرجة.")}</p> : null}
+        </div>
+        <Button type="button" className="shrink-0" disabled={draft == null} onClick={() => draft != null && onPick(draft)}>
+          {tr("اعتماد التعديل")}
+        </Button>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={ask} onOpenChange={setAsk}>
+      <DialogContent className="!inset-auto !top-1/2 !left-1/2 z-[80] !h-auto !max-h-none w-[min(92vw,24rem)] !max-w-sm !-translate-x-1/2 !-translate-y-1/2 rounded-2xl p-5 shadow-xl">
+        <DialogHeader>
+          <DialogTitle className="text-center text-lg">{tr("اعتماد وإغلاق بدون تعديل؟")}</DialogTitle>
+          <DialogDescription className="text-center">{tr("لن يُحفظ أي تغيير على المخالفة.")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="secondary" onClick={() => setAsk(false)}>{tr("البقاء")}</Button>
+          <Button type="button" onClick={onClose}>{tr("إغلاق بدون تعديل")}</Button>
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -170,34 +211,142 @@ function ProcedurePreview({
   shared?: boolean;
 }) {
   const ladder = procedureLadder(degree, procedures);
+  const currentIndex = shared || nextOccurrence == null ? 0 : stageIndexFor(nextOccurrence, ladder.length);
+  const [open, setOpen] = useState<number[]>([currentIndex]);
+  useEffect(() => {
+    setOpen([currentIndex]);
+  }, [currentIndex]);
   return (
-    <div className="space-y-2 rounded-2xl border border-border bg-bg-elevated p-3">
-      <p className="text-sm font-semibold">{tr("الإجراءات")}</p>
-      {shared ? (
-        <p className="text-xs text-fg-muted">{tr("المرحلة تعتمد على عدد مرات كل طالب.")}</p>
-      ) : null}
+    <div className="space-y-1">
+      {shared ? <p className="text-xs text-fg-muted">{tr("المرحلة تعتمد على عدد مرات كل طالب.")}</p> : null}
       {ladder.map((lines, index) => {
         const time = index + 1;
-        const current = !shared && nextOccurrence != null && index === stageIndexFor(nextOccurrence, ladder.length);
+        const current = index === currentIndex;
+        const done = !shared && index < currentIndex;
+        const expanded = open.includes(index);
         const verbal = isTeacherVerbal(degree, time);
         return (
           <div
             key={time}
-            className={cn("rounded-xl border px-3 py-2", current ? "border-primary bg-primary/5" : "border-border bg-bg")}
+            className={cn(
+              "overflow-hidden rounded-xl border-2",
+              current && "border-primary bg-primary/15",
+              done && "border-border bg-muted/70",
+              !current && !done && "border-border bg-bg",
+            )}
           >
-            <p className="text-xs font-semibold">
-              {occurrenceLabel(time)}
-              {current ? ` — ${tr("هذه المرة")}` : ""}
-              {verbal ? ` — ${tr("دون إجراء من الوكيل")}` : degree === 1 ? ` — ${tr("تُحال إلى الوكيل")}` : ""}
-            </p>
-            <ul className="mt-1 space-y-0.5 text-sm leading-6">
-              {lines.map((line) => (
-                <li key={line}>{tr(line)}</li>
-              ))}
-            </ul>
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center justify-between gap-2 px-3 text-right",
+                expanded ? "min-h-8 py-2" : "min-h-0 py-1",
+              )}
+              aria-expanded={expanded}
+              onClick={() => setOpen((currentOpen) => currentOpen.includes(index) ? currentOpen.filter((item) => item !== index) : [...currentOpen, index])}
+            >
+              <span className={cn("text-sm font-semibold leading-5", done && "text-fg-muted line-through", current && "text-primary")}>
+                {occurrenceLabel(time)}
+                {current ? ` — ${tr("هذه المرة")}` : ""}
+                {done ? ` — ${tr("سُجّل سابقاً")}` : ""}
+                {!done && verbal ? ` — ${tr("دون إجراء من الوكيل")}` : ""}
+                {!done && degree === 1 && !verbal ? ` — ${tr("تُحال إلى الوكيل")}` : ""}
+              </span>
+              <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", expanded && "rotate-180", done && "text-fg-muted")} />
+            </button>
+            {expanded ? (
+              <ol className="space-y-1 border-t border-border px-3 py-2">
+                {lines.map((line, lineIndex) => (
+                  <li key={line} className="flex gap-2 text-sm leading-6">
+                    <span className="font-bold tabular-nums">{lineIndex + 1}.</span>
+                    <span>{tr(line)}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function BehaviorReview({
+  student,
+  name,
+  degree,
+  staffAudience,
+  procedures,
+  nextOccurrence,
+  shared,
+  other,
+  late,
+  lateMinutes,
+  onLateMinutes,
+  details,
+  onDetails,
+  formKey,
+  pending,
+  canSend,
+  onBack,
+  onSend,
+}: {
+  student: string;
+  name: string;
+  degree: number;
+  staffAudience: boolean;
+  procedures?: string[][];
+  nextOccurrence?: number;
+  shared?: boolean;
+  other: boolean;
+  late: boolean;
+  lateMinutes: string;
+  onLateMinutes: (value: string) => void;
+  details: string;
+  onDetails: (value: string) => void;
+  formKey: string;
+  pending: boolean;
+  canSend: boolean;
+  onBack: () => void;
+  onSend: () => void;
+}) {
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const field = notesRef.current;
+    if (!field) return;
+    field.style.height = "0px";
+    field.style.height = `${field.scrollHeight}px`;
+  }, [details]);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DialogHeader className="sr-only">
+        <DialogTitle>{tr("الإجراءات")}</DialogTitle>
+      </DialogHeader>
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pe-1">
+        {late ? (
+          <div className="space-y-1.5">
+            <Label htmlFor={`late-minutes-${formKey}`}>{tr("دقائق التأخر عن بداية الحصة")}</Label>
+            <Input id={`late-minutes-${formKey}`} type="number" min={1} max={90} inputMode="numeric" value={lateMinutes} onChange={(event) => onLateMinutes(event.target.value)} />
+          </div>
+        ) : null}
+        <Textarea
+          ref={notesRef}
+          id={`review-notes-${formKey}`}
+          rows={1}
+          aria-label={other ? tr("صف المخالفة يدوياً") : tr("الملاحظات")}
+          className="!min-h-0 resize-none overflow-hidden rounded-lg border-2 border-amber-600 bg-amber-200 px-2 py-0.5 text-sm font-medium leading-5 text-amber-950 placeholder:text-amber-900/80"
+          placeholder={other ? tr("اكتب وصف المخالفة") : tr("ملاحظة توضيحية اختيارية")}
+          value={details}
+          onChange={(event) => onDetails(event.target.value)}
+        />
+        <ProcedurePreview degree={degree} procedures={procedures} nextOccurrence={nextOccurrence} shared={shared} />
+      </div>
+      <div className="mt-2 grid shrink-0 grid-cols-[auto_1fr] gap-2 border-t border-border pt-3">
+        <Button type="button" variant="secondary" onClick={onBack}>{tr("رجوع")}</Button>
+        <Button type="button" disabled={!canSend || pending} onClick={onSend}>
+          <Send className="size-4" />
+          {pending ? tr("جارٍ الإرسال…") : tr("إرسال واعتماد")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -271,6 +420,7 @@ function ActionSequence({
       toast.success(notes.length > 1 ? `تم إنهاء المخالفة على ${notes.length} طلاب` : tr("تم إنهاء المخالفة"));
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["today-marks"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       onDone();
@@ -321,6 +471,8 @@ function ActionSequence({
             sharedText={note.details}
             subject={staff.subject}
             periodKey={note.periodKey}
+            noteId={note.id}
+            behaviorDegree={note.degree}
             label={tr("إرسال رسالة")}
           />
         ) : null}
@@ -395,14 +547,20 @@ export function NoteActions({
   studentId,
   studentName,
   classId,
+  presetSubject,
+  presetPeriod,
 }: {
   studentId: number;
   studentName: string;
   classId: number;
+  presetSubject?: string;
+  presetPeriod?: string;
 }) {
   return (
     <NoteComposer
       targets={[{ studentId, studentName, classId }]}
+      presetSubject={presetSubject}
+      presetPeriod={presetPeriod}
       trigger={
         <Button size="icon" variant="secondary" aria-label={`تسجيل ملاحظة لـ ${studentName}`}>
           <Plus className="size-5" />
@@ -418,14 +576,18 @@ export function NoteComposer({
   onOpenChange: onOpenChangeProp,
   onSubmitted,
   trigger,
+  presetSubject,
+  presetPeriod,
 }: {
   targets: NoteTarget[];
   open?: boolean;
   onOpenChange?: (next: boolean) => void;
   onSubmitted?: (result: { count: number; failedIds: number[] }) => void;
   trigger?: ReactNode;
+  presetSubject?: string;
+  presetPeriod?: string;
 }) {
-  const { behaviorTypes, school, staff } = useWorkspace();
+  const { behaviorTypes, school, staff, studyNotes = [] } = useWorkspace();
   const { locale } = useLocale();
   const showName = (name: string) => studentLabel(locale, name);
   const slots = scheduleFor(school.season, school.schedules);
@@ -438,6 +600,10 @@ export function NoteComposer({
   const [type, setType] = useState<NoteType | null>(null);
   const [shortcut, setShortcut] = useState<NoteType | null>(null);
   const [behaviorTypeId, setBehaviorTypeId] = useState<number | null>(null);
+  const [behaviorStep, setBehaviorStep] = useState<"choose" | "review">("choose");
+  const [exitKind, setExitKind] = useState<ExitKind | null>(null);
+  const grantExit = useGrantExitPermit();
+  const [leaveAsk, setLeaveAsk] = useState(false);
   const [picking, setPicking] = useState(false);
   const [audience, setAudience] = useState<"students" | "staff">("students");
   const [degreePick, setDegreePick] = useState(1);
@@ -447,10 +613,35 @@ export function NoteComposer({
   const [shared, setShared] = useState(false);
   const [lateMinutes, setLateMinutes] = useState("");
   const [lateTouched, setLateTouched] = useState(false);
+  const [studyId, setStudyId] = useState("");
+  const [deduction, setDeduction] = useState("");
+  const deskSubjects = useQuery({
+    queryKey: ["my-timetable", "note-subject"],
+    queryFn: () => getMyTimetable(),
+    enabled: parseSubjects(staff.subject).length === 0,
+  });
+  const subjects = parseSubjects(staff.subject).length
+    ? parseSubjects(staff.subject)
+    : parseSubjects(String((deskSubjects.data as { subject?: string } | undefined)?.subject || ""));
+  const lockedSubject = presetSubject && subjects.includes(presetSubject) ? presetSubject : "";
+  const [lessonSubject, setLessonSubject] = useState(lockedSubject || (subjects.length === 1 ? subjects[0] : ""));
+  const [pickSubject, setPickSubject] = useState(false);
+  const timetable = useQuery({
+    queryKey: ["my-timetable"],
+    queryFn: () => getMyTimetable(),
+    enabled: open,
+  });
   const wasOpen = useRef(false);
   const queryClient = useQueryClient();
   const selectedBehavior = behaviorTypes.find((bt) => bt.id === behaviorTypeId);
   const otherBehavior = Boolean(selectedBehavior && isOtherChoice(selectedBehavior.name));
+  const studyChoices = useMemo(() => {
+    const saved = studyNotes
+      .filter((item) => item.active !== false)
+      .map((item) => ({ id: String(item.id), label: item.name }));
+    const base = saved.length > 0 ? saved : STUDY_NOTES.filter((item) => item.id !== "other");
+    return [...base, { id: "other", label: "ملاحظة أخرى" }];
+  }, [studyNotes]);
   const periodLabel = slots.find((s) => s.key === periodKey)?.label ?? tr("الحصة غير محددة");
   const many = targets.length > 1;
   const formKey = many ? "group" : String(targets[0]?.studentId ?? "note");
@@ -459,14 +650,46 @@ export function NoteComposer({
     queryFn: () => previewBehaviorOccurrence({ data: { studentId: targets[0]!.studentId, behaviorTypeId: behaviorTypeId! } }),
     enabled: !many && type === "behavior" && behaviorTypeId != null && targets[0] != null,
   });
+  const studyCatalogId = studyId !== "" && studyId !== "other" ? Number(studyId) : null;
+  const studyPreview = useQuery({
+    queryKey: ["study-occurrence", targets.map((item) => item.studentId).join(","), studyCatalogId, studyId === "other" ? details.trim() : ""],
+    queryFn: () =>
+      previewStudyOccurrence({
+        data: {
+          studentIds: targets.map((item) => item.studentId),
+          studyNoteId: studyCatalogId ?? undefined,
+          details: studyId === "other" ? details.trim() : undefined,
+        },
+      }),
+    enabled: type === "homework" && targets.length > 0 && (studyCatalogId != null || (studyId === "other" && details.trim().length >= 2)),
+  });
+  const studyStage = studyPreview.data?.stage ?? 1;
+  const studyAction = studyActionFor(studyStage);
+  const studyNeedsDeduction = (studyPreview.data?.students ?? []).some((row) => row.stage >= 3) || studyStage >= 3;
+  const studyHandsOff = (studyStage === 2 || studyStage === 3) && !staffCan(staff, "sendMessages");
+  useEffect(() => {
+    if (!open) return;
+    if (lockedSubject) {
+      setLessonSubject(lockedSubject);
+      return;
+    }
+    if (subjects.length === 1) {
+      setLessonSubject(subjects[0]);
+      return;
+    }
+    const day = new Date(fromDatetimeLocalValue(occurredAt)).getDay();
+    const cells = ((timetable.data as { cells?: { day: number; periodKey: string; subject?: string }[] } | undefined)?.cells ?? []);
+    const cell = cells.find((item) => item.day === day && item.periodKey === periodKey);
+    setLessonSubject(cell?.subject?.trim() || "");
+  }, [open, periodKey, occurredAt, subjects.join("|"), timetable.data, lockedSubject]);
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
+      setPeriodKey(presetPeriod || currentPeriod(school.season, new Date(), school.schedules)?.key || "");
       setOccurredAt(toDatetimeLocalValue());
       setWhenOpen(false);
     }
     wasOpen.current = open;
-  }, [open, school.season, school.schedules]);
+  }, [open, school.season, school.schedules, presetPeriod]);
   useEffect(() => {
     if (shortcut !== "late" || lateTouched) return;
     const slot = slots.find((item) => item.key === periodKey);
@@ -519,10 +742,13 @@ export function NoteComposer({
       if (shortcut === "late" && !(Number(lateMinutes) >= 1)) throw new Error(tr("أدخل دقائق التأخر عن بداية الحصة"));
       const noteDetails = composeDetails();
       const saved: SavedBehavior[] = [];
+      const whatsapps: { phone: string; body: string }[] = [];
       const failedIds: number[] = [];
       const failedNames: string[] = [];
       let label = "";
       let count = 0;
+      let transferred = 0;
+      let messageStages = 0;
       let firstError = tr("تعذر التسجيل");
       setSent(0);
       for (const target of targets) {
@@ -533,8 +759,11 @@ export function NoteComposer({
               type,
               details: noteDetails,
               behaviorTypeId: type === "behavior" ? behaviorTypeId ?? undefined : undefined,
+              studyNoteId: type === "homework" && studyCatalogId != null ? studyCatalogId : undefined,
+              deduction: type === "homework" && studyNeedsDeduction ? Number(deduction) : undefined,
               periodKey,
               occurredAt: fromDatetimeLocalValue(occurredAt),
+              subject: lessonSubject,
             },
           })) as {
             id: number;
@@ -547,10 +776,19 @@ export function NoteComposer({
             occurrence?: number;
             behaviorName?: string | null;
             behaviorDegree?: number | null;
+            whatsapp?: { phone?: string; body?: string } | null;
+            studyAction?: string;
+            studyStage?: number | null;
+            transferred?: boolean;
           };
-          label = result.label;
+          label = result.studyAction ? `${result.label}` : result.label;
           count += 1;
           setSent(count);
+          if (result.transferred) transferred += 1;
+          if (result.studyStage === 2 || result.studyStage === 3) messageStages += 1;
+          if (result.whatsapp?.phone && result.whatsapp.body) {
+            whatsapps.push({ phone: result.whatsapp.phone, body: result.whatsapp.body });
+          }
           if (type === "behavior" && result.id) {
             saved.push({
               id: result.id,
@@ -574,7 +812,7 @@ export function NoteComposer({
         }
       }
       if (count === 0) throw new Error(firstError);
-      return { label, count, failedIds, failedNames, saved };
+      return { label, count, failedIds, failedNames, saved, whatsapps, transferred, messageStages };
     },
     onSuccess: (result) => {
       if (result.failedIds.length > 0) {
@@ -583,30 +821,53 @@ export function NoteComposer({
       const verbal = result.saved.filter((note) => isTeacherVerbal(note.degree, note.occurrence));
       const pending = result.saved.filter((note) => !isTeacherVerbal(note.degree, note.occurrence));
       const actNow = type === "behavior" && staffCan(staff, "takeActions") && pending.length > 0;
-      if (verbal.length > 0) {
+      if (type === "homework") {
+        const onlyTransfer = result.transferred > 0 && result.whatsapps.length === 0;
+        if (!onlyTransfer) {
+          toast.success(
+            many
+              ? tr("سُجّل لكل طالب الإجراء المناسب لعدد مراته")
+              : `${tr("سُجّل الإجراء")}: ${tr(studyAction.label)}`,
+          );
+        }
+        const link = result.whatsapps[0];
+        if (result.whatsapps.length === 1 && link) {
+          const number = toWhatsAppNumber(link.phone);
+          if (number) {
+            window.open(`https://wa.me/${number}?text=${encodeURIComponent(link.body)}`, "_blank", "noopener,noreferrer");
+          }
+        } else if (result.whatsapps.length > 1) {
+          toast.success(tr("حُفظ إشعار ولي الأمر في سجل كل طالب"));
+        }
+        if (result.transferred > 0) {
+          toast.success(tr("حُوّلت إشعارات أولياء الأمور إلى المرشد الطلابي ووكيل شؤون الطلاب"));
+        } else if (result.messageStages > 0 && result.whatsapps.length === 0) {
+          toast(tr("سُجّل الإجراء. لا يوجد رقم ولي أمر لفتح واتساب."));
+        }
+      } else if (verbal.length > 0) {
         toast.success(
           verbal.length > 1
             ? tr("سُجّل تنبيه شفهي على الطلاب وأُغلق دون إجراء من الوكيل")
             : `${tr("سُجّل تنبيه شفهي")} — ${occurrenceLabel(verbal[0]!.occurrence)}. ${tr("لا يحتاج إجراء من الوكيل.")}`,
         );
       }
-      if (actNow) {
+      if (type !== "homework" && actNow) {
         toast.success(tr("سُجّلت المخالفة. أكمل الإجراء ثم التعهد ثم الإرسال."));
         setFollow(pending);
         setPicking(false);
-      } else if (verbal.length === 0 && targets.length === 1) {
+      } else if (type !== "homework" && verbal.length === 0 && targets.length === 1) {
         toast.success(
           type === "behavior" && (result.saved[0]?.occurrence ?? 1) >= 3
             ? `${tr("أُرسلت المخالفة إلى وكيل شؤون الطلاب")} — ${occurrenceLabel(result.saved[0]?.occurrence ?? 3)}`
             : `تم تسجيل ${result.label} لـ ${targets[0]?.studentName ?? ""}`,
         );
-      } else if (verbal.length === 0) {
+      } else if (type !== "homework" && verbal.length === 0) {
         toast.success(
           many && shared
             ? `تم تسجيل مخالفة مشتركة على ${result.count} طلاب`
             : `تم تسجيل ${result.label} على ${result.count} طلاب`,
         );
-      } else if (pending.length > 0) {
+      } else if (type !== "homework" && pending.length > 0) {
         toast.success(tr("أُرسلت المخالفة إلى وكيل شؤون الطلاب من المرة الثالثة"));
       }
       if (!actNow) {
@@ -616,9 +877,11 @@ export function NoteComposer({
         onSubmitted?.({ count: result.count, failedIds: result.failedIds });
       }
       void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["today-marks"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
       void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
+      void queryClient.invalidateQueries({ queryKey: ["desk-inbox"] });
       void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
     },
@@ -632,6 +895,8 @@ export function NoteComposer({
     setType(null);
     setShortcut(null);
     setBehaviorTypeId(null);
+    setBehaviorStep("choose");
+    setExitKind(null);
     setPicking(false);
     setPeriodKey(currentPeriod(school.season, new Date(), school.schedules)?.key ?? "");
     setOccurredAt(toDatetimeLocalValue());
@@ -640,10 +905,17 @@ export function NoteComposer({
     setShared(false);
     setLateMinutes("");
     setLateTouched(false);
+    setStudyId("");
+    setDeduction("");
     setFollow(null);
   }
 
   function onOpenChange(next: boolean) {
+    if (!next && type === "behavior" && behaviorStep === "review") {
+      setLeaveAsk(true);
+      return;
+    }
+    setLeaveAsk(false);
     setInnerOpen(next);
     onOpenChangeProp?.(next);
     if (next) {
@@ -654,23 +926,33 @@ export function NoteComposer({
     if (!next) reset();
   }
 
+  function confirmLeave() {
+    setLeaveAsk(false);
+    setInnerOpen(false);
+    onOpenChangeProp?.(false);
+    reset();
+  }
+
   const canSend =
     targets.length > 0 &&
     type != null &&
     (type !== "behavior" || behaviorTypeId != null) &&
     (!otherBehavior || details.trim().length >= 2) &&
     (shortcut !== "late" || Number(lateMinutes) >= 1) &&
+    (shortcut !== "homework" || (studyId !== "" && (studyId !== "other" || details.trim().length >= 2) && (!studyNeedsDeduction || Number(deduction) > 0) && !studyPreview.isFetching)) &&
+    (subjects.length <= 1 || Boolean(lessonSubject)) &&
     !mutation.isPending;
   const iso = fromDatetimeLocalValue(occurredAt);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         className={cn(
           "flex flex-col overflow-hidden p-4",
           "!inset-0 !h-dvh !max-h-dvh !w-full !max-w-none !translate-x-0 !translate-y-0 !rounded-none",
-          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!h-auto sm:!max-h-[92vh] sm:!w-[calc(100%-2rem)] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
+          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!h-[92vh] sm:!max-h-[92vh] sm:!w-[calc(100%-2rem)] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
         )}
       >
         {follow ? (
@@ -685,6 +967,27 @@ export function NoteComposer({
               onOpenChangeProp?.(false);
               onSubmitted?.({ count, failedIds: [] });
             }}
+          />
+        ) : type === "behavior" && behaviorStep === "review" && selectedBehavior ? (
+          <BehaviorReview
+            student={many ? namePreview : showName(targets[0]?.studentName ?? "")}
+            name={selectedBehavior.name}
+            degree={selectedBehavior.degree ?? 1}
+            staffAudience={isStaffViolation(selectedBehavior)}
+            procedures={selectedBehavior.procedures}
+            nextOccurrence={many ? undefined : occurrencePreview.data?.next}
+            shared={many}
+            other={otherBehavior}
+            late={shortcut === "late"}
+            lateMinutes={lateMinutes}
+            onLateMinutes={(value) => { setLateTouched(true); setLateMinutes(value); }}
+            details={details}
+            onDetails={setDetails}
+            formKey={formKey}
+            pending={mutation.isPending}
+            canSend={canSend}
+            onBack={() => { setBehaviorStep("choose"); setPicking(true); }}
+            onSend={() => mutation.mutate()}
           />
         ) : (
         <>
@@ -777,7 +1080,39 @@ export function NoteComposer({
           </div>
         ) : null}
 
-        <div className="shrink-0 space-y-2">
+        {lockedSubject && !pickSubject ? (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-[var(--radius-md)] bg-primary/10 px-3 py-2">
+            <p className="text-sm font-semibold">{tr("المادة")}: {lockedSubject}</p>
+            {subjects.length > 1 ? (
+              <button type="button" className="text-xs font-medium text-primary" onClick={() => setPickSubject(true)}>
+                {tr("تغيير المادة")}
+              </button>
+            ) : null}
+          </div>
+        ) : subjects.length === 1 ? (
+          <p className="mb-2 text-sm font-semibold">{tr("المادة")}: {subjects[0]}</p>
+        ) : subjects.length > 1 ? (
+          <div className="mb-2 space-y-1">
+            <p className="text-xs text-fg-muted">{tr("اختر المادة. لا تُحدَّد واحدة مسبقاً.")}</p>
+            <div className="flex flex-wrap gap-2">
+              {subjects.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setLessonSubject(name)}
+                  className={cn(
+                    "min-h-10 rounded-full border px-3 text-sm",
+                    lessonSubject === name ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg",
+                  )}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-2 min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto overscroll-contain pe-1">
           <Label>{tr("نوع الملاحظة")}</Label>
           <div className="grid grid-cols-4 gap-1.5">
             {NOTE_TYPES.map((item) => {
@@ -787,6 +1122,16 @@ export function NoteComposer({
                   key={item}
                   type="button"
                   onClick={() => {
+                    setExitKind(null);
+                    if (item === "homework") {
+                      setShortcut("homework");
+                      setStudyId("");
+                      setType(null);
+                      setBehaviorTypeId(null);
+                      setPicking(false);
+                      setDetails("");
+                      return;
+                    }
                     const linked = SHORTCUT_VIOLATIONS[item];
                     if (linked) {
                       const found = behaviorTypes.find((bt) => bt.name === linked);
@@ -794,11 +1139,14 @@ export function NoteComposer({
                       setType("behavior");
                       setBehaviorTypeId(found?.id ?? null);
                       setPicking(false);
+                      setStudyId("");
+                      setBehaviorStep(found ? "review" : "choose");
                       if (item === "late") setLateTouched(false);
                       if (!found) toast.error(tr("المخالفة غير جاهزة بعد. حدّث الصفحة ثم أعد المحاولة."));
                       return;
                     }
                     setShortcut(null);
+                    setStudyId("");
                     setType(item);
                     if (item === "behavior") setPicking(true);
                     else {
@@ -807,7 +1155,8 @@ export function NoteComposer({
                     }
                   }}
                   className={cn(
-                    "flex min-h-11 items-center justify-center rounded-[var(--radius-md)] border px-1 text-[13px] font-semibold leading-4",
+                    "flex min-h-8 items-center justify-center rounded-[var(--radius-md)] border px-1 text-center font-semibold leading-4",
+                    item === "homework" ? "text-[11px]" : "text-[13px]",
                     (shortcut ? shortcut === item : type === item)
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-border bg-bg text-fg",
@@ -818,91 +1167,161 @@ export function NoteComposer({
               );
             })}
           </div>
-          {shortcut && selectedBehavior ? (
+          {!many ? (
+            <div className="space-y-1.5">
+              <Label>{tr("الاستئذان")}</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {EXIT_PERMITS.map((item) => (
+                  <button
+                    key={item.kind}
+                    type="button"
+                    onClick={() => {
+                      setExitKind(item.kind);
+                      setType(null);
+                      setShortcut(null);
+                      setBehaviorTypeId(null);
+                      setPicking(false);
+                      setStudyId("");
+                      setBehaviorStep("choose");
+                    }}
+                    className={cn(
+                      "flex min-h-8 items-center justify-center rounded-[var(--radius-md)] border px-2 text-center text-[13px] font-semibold leading-4",
+                      exitKind === item.kind ? "border-primary bg-primary/5 text-primary" : "border-border bg-bg text-fg",
+                    )}
+                  >
+                    {tr(item.label)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {shortcut === "homework" ? (
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold">{tr("الملاحظة الدراسية")}</p>
+              <div className="grid gap-1.5">
+                {studyChoices.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => {
+                      setExitKind(null);
+                      setStudyId(note.id);
+                      setType("homework");
+                      setBehaviorTypeId(null);
+                      setShortcut("homework");
+                      setDetails(note.id === "other" ? "" : "");
+                      setDeduction("");
+                    }}
+                    className={cn(
+                      "min-h-8 rounded-[var(--radius-md)] border px-3 py-2 text-right text-sm font-semibold",
+                      studyId === note.id ? "border-primary bg-primary/5 text-primary" : "border-border bg-bg text-fg",
+                    )}
+                  >
+                    {tr(note.label)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : shortcut && selectedBehavior ? (
             <p className="text-xs text-fg-muted">
               {tr("اختصار للتسجيل السريع، وتُعامل كمخالفة سلوكية من الدرجة")} {degreeLabel(selectedBehavior.degree)}. {tr("بعد الإرسال تُكمَل إجراءاتها.")}
             </p>
           ) : type ? (
             <p className="text-xs text-fg-muted">{tr(TYPE_HINT[type])}</p>
           ) : null}
-        </div>
 
-        <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pe-1">
           {type === "behavior" ? (
             selectedBehavior ? (
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setPicking(true)}
-                  className={cn("w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(selectedBehavior.degree ?? 1))}
-                >
-                  <p className="text-base font-semibold leading-7">{tr(selectedBehavior.name)}</p>
-                  <p className="text-sm font-medium">
-                    {degreeLabel(selectedBehavior.degree)}
-                    {isStaffViolation(selectedBehavior) ? tr(" · تجاه المعلمين ومن في حكمهم") : ""}
-                    {" "}— {tr("اضغط لتغيير المخالفة")}
-                  </p>
-                </button>
-                {shortcut === "late" ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`late-minutes-${formKey}`}>{tr("دقائق التأخر عن بداية الحصة")}</Label>
-                    <Input
-                      id={`late-minutes-${formKey}`}
-                      type="number"
-                      min={1}
-                      max={90}
-                      inputMode="numeric"
-                      value={lateMinutes}
-                      onChange={(e) => {
-                        setLateTouched(true);
-                        setLateMinutes(e.target.value);
-                      }}
-                    />
-                    <p className="text-xs text-fg-muted">
-                      {tr("تُحسب من بداية الحصة ويمكن تعديلها قبل الإرسال.")}
-                    </p>
-                  </div>
-                ) : null}
-                {otherBehavior ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`other-${formKey}`}>{tr("صف المخالفة يدوياً")}</Label>
-                    <Textarea
-                      id={`other-${formKey}`}
-                      className="min-h-20"
-                      placeholder={tr("اكتب نوع المخالفة…")}
-                      value={details}
-                      onChange={(e) => setDetails(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`details-${formKey}`}>{tr("الملاحظات")}</Label>
-                    <Textarea
-                      id={`details-${formKey}`}
-                      className="min-h-11"
-                      placeholder={tr("أضف تفاصيل الملاحظة…")}
-                      value={details}
-                      onChange={(e) => setDetails(e.target.value)}
-                    />
-                  </div>
-                )}
-                <ProcedurePreview
-                  degree={selectedBehavior.degree ?? 1}
-                  procedures={selectedBehavior.procedures}
-                  nextOccurrence={many ? undefined : occurrencePreview.data?.next}
-                  shared={many}
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className={cn("w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(selectedBehavior.degree ?? 1))}
+              >
+                <p className="text-base font-semibold leading-7">{tr(selectedBehavior.name)}</p>
+                <p className="text-sm font-medium">
+                  {degreeLabel(selectedBehavior.degree)}
+                  {isStaffViolation(selectedBehavior) ? tr(" · تجاه المعلمين ومن في حكمهم") : ""}
+                  {" "}— {tr("اضغط لتغيير المخالفة")}
+                </p>
+              </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setPicking(true)}
-                className="min-h-16 w-full rounded-2xl border-2 border-dashed border-primary px-3 text-base font-bold text-primary"
+                className="min-h-10 w-full rounded-2xl border-2 border-dashed border-primary px-3 text-base font-bold text-primary"
               >
                 {tr("اختيار المخالفة")}
               </button>
             )
+          ) : type === "homework" ? (
+            <div className="space-y-3">
+              <div className="space-y-2 rounded-2xl border border-border bg-bg-elevated p-3">
+                <p className="text-sm font-semibold">{tr("الإجراء حسب التكرار")}</p>
+                {many ? (
+                  <p className="text-xs text-fg-muted">{tr("المرحلة تعتمد على عدد مرات كل طالب.")}</p>
+                ) : (
+                  <p className="text-xs text-fg-muted">{occurrenceLabel(studyPreview.data?.students?.[0]?.next ?? studyStage)} — {tr("هذه المرة")}</p>
+                )}
+                {STUDY_ACTIONS.map((action, index) => {
+                  const current = index + 1 === studyStage;
+                  return (
+                    <div
+                      key={action.id}
+                      className={cn("rounded-xl border px-3 py-2", current ? "border-primary bg-primary/5" : "border-border bg-bg")}
+                    >
+                      <p className="text-xs font-semibold">
+                        {occurrenceLabel(index + 1)}
+                        {current ? ` — ${tr("هذه المرة")}` : ""}
+                      </p>
+                      <p className="text-sm font-semibold">{tr(action.label)}</p>
+                      <p className="text-xs leading-5 text-fg-muted">{tr(action.hint)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              {studyHandsOff ? (
+                <p className="text-xs leading-5 text-fg-muted">{tr("إشعار ولي الأمر يرسله المرشد الطلابي أو وكيل شؤون الطلاب، ما لم تُمنح صلاحية الرسائل.")}</p>
+              ) : null}
+              {studyId === "other" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`details-${formKey}`}>{tr("اكتب الملاحظة الدراسية")}</Label>
+                  <Textarea
+                    id={`details-${formKey}`}
+                    className="min-h-20"
+                    placeholder={tr("مثال: لم يحضر أدوات الرسم")}
+                    value={details}
+                    onChange={(e) => setDetails(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`details-${formKey}`}>{tr("تفصيل إضافي")}</Label>
+                  <Textarea
+                    id={`details-${formKey}`}
+                    className="min-h-8"
+                    placeholder={tr("اختياري، مثل اسم الواجب أو الدرس")}
+                    value={details}
+                    onChange={(e) => setDetails(e.target.value)}
+                  />
+                </div>
+              )}
+              {studyNeedsDeduction ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`deduct-${formKey}`}>{tr("الدرجة المخصومة من أعمال السنة")}</Label>
+                  <Input
+                    id={`deduct-${formKey}`}
+                    type="number"
+                    min={0.5}
+                    max={30}
+                    step={0.5}
+                    inputMode="decimal"
+                    value={deduction}
+                    onChange={(e) => setDeduction(e.target.value)}
+                  />
+                  <p className="text-xs text-fg-muted">{tr("تُخصم من درجات المادة لا من السلوك، ويُشعر ولي الأمر.")}</p>
+                </div>
+              ) : null}
+            </div>
           ) : type ? (
             <div className="space-y-1.5">
               <Label htmlFor={`details-${formKey}`}>{tr("الملاحظات")}</Label>
@@ -914,12 +1333,40 @@ export function NoteComposer({
                 onChange={(e) => setDetails(e.target.value)}
               />
             </div>
+          ) : exitKind ? (
+            <p className="px-1 text-xs text-fg-muted">{tr("يظهر أمام اسم الطالب لمدة ١٥ دقيقة.")}</p>
           ) : (
             <p className="px-1 py-6 text-center text-sm text-fg-muted">{tr("اختر نوع الملاحظة أعلاه لعرض القائمة.")}</p>
           )}
         </div>
 
         <div className="mt-2 shrink-0 border-t border-border pt-3">
+          {exitKind ? (
+            <Button
+              className="w-full"
+              disabled={grantExit.isPending || !targets[0]}
+              onClick={() => {
+                const studentId = targets[0]?.studentId;
+                if (!studentId) return;
+                grantExit.mutate(
+                  { studentId, kind: exitKind },
+                  {
+                    onSuccess: () => {
+                      reset();
+                      setInnerOpen(false);
+                      onOpenChangeProp?.(false);
+                    },
+                  },
+                );
+              }}
+            >
+              {grantExit.isPending ? tr("جارٍ الحفظ…") : tr("سماح بالخروج")}
+            </Button>
+          ) : type === "behavior" && behaviorStep === "choose" ? (
+            <Button className="w-full" disabled={!selectedBehavior} onClick={() => setBehaviorStep("review")}>
+              {tr("التالي: الإجراءات")}
+            </Button>
+          ) : (
           <Button className="w-full" disabled={!canSend} onClick={() => mutation.mutate()}>
             <Send className="size-4" />
             {mutation.isPending
@@ -927,17 +1374,28 @@ export function NoteComposer({
                 ? `جارٍ التسجيل… ${sent} من ${targets.length}`
                 : tr("جارٍ الإرسال…")
               : many
-                ? selectedBehavior
+                ? type === "homework"
+                  ? studyHandsOff
+                    ? `${tr("تحويل حسب تكرار كل طالب")} — ${targets.length}`
+                    : `${tr(studyAction.label)} — ${targets.length}`
+                  : selectedBehavior
                   ? `تسجيل «${tr(selectedBehavior.name)}» على ${targets.length}`
                   : type
                     ? `تسجيل ${tr(NOTE_META[type].label)} على ${targets.length}`
                     : `تسجيل على ${targets.length}`
-                : selectedBehavior
+                : type === "homework"
+                  ? !many && studyHandsOff
+                    ? studyStage === 2
+                      ? tr("تحويل الإشعار للمرشد والوكيل")
+                      : tr("تسجيل الحسم وتحويل الإشعار")
+                    : tr(studyAction.label)
+                  : selectedBehavior
                   ? `${tr("إرسال")} — ${tr(selectedBehavior.name)}`
                   : type
                     ? `${tr("إرسال")} — ${tr(NOTE_META[type].label)}`
                     : tr("إرسال الملاحظة")}
           </Button>
+          )}
         </div>
         </>
         )}
@@ -947,18 +1405,37 @@ export function NoteComposer({
           items={behaviorTypes}
           audience={audience}
           degree={degreePick}
+          currentId={behaviorTypeId}
           onAudience={(next) => {
             setAudience(next);
             setDegreePick(next === "staff" ? 4 : 1);
           }}
           onDegree={setDegreePick}
           onPick={(id) => {
+            setType("behavior");
             setBehaviorTypeId(id);
             setPicking(false);
+            setBehaviorStep("review");
           }}
-          onClose={() => setPicking(false)}
+          onClose={() => {
+            setPicking(false);
+            if (behaviorTypeId != null) setBehaviorStep("review");
+          }}
         />
       ) : null}
     </Dialog>
+    <Dialog open={leaveAsk} onOpenChange={setLeaveAsk}>
+      <DialogContent className="!inset-auto !top-1/2 !left-1/2 z-[80] !h-auto !max-h-none w-[min(92vw,24rem)] !max-w-sm !-translate-x-1/2 !-translate-y-1/2 rounded-2xl p-5 shadow-xl">
+        <DialogHeader>
+          <DialogTitle className="text-center text-lg">{tr("إغلاق المخالفة دون حفظها؟")}</DialogTitle>
+          <DialogDescription className="text-center">{tr("لم يُعتمد الإجراء ولن تُحفظ المخالفة.")}</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="secondary" onClick={() => setLeaveAsk(false)}>{tr("البقاء")}</Button>
+          <Button type="button" onClick={confirmLeave}>{tr("إغلاق دون حفظ")}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

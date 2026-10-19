@@ -6,16 +6,17 @@ import { classLabel } from "@/lib/school/constants";
 import { parsePermissions } from "@/lib/school/permissions";
 import type { DailyKind, StaffRole } from "@/lib/school/types";
 
-async function attendanceStaff(userId: string) {
+async function approvedStaff(userId: string) {
   const sql = await getSql();
   const staff = (
     await sql<{
       school_id: number;
+      user_id: string;
       role: string;
       permissions: string;
       active: boolean;
     }>`
-      select school_id, role,
+      select school_id, user_id, role,
              coalesce(permissions::text, '{}') as permissions,
              coalesce(active, true) as active
       from staff
@@ -26,6 +27,11 @@ async function attendanceStaff(userId: string) {
     throw new Error("لا تملك صلاحية الوصول بعد");
   }
   const perms = parsePermissions(staff.permissions, staff.role as StaffRole);
+  return { sql, staff, perms };
+}
+
+async function attendanceStaff(userId: string) {
+  const { sql, staff, perms } = await approvedStaff(userId);
   if (staff.role !== "admin" && !perms.dailyAttendance) {
     throw new Error("ليست لديك هذه الصلاحية");
   }
@@ -36,10 +42,11 @@ export const listAttendanceDayCounts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const { sql, staff } = await attendanceStaff(context.userId);
-    const rows = await sql<{ student_id: number; absence_days: number; late_days: number }>`
+    const rows = await sql<{ student_id: number; absence_days: number; late_days: number; leave_days: number }>`
       select student_id,
              sum(case when kind = 'absence' then 1 else 0 end)::int as absence_days,
-             sum(case when kind = 'late' then 1 else 0 end)::int as late_days
+             sum(case when kind = 'late' then 1 else 0 end)::int as late_days,
+             sum(case when kind = 'leave' then 1 else 0 end)::int as leave_days
       from daily_attendance
       where school_id = ${staff.school_id}
       group by student_id
@@ -49,6 +56,7 @@ export const listAttendanceDayCounts = createServerFn({ method: "GET" })
         studentId: Number(row.student_id),
         absenceDays: Number(row.absence_days) || 0,
         lateDays: Number(row.late_days) || 0,
+        leaveDays: Number(row.leave_days) || 0,
       })),
     };
   });
@@ -57,7 +65,7 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(z.object({ studentId: z.number() }))
   .handler(async ({ context, data }) => {
-    const { sql, staff, perms } = await attendanceStaff(context.userId);
+    const { sql, staff, perms } = await approvedStaff(context.userId);
     const student = (
       await sql<{
         id: number;
@@ -76,8 +84,8 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
       `
     )[0];
     if (!student) throw new Error("الطالب غير موجود");
-    const days = await sql<{ day: string; kind: DailyKind; arrived_at: string | null }>`
-      select day::text as day, kind, arrived_at::text as arrived_at
+    const days = await sql<{ day: string; kind: string; arrived_at: string | null; details: string }>`
+      select day::text as day, kind, arrived_at::text as arrived_at, coalesce(details, '') as details
       from daily_attendance
       where school_id = ${staff.school_id} and student_id = ${student.id}
       order by day
@@ -90,8 +98,10 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
       parentPhone: perms.sendMessages ? student.parent_phone : "",
       days: days.map((row) => ({
         day: String(row.day).slice(0, 10),
-        kind: row.kind,
+        kind: (row.kind === "leave" ? "leave" : row.kind) as DailyKind | "leave",
         arrivedAt: row.arrived_at || null,
+        details: row.details ?? "",
+        leave: row.kind === "leave",
       })),
     };
   });

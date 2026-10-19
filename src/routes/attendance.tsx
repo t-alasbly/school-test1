@@ -5,13 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
+import { StudentSheet } from "@/components/student-sheet";
+import { ExitPermitBadge } from "@/components/exit-permit";
 import { AppGate } from "@/components/app-gate";
 import { PageHelp } from "@/components/page-help";
 import { DayField, CalendarSwitch } from "@/components/day-field";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDailyAttendance, logParentMessage, requestClassMove, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
-import { getStudentAttendanceDays, listAttendanceDayCounts } from "@/lib/school/attendance-totals";
-import { formatPrimaryDate, isoFromDate, weekdayAr, type CalendarKind } from "@/lib/school/calendar";
-import { formatTime, toWhatsAppNumber } from "@/lib/school/constants";
+import { getDailyAttendance, saveDailyAttendance, updateAppearance } from "@/lib/school/api";
+import { listAttendanceDayCounts } from "@/lib/school/attendance-totals";
+import { formatPrimaryDate, isoFromDate, type CalendarKind } from "@/lib/school/calendar";
+import { formatTime, scheduleFor } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
 import { studentLabel, useLocale, tr } from "@/lib/school/i18n";
-import { rangeFromPreset } from "@/components/attendance-roster";
 import { staffCan } from "@/lib/school/permissions";
 import { mergeAppearance, applyAppearance } from "@/lib/school/theme";
 import { useCalendar } from "@/lib/school/use-calendar";
@@ -35,8 +34,15 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/attendance")({ component: AttendancePage });
 
-type PrintKind = "all" | "absence" | "late";
-type Draft = { kind: DailyKind | "present"; excused: boolean; arrivedAt: string | null };
+type PrintKind = "all" | "absence" | "late" | "leave";
+type Marks = {
+  absence: boolean;
+  late: boolean;
+  leave: boolean;
+  excused: boolean;
+  arrivedAt: string | null;
+  leaveDetails: string;
+};
 
 function todayISO() {
   return isoFromDate(new Date());
@@ -63,38 +69,60 @@ function isoFromDayTime(day: string, time: string) {
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
-function dayCountLabel(n: number) {
-  if (n === 1) return tr("1 يوم");
-  if (n === 2) return tr("2 يومين");
-  if (n >= 3 && n <= 10) return `${n} أيام`;
-  return `${n} يوماً`;
+function slotBy(season: "winter" | "summer", schedules: Parameters<typeof scheduleFor>[1], key: string, hint: string) {
+  const slots = scheduleFor(season, schedules);
+  return slots.find((item) => item.key === key) ?? slots.find((item) => item.label.includes(hint)) ?? null;
 }
 
-type HistoryDay = { day: string; kind: DailyKind; arrivedAt: string | null };
-
-function historyLine(row: HistoryDay, calendar: CalendarKind) {
-  const date = `${weekdayAr(row.day)} ${formatPrimaryDate(row.day, calendar)}`;
-  if (row.kind === "late" && row.arrivedAt) return `${date} — ${formatTime(row.arrivedAt)}`;
-  return date;
+function clockMinutes(iso: string | null) {
+  const [hour, minute] = timeFromIso(iso).split(":").map(Number);
+  return hour * 60 + minute;
 }
 
-function historyMessage(opts: {
-  name: string;
-  classLabel: string;
-  school: string;
-  kind: DailyKind;
-  span: string;
-  lines: string[];
-}) {
-  const what = opts.kind === "absence" ? tr("الغياب") : tr("التأخر");
-  const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel} خلال ${opts.span}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
-  const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
-  const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
-  if (packed(opts.lines).length <= 1900) return packed(opts.lines);
-  const note = tr("… وأيام أقدم لم تُذكر لطول الرسالة.\n");
-  const kept = [...opts.lines];
-  while (kept.length > 1 && packed(kept, note).length > 1900) kept.shift();
-  return packed(kept, note).slice(0, 2000);
+function lateFromFirst(iso: string | null, season: "winter" | "summer", schedules: Parameters<typeof scheduleFor>[1]) {
+  const assembly = slotBy(season, schedules, "assembly", "الطابور");
+  const first = slotBy(season, schedules, "p1", "الأولى");
+  if (!assembly || !first) return null;
+  const mins = clockMinutes(iso);
+  if (mins < assembly.startMin) return { phase: "before" as const, minutes: 0 };
+  if (mins < first.startMin) return { phase: "assembly" as const, minutes: 0 };
+  return { phase: "lesson" as const, minutes: mins - first.startMin };
+}
+
+function lateCountLabel(iso: string | null, season: "winter" | "summer", schedules: Parameters<typeof scheduleFor>[1]) {
+  const count = lateFromFirst(iso, season, schedules);
+  if (!count || count.phase === "before") return "";
+  if (count.phase === "assembly") return tr("من الطابور");
+  return count.minutes <= 0 ? tr("بداية الأولى") : `${count.minutes} ${tr("د")} ${tr("من الأولى")}`;
+}
+
+function minutesAfterSlot(
+  season: "winter" | "summer",
+  schedules: Parameters<typeof scheduleFor>[1],
+  key: string,
+  hint: string,
+) {
+  const period = slotBy(season, schedules, key, hint);
+  if (!period) return null;
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  if (mins < period.endMin) return null;
+  return mins - period.endMin;
+}
+
+function afterPeriod7Details(minutes: number) {
+  return `p7m:${minutes}@${nowTime()}`;
+}
+
+function parseAfterPeriod6(details: string) {
+  const match = String(details ?? "").match(/^p[67](only|m):(\d+)(?:@(\d{1,2}:\d{2}))?$/);
+  if (!match) return null;
+  return { only: match[1] === "only", minutes: Number(match[2]), time: match[3] ?? "" };
+}
+
+function afterPeriod7Label(minutes: number, time: string) {
+  const mins = minutes <= 0 ? tr("بعد السابعة") : `${minutes} ${tr("د")} ${tr("بعد السابعة")}`;
+  return time ? `${mins} · ${time}` : mins;
 }
 
 function AttendancePage() {
@@ -111,17 +139,12 @@ function AttendanceBody() {
   const calendar = useCalendar();
   const queryClient = useQueryClient();
   const sheetRef = useRef<HTMLElement>(null);
-  const historyRef = useRef<HTMLElement>(null);
   const [day, setDay] = useState(todayISO);
   const [stageId, setStageId] = useState<number | null>(stages[0]?.id ?? null);
   const [classId, setClassId] = useState<number | null>(null);
   const [sort, setSort] = useState<ClassSort>("order");
-  const [historyId, setHistoryId] = useState<number | null>(null);
-  const [historyKind, setHistoryKind] = useState<DailyKind>("absence");
-  const [historySpan, setHistorySpan] = useState<"week" | "month" | "term" | "all">("term");
-  const [historyDraft, setHistoryDraft] = useState("");
-  const [moveClassId, setMoveClassId] = useState("");
-  const [local, setLocal] = useState<Record<number, Draft>>({});
+  const [sheetStudentId, setSheetStudentId] = useState<number | null>(null);
+  const [local, setLocal] = useState<Record<number, Marks>>({});
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const [printKind, setPrintKind] = useState<PrintKind>("all");
   const [showSheet, setShowSheet] = useState(false);
@@ -168,43 +191,6 @@ function AttendanceBody() {
     queryFn: () => listAttendanceDayCounts(),
     enabled: can,
   });
-  const history = useQuery({
-    queryKey: ["student-attendance-days", historyId],
-    queryFn: () => getStudentAttendanceDays({ data: { studentId: historyId! } }),
-    enabled: can && historyId != null,
-  });
-  const historyBounds = useMemo(() => rangeFromPreset(historySpan), [historySpan]);
-  const historySpanText =
-    historySpan === "all"
-      ? tr("كل الأيام المسجّلة")
-      : `${historyBounds.label} (${formatPrimaryDate(historyBounds.from, calendar)} — ${formatPrimaryDate(historyBounds.to, calendar)})`;
-  const historyDays = useMemo(() => {
-    const all = history.data?.days ?? [];
-    return all.filter((row) => {
-      const iso = String(row.day).slice(0, 10);
-      return row.kind === historyKind && iso >= historyBounds.from && iso <= historyBounds.to;
-    });
-  }, [history.data, historyKind, historyBounds]);
-
-  useEffect(() => {
-    if (!history.data) return;
-    const lines = (history.data.days ?? [])
-      .filter((row) => {
-        const iso = String(row.day).slice(0, 10);
-        return row.kind === historyKind && iso >= historyBounds.from && iso <= historyBounds.to;
-      })
-      .map((row) => historyLine(row, calendar));
-    setHistoryDraft(
-      historyMessage({
-        name: history.data.studentName,
-        classLabel: history.data.classLabel,
-        school: school.name,
-        kind: historyKind,
-        span: historySpan === "all" ? tr("كل المدة المسجّلة") : historyBounds.label,
-        lines,
-      }),
-    );
-  }, [history.data, historyKind, historyBounds, historySpan, calendar, school.name]);
 
   useEffect(() => {
     setLocal({});
@@ -212,31 +198,43 @@ function AttendanceBody() {
 
   const students: DailyAttendanceRow[] = (query.data as { students?: DailyAttendanceRow[] } | undefined)?.students ?? [];
 
+  function marksOf(row: DailyAttendanceRow): Marks {
+    return local[row.studentId] ?? {
+      absence: row.kind === "absence",
+      late: row.kind === "late",
+      leave: Boolean(row.hasLeave),
+      excused: row.excused,
+      arrivedAt: row.arrivedAt,
+      leaveDetails: row.leaveDetails ?? "",
+    };
+  }
+
   function statusOf(row: DailyAttendanceRow): DailyKind | "present" {
-    return local[row.studentId]?.kind ?? row.kind ?? "present";
+    const marks = marksOf(row);
+    if (marks.absence) return "absence";
+    if (marks.late) return "late";
+    return "present";
   }
 
   function dayTotals(row: DailyAttendanceRow) {
     const found = totals.data?.counts.find((item) => item.studentId === row.studentId);
     let absenceDays = found?.absenceDays ?? 0;
     let lateDays = found?.lateDays ?? 0;
-    const saved = row.kind;
-    const now = statusOf(row);
-    if (saved !== now) {
-      if (saved === "absence") absenceDays -= 1;
-      if (saved === "late") lateDays -= 1;
-      if (now === "absence") absenceDays += 1;
-      if (now === "late") lateDays += 1;
-    }
+    let leaveDays = found?.leaveDays ?? 0;
+    const saved = { absence: row.kind === "absence", late: row.kind === "late", leave: Boolean(row.hasLeave) };
+    const now = marksOf(row);
+    if (saved.absence !== now.absence) absenceDays += now.absence ? 1 : -1;
+    if (saved.late !== now.late) lateDays += now.late ? 1 : -1;
+    if (saved.leave !== now.leave) leaveDays += now.leave ? 1 : -1;
     return {
       absenceDays: Math.max(0, absenceDays),
       lateDays: Math.max(0, lateDays),
+      leaveDays: Math.max(0, leaveDays),
     };
   }
 
   function arrivedOf(row: DailyAttendanceRow): string | null {
-    if (local[row.studentId]?.arrivedAt !== undefined) return local[row.studentId].arrivedAt;
-    return row.arrivedAt;
+    return marksOf(row).arrivedAt;
   }
 
   const shown = useMemo(() => {
@@ -245,27 +243,68 @@ function AttendanceBody() {
       sort,
     );
   }, [students, sort]);
+  const dismissalWord = day < todayISO() || (day === todayISO() && minutesAfterSlot(school.season, school.schedules, "p6", "السادسة") != null);
 
-  async function persist(s: DailyAttendanceRow, kind: DailyKind | "present", extras?: Partial<Draft>) {
-    const excused = extras?.excused ?? local[s.studentId]?.excused ?? s.excused;
-    const arrivedAt =
-      kind === "late"
-        ? extras?.arrivedAt ?? local[s.studentId]?.arrivedAt ?? s.arrivedAt ?? isoFromDayTime(day, nowTime())
-        : null;
-    const draft: Draft = { kind, excused, arrivedAt };
-    setLocal((prev) => ({ ...prev, [s.studentId]: draft }));
+  async function persist(s: DailyAttendanceRow, target: "absence" | "late" | "leave", extras?: Partial<Marks>) {
+    const current = marksOf(s);
+    const next: Marks = { ...current, ...extras };
+    if (target === "absence") {
+      if (current.absence && !extras) {
+        next.absence = false;
+      } else if (!extras) {
+        next.absence = true;
+        next.late = false;
+        next.leave = false;
+        next.leaveDetails = "";
+      }
+    } else if (target === "late") {
+      const arrivedAt = extras?.arrivedAt || current.arrivedAt || isoFromDayTime(day, nowTime());
+      if (day === todayISO() && lateFromFirst(arrivedAt, school.season, school.schedules)?.phase === "before") {
+        toast.error(tr("التأخر يبدأ مع بداية الطابور"));
+        return;
+      }
+      if (extras?.arrivedAt) {
+        next.late = true;
+        next.absence = false;
+        next.arrivedAt = extras.arrivedAt;
+      } else if (current.late) {
+        next.late = false;
+      } else {
+        next.late = true;
+        next.absence = false;
+        next.arrivedAt = arrivedAt;
+      }
+    } else if (current.leave && !extras?.leaveDetails) {
+      next.leave = false;
+      next.leaveDetails = "";
+    } else {
+      const after = day === todayISO() ? minutesAfterSlot(school.season, school.schedules, "p7", "السابعة") : 0;
+      if (day === todayISO() && after == null) {
+        toast.error(tr("تأخر الانصراف يُحسب بعد نهاية الحصة السابعة حسب الجدول"));
+        return;
+      }
+      next.leave = true;
+      next.absence = false;
+      next.late = false;
+      next.leaveDetails = afterPeriod7Details(after ?? 0);
+    }
+    setLocal((prev) => ({ ...prev, [s.studentId]: next }));
     setPendingIds((p) => (p.includes(s.studentId) ? p : [...p, s.studentId]));
+    const turningOff = target === "absence" ? !next.absence : target === "late" ? !next.late : !next.leave;
     try {
       await saveDailyAttendance({
         data: {
           day,
           entries: [
-            {
-              studentId: s.studentId,
-              kind,
-              excused,
-              arrivedAt: arrivedAt ?? undefined,
-            },
+            turningOff
+              ? { studentId: s.studentId, kind: "present" as const, clear: target }
+              : {
+                  studentId: s.studentId,
+                  kind: target,
+                  excused: next.excused,
+                  details: target === "leave" ? next.leaveDetails : "",
+                  arrivedAt: target === "late" ? next.arrivedAt ?? undefined : undefined,
+                },
           ],
         },
       });
@@ -277,15 +316,18 @@ function AttendanceBody() {
             row.studentId === s.studentId
               ? {
                   ...row,
-                  kind: kind === "present" ? null : kind,
-                  excused,
-                  arrivedAt: kind === "late" ? arrivedAt : null,
+                  kind: next.absence ? "absence" : next.late ? "late" : null,
+                  excused: next.excused,
+                  arrivedAt: next.late ? next.arrivedAt : null,
+                  hasLeave: next.leave,
+                  leaveDetails: next.leave ? next.leaveDetails : "",
                 }
               : row,
           ),
         };
       });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["today-marks"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["attendance-day-counts"] });
       void queryClient.invalidateQueries({ queryKey: ["student-attendance-days", s.studentId] });
@@ -299,8 +341,8 @@ function AttendanceBody() {
   const marked = useMemo(
     () =>
       shown.filter((s) => {
-        const kind = statusOf(s);
-        return kind === "absence" || kind === "late";
+        const marks = marksOf(s);
+        return marks.absence || marks.late || marks.leave;
       }),
     [shown, local],
   );
@@ -313,15 +355,18 @@ function AttendanceBody() {
       .join(" · ");
   }
 
-  function withDrafts(rows: DailyAttendanceRow[]) {
+  function withDrafts(rows: DailyAttendanceRow[]): DailyAttendanceRow[] {
     return rows.map((row) => {
       const draft = local[row.studentId];
       if (!draft) return row;
+      const kind: DailyKind | null = draft.absence ? "absence" : draft.late ? "late" : null;
       return {
         ...row,
-        kind: draft.kind === "present" ? null : draft.kind,
+        kind,
         excused: draft.excused,
-        arrivedAt: draft.kind === "late" ? draft.arrivedAt : null,
+        arrivedAt: draft.late ? draft.arrivedAt : null,
+        hasLeave: draft.leave,
+        leaveDetails: draft.leave ? draft.leaveDetails : "",
       };
     });
   }
@@ -394,58 +439,6 @@ function AttendanceBody() {
     }
   }
 
-  const canMessage = staffCan(staff, "sendMessages");
-  const historyPhone = history.data?.parentPhone ?? "";
-  const historyNumber = toWhatsAppNumber(historyPhone);
-
-  function printHistory() {
-    if (!historyRef.current || historyDays.length === 0) return;
-    printElement(historyRef.current);
-  }
-
-  async function sendHistory() {
-    if (!history.data || !historyNumber || !historyDraft.trim()) return;
-    try {
-      await logParentMessage({
-        data: {
-          studentId: history.data.studentId,
-          kind: historyKind,
-          body: historyDraft.trim(),
-          parentPhone: historyPhone,
-        },
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الرسالة"));
-      return;
-    }
-    window.open(
-      `https://wa.me/${historyNumber}?text=${encodeURIComponent(historyDraft.trim())}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    toast.success(tr("فُتحت واتساب وحُفظت الرسالة في السجل"));
-  }
-
-  const moveClass = useMutation({
-    mutationFn: () =>
-      requestClassMove({
-        data: { studentId: historyId!, classId: Number(moveClassId) },
-      }),
-    onSuccess: (result) => {
-      if (result.applied) {
-        toast.success(`تم نقل الطالب إلى ${result.toLabel}`);
-        void queryClient.invalidateQueries({ queryKey: ["daily-attendance"] });
-        void queryClient.invalidateQueries({ queryKey: ["student-attendance-days"] });
-        void queryClient.invalidateQueries({ queryKey: ["attendance-roster"] });
-      } else {
-        toast.success(`أُرسل طلب النقل إلى ${result.count}`);
-        void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      }
-      setMoveClassId("");
-    },
-    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر إرسال الطلب")),
-  });
-
   if (!can) {
     return <p className="text-fg-muted">{tr("تسجيل الغياب اليومي متاح لمسجل الغياب ولمن مُنح الصلاحية.")}</p>;
   }
@@ -455,15 +448,22 @@ function AttendanceBody() {
       ? tr("كشف الغياب اليومي")
       : printKind === "late"
         ? tr("كشف التأخر الصباحي")
-        : tr("كشف الغياب اليومي والتأخر الصباحي");
+        : printKind === "leave"
+          ? tr("كشف الانصراف")
+          : tr("كشف الغياب اليومي والتأخر والانصراف");
   const dayStamp = `${day}T12:00:00`;
   const sheetNames = sheetRows.filter((s) => {
     if (printKind === "absence") return s.kind === "absence";
     if (printKind === "late") return s.kind === "late";
-    return s.kind === "absence" || s.kind === "late";
+    if (printKind === "leave") return Boolean(s.hasLeave);
+    return s.kind === "absence" || s.kind === "late" || Boolean(s.hasLeave);
   });
   const sheetAbsenceCount = sheetRows.filter((s) => s.kind === "absence").length;
   const sheetLateCount = sheetRows.filter((s) => s.kind === "late").length;
+  const sheetLeaveCount = sheetRows.filter((s) => s.hasLeave).length;
+  const showArrival = printKind === "late" || printKind === "all";
+  const showLeaveCol = printKind === "leave" || printKind === "all";
+  const nameColSpan = 4 + (showArrival ? 1 : 0) + (showLeaveCol ? 1 : 0);
 
   return (
     <div className="space-y-2">
@@ -496,7 +496,7 @@ function AttendanceBody() {
       <header className="no-print flex items-center gap-2">
         <h1 className="flex min-w-0 items-center gap-1 text-xl font-semibold tracking-tight sm:text-3xl">
           <span className="truncate">{tr("الغياب اليومي")}</span>
-          <PageHelp text={tr("غياب اليوم أو التأخر عن الاصطفاف. الضغط مرة ثانية يلغي التحديد.")} />
+          <PageHelp text={tr("التأخر يبدأ مع الطابور ويُحسب من الحصة الأولى. بعد الحصة السادسة يصبح الزر انصرافًا، ويُحسب تأخر الانصراف بعد نهاية الحصة السابعة حسب الجدول.")} />
         </h1>
         <div className="ms-auto shrink-0">
           <CalendarSwitch calendar={calendar} onCalendar={(next) => saveCalendar.mutate(next)} />
@@ -522,17 +522,15 @@ function AttendanceBody() {
                 <div className="min-w-0 flex-1">
                   <button
                     type="button"
-                    onClick={() => {
-                      setHistoryKind(kind === "late" ? "late" : "absence");
-                      setHistoryId(s.studentId);
-                    }}
+                    onClick={() => setSheetStudentId(s.studentId)}
                     className={cn(
-                      "block w-full truncate text-right text-base font-semibold leading-6 hover:underline",
-                      kind === "absence" && "text-danger",
-                      kind === "late" && "text-warn",
+                      "block w-fit max-w-full truncate rounded px-1.5 text-right text-base font-semibold leading-6 hover:underline",
+                      kind === "absence" && "bg-danger text-white",
+                      kind === "late" && "bg-orange-500 text-white",
                     )}
                   >
                     {studentLabel(locale, s.studentName, s.nameEn)}
+                    <ExitPermitBadge studentId={s.studentId} className="ms-1.5 align-middle" />
                     {saving ? <span className="ms-2 text-xs font-normal text-fg-muted">{tr("يُحفظ…")}</span> : null}
                   </button>
                   <p className="flex min-w-0 items-center gap-2">
@@ -561,7 +559,7 @@ function AttendanceBody() {
                           type="time"
                           value={timeFromIso(arrivedOf(s))}
                           onChange={(e) =>
-                            void persist(s, "late", { arrivedAt: isoFromDayTime(day, e.target.value) })
+                            void persist(s, "late", { arrivedAt: isoFromDayTime(day, e.target.value), late: true })
                           }
                           onClick={(e) => {
                             try {
@@ -573,41 +571,60 @@ function AttendanceBody() {
                           className="bg-transparent text-[11px] font-bold text-primary-fg scheme-dark [&::-webkit-calendar-picker-indicator]:hidden"
                           dir="ltr"
                         />
+                        <span>{lateCountLabel(arrivedOf(s), school.season, school.schedules)}</span>
                       </label>
+                    ) : null}
+                    {marksOf(s).leave ? (
+                      <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-[#1e3a5f] px-2 text-[10px] font-bold text-white">
+                        {afterPeriod7Label(parseAfterPeriod6(marksOf(s).leaveDetails)?.minutes ?? 0, parseAfterPeriod6(marksOf(s).leaveDetails)?.time ?? "")}
+                      </span>
                     ) : null}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
-                  {(
-                    [
-                      ["late", tr("تأخر"), days.lateDays, "text-warn"],
-                      ["absence", tr("غياب"), days.absenceDays, "text-danger"],
-                    ] as const
-                  ).map(([k, label, count, tone]) => (
-                    <div key={k} className="flex flex-col items-center">
-                      <button
-                        type="button"
-                        aria-pressed={kind === k}
-                        onClick={() => void persist(s, kind === k ? "present" : k)}
-                        className={cn(
-                          "h-10 rounded-full border px-2.5 text-sm font-medium",
-                          kind === k
-                            ? k === "late"
-                              ? "border-warn bg-warn-soft text-warn"
-                              : "border-danger bg-danger-soft text-danger"
+                  <div className="flex flex-col items-center">
+                    <button
+                      type="button"
+                      aria-pressed={dismissalWord ? marksOf(s).leave : kind === "late"}
+                      onClick={() => {
+                        void persist(s, dismissalWord ? "leave" : "late");
+                      }}
+                      className={cn(
+                        "h-10 rounded-full border px-2.5 text-sm font-medium",
+                        dismissalWord
+                          ? marksOf(s).leave
+                            ? "border-violet-700 bg-violet-100 text-violet-800"
+                            : "border-border bg-bg-elevated text-fg-muted"
+                          : kind === "late"
+                            ? "border-orange-500 bg-orange-500 text-white"
                             : "border-border bg-bg-elevated text-fg-muted",
-                        )}
-                      >
-                        {label}
-                      </button>
-                      <span
-                        title={`${count} أيام`}
-                        className={cn("mt-0.5 text-[10px] leading-3 tabular-nums", count > 0 ? tone : "text-fg-subtle")}
-                      >
-                        {count}
-                      </span>
-                    </div>
-                  ))}
+                      )}
+                    >
+                      {dismissalWord ? tr("انصراف") : tr("تأخر")}
+                    </button>
+                    <span className="mt-0.5 flex gap-1 text-[10px] leading-3 tabular-nums">
+                      <span className={days.lateDays > 0 ? "text-orange-600" : "text-fg-subtle"}>{days.lateDays}</span>
+                      <span className={days.leaveDays > 0 ? "text-violet-700" : "text-fg-subtle"}>{days.leaveDays}</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <button
+                      type="button"
+                      aria-pressed={kind === "absence"}
+                      onClick={() => {
+                        void persist(s, "absence");
+                      }}
+                      className={cn(
+                        "h-10 rounded-full border px-2.5 text-sm font-medium",
+                        kind === "absence" ? "border-danger bg-danger-soft text-danger" : "border-border bg-bg-elevated text-fg-muted",
+                      )}
+                    >
+                      {tr("غياب")}
+                    </button>
+                    <span className={cn("mt-0.5 text-[10px] leading-3 tabular-nums", days.absenceDays > 0 ? "text-danger" : "text-fg-subtle")}>
+                      {days.absenceDays}
+                    </span>
+                  </div>
                 </div>
               </div>
             </li>
@@ -632,18 +649,22 @@ function AttendanceBody() {
           <thead>
             <tr>
               <th>{tr("التاريخ")}</th>
-              {printKind !== "late" ? <th>{tr("عدد الغائبين")}</th> : null}
-              {printKind !== "absence" ? <th>{tr("عدد المتأخرين")}</th> : null}
+              {printKind === "absence" || printKind === "all" ? <th>{tr("عدد الغائبين")}</th> : null}
+              {printKind === "late" || printKind === "all" ? <th>{tr("عدد المتأخرين")}</th> : null}
+              {printKind === "leave" || printKind === "all" ? <th>{tr("عدد الانصراف")}</th> : null}
             </tr>
           </thead>
           <tbody>
             <tr>
               <td className="py-2 text-[16px] font-semibold">{formatPrimaryDate(dayStamp, calendar)}</td>
-              {printKind !== "late" ? (
+              {printKind === "absence" || printKind === "all" ? (
                 <td className="text-[16px] font-semibold">{sheetAbsenceCount}</td>
               ) : null}
-              {printKind !== "absence" ? (
+              {printKind === "late" || printKind === "all" ? (
                 <td className="text-[16px] font-semibold">{sheetLateCount}</td>
+              ) : null}
+              {printKind === "leave" || printKind === "all" ? (
+                <td className="text-[16px] font-semibold">{sheetLeaveCount}</td>
               ) : null}
             </tr>
           </tbody>
@@ -655,32 +676,46 @@ function AttendanceBody() {
               <th>{tr("اسم الطالب")}</th>
               <th>{tr("الصف")}</th>
               <th>{tr("النوع")}</th>
-              {printKind !== "absence" ? <th>{tr("وقت الحضور")}</th> : null}
+              {showArrival ? <th>{tr("وقت الحضور")}</th> : null}
+              {showLeaveCol ? <th>{tr("انصراف")}</th> : null}
             </tr>
           </thead>
           <tbody>
             {sheetNames.length === 0 ? (
               <tr>
-                <td colSpan={printKind === "absence" ? 4 : 5} className="py-8">
+                <td colSpan={nameColSpan} className="py-8">
                   {printKind === "absence"
                     ? tr("لا يوجد غائبون في هذا النطاق.")
                     : printKind === "late"
                       ? tr("لا يوجد متأخرون في هذا النطاق.")
-                      : tr("لا يوجد غائبون أو متأخرون في هذا النطاق.")}
+                      : printKind === "leave"
+                        ? tr("لا يوجد انصراف متأخر في هذا النطاق.")
+                        : tr("لا يوجد غائبون أو متأخرون في هذا النطاق.")}
                 </td>
               </tr>
             ) : (
-              sheetNames.map((s, i) => (
-                <tr key={s.studentId}>
-                  <td>{i + 1}</td>
-                  <td className="text-[15px] font-semibold">{studentLabel(locale, s.studentName, s.nameEn)}</td>
-                  <td>{s.classLabel}</td>
-                  <td>{s.kind === "late" ? tr("تأخر صباحي") : tr("غياب اليوم الكامل")}</td>
-                  {printKind !== "absence" ? (
-                    <td>{s.kind === "late" && s.arrivedAt ? formatTime(s.arrivedAt) : "—"}</td>
-                  ) : null}
-                </tr>
-              ))
+              sheetNames.map((s, i) => {
+                const leave = parseAfterPeriod6(s.leaveDetails ?? "");
+                const kindText = [
+                  s.kind === "absence" ? tr("غياب اليوم الكامل") : "",
+                  s.kind === "late" ? tr("تأخر صباحي") : "",
+                  s.hasLeave ? tr("انصراف") : "",
+                ].filter(Boolean).join(" · ");
+                return (
+                  <tr key={s.studentId}>
+                    <td>{i + 1}</td>
+                    <td className="text-[15px] font-semibold">{studentLabel(locale, s.studentName, s.nameEn)}</td>
+                    <td>{s.classLabel}</td>
+                    <td>{kindText || "—"}</td>
+                    {showArrival ? (
+                      <td>{s.kind === "late" && s.arrivedAt ? `${formatTime(s.arrivedAt)} · ${lateCountLabel(s.arrivedAt, school.season, school.schedules) || "—"}` : "—"}</td>
+                    ) : null}
+                    {showLeaveCol ? (
+                      <td>{s.hasLeave ? (leave ? afterPeriod7Label(leave.minutes, leave.time) : tr("انصراف")) : "—"}</td>
+                    ) : null}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -699,11 +734,12 @@ function AttendanceBody() {
           <div className="space-y-4">
             <div className="space-y-2">
               <p className="text-sm font-semibold">{tr("نوع الكشف")}</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {(
                   [
                     ["absence", tr("الغياب")],
                     ["late", tr("التأخر")],
+                    ["leave", tr("انصراف")],
                     ["all", tr("الكل")],
                   ] as const
                 ).map(([kind, label]) => (
@@ -712,7 +748,7 @@ function AttendanceBody() {
                     type="button"
                     onClick={() => setPrintKind(kind)}
                     className={cn(
-                      "min-h-11 rounded-[var(--radius-md)] border text-sm font-semibold",
+                      "min-h-8 rounded-[var(--radius-md)] border text-sm font-semibold",
                       printKind === kind
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-border bg-bg text-fg",
@@ -734,7 +770,7 @@ function AttendanceBody() {
                     setPrintStageIds([]);
                   }}
                   className={cn(
-                    "min-h-11 rounded-full border px-3 text-sm font-medium",
+                    "min-h-8 rounded-full border px-3 text-sm font-medium",
                     printAll ? "border-primary bg-primary/5 text-primary" : "border-border bg-bg text-fg",
                   )}
                 >
@@ -748,7 +784,7 @@ function AttendanceBody() {
                       type="button"
                       onClick={() => togglePrintStage(stage.id)}
                       className={cn(
-                        "min-h-11 rounded-full border px-3 text-sm font-medium",
+                        "min-h-8 rounded-full border px-3 text-sm font-medium",
                         on ? "border-primary bg-primary/5 text-primary" : "border-border bg-bg text-fg",
                       )}
                     >
@@ -788,160 +824,13 @@ function AttendanceBody() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={historyId != null} onOpenChange={(open) => { if (!open) { setHistoryId(null); setMoveClassId(""); } }}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{history.data?.studentName ?? tr("أيام الطالب")}</DialogTitle>
-            <DialogDescription>
-              {history.data?.classLabel
-                ? `${history.data.classLabel} — طباعة أيام المدة في صفحة واحدة`
-                : tr("طباعة أيام الغياب أو التأخر حسب المدة")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ["absence", tr("أيام الغياب")],
-                ["late", tr("أيام التأخر")],
-              ] as const
-            ).map(([kind, label]) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => setHistoryKind(kind)}
-                className={cn(
-                  "min-h-11 rounded-[var(--radius-md)] border text-sm font-semibold",
-                  historyKind === kind
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border bg-bg text-fg",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {(
-              [
-                ["week", tr("أسبوع")],
-                ["month", tr("شهر")],
-                ["term", tr("ترم")],
-                ["all", tr("الكل")],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setHistorySpan(key)}
-                className={cn(
-                  "h-9 rounded-full border px-3 text-sm font-medium",
-                  historySpan === key
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border bg-bg text-fg-muted",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-fg-muted">{historySpanText}</p>
-          {history.isPending ? (
-            <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
-          ) : historyDays.length === 0 ? (
-            <p className="text-sm text-fg-muted">
-              {historyKind === "absence" ? tr("لا أيام غياب في هذه المدة.") : tr("لا أيام تأخر في هذه المدة.")}
-            </p>
-          ) : (
-            <ul className="max-h-40 space-y-1 overflow-y-auto rounded-[var(--radius-md)] border border-border px-3 py-2 text-sm">
-              {historyDays.map((row) => (
-                <li key={`${row.kind}-${row.day}`}>{historyLine(row, calendar)}</li>
-              ))}
-            </ul>
-          )}
-          <p className="text-xs text-fg-muted">المجموع: {dayCountLabel(historyDays.length)}</p>
-          <Textarea
-            className="min-h-36"
-            value={historyDraft}
-            onChange={(e) => setHistoryDraft(e.target.value)}
-            aria-label={tr("نص الرسالة")}
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="secondary" disabled={historyDays.length === 0} onClick={printHistory}>
-              <Printer className="size-4" />
-              {tr("طباعة")}
-            </Button>
-            {canMessage ? (
-              <Button type="button" disabled={!historyNumber || historyDays.length === 0 || !historyDraft.trim()} onClick={() => void sendHistory()}>
-                {tr("إرسال لولي الأمر")}
-              </Button>
-            ) : null}
-          </div>
-          {canMessage && history.data && !historyNumber ? (
-            <p className="text-xs text-fg-muted">{tr("لا يوجد رقم جوال محفوظ لولي الأمر.")}</p>
-          ) : null}
-          <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-sm font-semibold">{tr("طلب تغيير الفصل")}</p>
-            <Select value={moveClassId} onChange={(e) => setMoveClassId(e.target.value)} aria-label={tr("الفصل الجديد")}>
-              <option value="">{tr("اختر الفصل الجديد")}</option>
-              {classes
-                .filter((item) => item.id !== history.data?.classId)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {tr(item.label)}
-                  </option>
-                ))}
-            </Select>
-            <Button
-              type="button"
-              className="w-full"
-              disabled={!historyId || !moveClassId || moveClass.isPending}
-              onClick={() => moveClass.mutate()}
-            >
-              {moveClass.isPending ? tr("جارٍ الإرسال…") : tr("إرسال لمن يعدّل بيانات الطلاب")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <article
-        ref={historyRef}
-        className="print-form print-report attendance-print official-sheet hidden bg-white font-naskh text-black"
-      >
-        <OfficialLetterhead school={school} />
-        <h2 className="mt-2 text-center text-[18px] font-semibold">
-          {historyKind === "absence" ? tr("كشف أيام الغياب") : tr("كشف أيام التأخر")}
-        </h2>
-        <p className="student-print-line">
-          <strong>{history.data?.studentName ?? ""}</strong>
-          {history.data?.classLabel ? <span> · {history.data.classLabel}</span> : null}
-          <span> · {historySpan === "all" ? tr("كل المدة") : historyBounds.label}</span>
-          <span> · المجموع: {dayCountLabel(historyDays.length)}</span>
-        </p>
-        <table className="official-table">
-          <thead>
-            <tr>
-              <th className="w-10">{tr("م")}</th>
-              <th>{tr("اليوم والتاريخ")}</th>
-              {historyKind === "late" ? <th>{tr("وقت الحضور")}</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {historyDays.length === 0 ? (
-              <tr>
-                <td colSpan={historyKind === "late" ? 3 : 2}>{tr("لا أيام مسجّلة.")}</td>
-              </tr>
-            ) : (
-              historyDays.map((row, index) => (
-                <tr key={`${row.kind}-${row.day}`}>
-                  <td>{index + 1}</td>
-                  <td>{weekdayAr(row.day)} {formatPrimaryDate(row.day, calendar)}</td>
-                  {historyKind === "late" ? <td>{row.arrivedAt ? formatTime(row.arrivedAt) : "—"}</td> : null}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </article>
+      <StudentSheet
+        studentId={sheetStudentId}
+        open={sheetStudentId != null}
+        onOpenChange={(open) => {
+          if (!open) setSheetStudentId(null);
+        }}
+      />
     </div>
   );
 }

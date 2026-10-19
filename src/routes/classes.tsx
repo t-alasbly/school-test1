@@ -10,6 +10,8 @@ import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { listStudents } from "@/lib/school/api";
@@ -218,7 +220,8 @@ function ClassesBody() {
                     <span className="text-xs font-medium leading-5 text-warn">{student.healthNote}</span>
                   </span>
                 ) : null}
-                <span className="min-w-0 text-base font-semibold">{studentLabel(locale, student.name)}</span>
+                <DayName studentId={student.id} className="min-w-0 text-base font-semibold">{studentLabel(locale, student.name)}</DayName>
+                <ExitPermitBadge studentId={student.id} />
               </span>
               <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>
             </button>

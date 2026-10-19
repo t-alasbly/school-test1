@@ -8,7 +8,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { forwardStudentMail, listMailMessages, listStaffDirectory, postMailMessage } from "@/lib/school/api";
 import { formatStampCalendar } from "@/lib/school/calendar";
-import { MAIL_DEST, NOTE_DEST_LABEL, ROLE_LABEL } from "@/lib/school/constants";
+import { MAIL_DEST, NOTE_DEST_LABEL, ROLE_LABEL, toWhatsAppNumber } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import { useCalendar } from "@/lib/school/use-calendar";
 import type { MailDest, MailMessage, StaffDirectoryRow, StaffRole, StudentMail } from "@/lib/school/types";
@@ -81,6 +81,19 @@ export function StaffMailThread({ mail }: { mail: StudentMail }) {
         <span>من {mail.authorName}</span>
         <span>إلى {mail.assigneeName}</span>
         <span>{formatStampCalendar(mail.updatedAt || mail.createdAt, calendar)}</span>
+        {mail.dest === "vp" && toWhatsAppNumber(mail.parentPhone) ? (
+          <button
+            type="button"
+            className="rounded-full bg-ok px-3 py-1 font-semibold text-white"
+            onClick={() => {
+              const text = messages.map((item) => item.body).filter(Boolean).join("\n\n") || mail.lastBody;
+              const number = toWhatsAppNumber(mail.parentPhone);
+              window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+            }}
+          >
+            {tr("إرسال لولي الأمر عبر واتساب")}
+          </button>
+        ) : null}
       </div>
       {query.isPending ? (
         <p className="text-xs text-fg-muted">{tr("جارٍ تحميل المراسلات…")}</p>

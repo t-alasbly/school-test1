@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { OfficialLetterhead } from "@/components/print-forms";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { Button } from "@/components/ui/button";
 import { PageHelp } from "@/components/page-help";
 import {
@@ -25,7 +27,7 @@ import { printElement } from "@/lib/school/print";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
-export type RosterKind = "absence" | "late";
+export type RosterKind = "absence" | "late" | "leave";
 
 function isoToday() {
   const d = new Date();
@@ -128,6 +130,14 @@ function isPeriodDetails(details: string) {
   return details.includes(tr("حصة"));
 }
 
+function leaveBit(details: string) {
+  const match = String(details ?? "").match(/p7(?:only|m):(\d+)(?:@(\d{1,2}:\d{2}))?/);
+  if (!match) return "";
+  const minutes = Number(match[1]);
+  const time = match[2] ?? "";
+  return [time, minutes > 0 ? `${minutes} ${tr("د")}` : ""].filter(Boolean).join(" ");
+}
+
 function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
   const map = new Map<number, { studentId: number; studentName: string; classLabel: string; days: Map<string, string[]> }>();
   for (const row of list) {
@@ -139,7 +149,7 @@ function groupStudents(list: Row[], withTime: boolean): StudentGroup[] {
       days: new Map<string, string[]>(),
     };
     const bits = current.days.get(day) ?? [];
-    const extra = [withTime && row.arrivedAt ? formatTime(row.arrivedAt) : "", row.excused ? tr("بعذر") : ""]
+    const extra = [withTime && row.arrivedAt ? formatTime(row.arrivedAt) : "", leaveBit(row.details), row.excused ? tr("بعذر") : ""]
       .filter(Boolean)
       .join(" ");
     if (extra && !bits.includes(extra)) bits.push(extra);
@@ -173,7 +183,7 @@ function fullDate(iso: string) {
 }
 
 function parentDaysMessage(opts: { name: string; classLabel: string; school: string; kind: RosterKind; lines: string[] }) {
-  const what = opts.kind === "absence" ? tr("الغياب") : tr("التأخر");
+  const what = opts.kind === "absence" ? tr("الغياب") : opts.kind === "leave" ? tr("الانصراف المتأخر") : tr("التأخر");
   const head = `السلام عليكم ولي أمر الطالب ${opts.name}،\nنود إعلامكم بأيام ${what} لابنكم في صف ${opts.classLabel}، وعددها ${dayCountLabel(opts.lines.length)}:\n`;
   const tail = `\nنرجو المتابعة والتواصل مع إدارة المدرسة عند الحاجة.\n\n${opts.school}`;
   const packed = (lines: string[], note = "") => `${head}${note}${lines.join("\n")}${tail}`;
@@ -236,7 +246,7 @@ export function AttendanceRoster({
   const [openId, setOpenId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const detailRef = useRef<HTMLElement>(null);
-  const title = kind === "absence" ? tr("كشف الغائبين") : tr("كشف المتأخرين");
+  const title = kind === "absence" ? tr("كشف الغائبين") : kind === "leave" ? tr("كشف الانصراف") : tr("كشف المتأخرين");
 
   const query = useQuery({
     queryKey: ["attendance-roster", kind, from, to],
@@ -294,7 +304,7 @@ export function AttendanceRoster({
       await logParentMessage({
         data: {
           studentId: detail.data.studentId,
-          kind,
+          kind: kind === "leave" ? "general" : kind,
           body: draft.trim(),
           parentPhone,
         },
@@ -312,7 +322,9 @@ export function AttendanceRoster({
       ? tr("لا يوجد طالب بلغ هذا العدد من الأيام في المدة المحددة.")
       : kind === "absence"
         ? tr("لا يوجد غياب يومي في هذا النطاق.")
-        : tr("لا يوجد تأخر صباحي في هذا النطاق.");
+        : kind === "leave"
+          ? tr("لا يوجد انصراف متأخر في هذا النطاق.")
+          : tr("لا يوجد تأخر صباحي في هذا النطاق.");
 
   const days = from === to ? formatDay(`${from}T12:00:00`) : `${formatDay(`${from}T12:00:00`)} — ${formatDay(`${to}T12:00:00`)}`;
 
@@ -320,16 +332,18 @@ export function AttendanceRoster({
     <div className="space-y-5">
       <header className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             {title}
             <PageHelp
               text={
                 kind === "absence"
                   ? tr("الغياب اليومي فقط. كل طالب يظهر مرة مع عدد أيام غيابه في المدة.")
-                  : tr("التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة.")
+                  : kind === "leave"
+                    ? tr("الانصراف بعد الحصة السابعة. كل طالب يظهر مرة مع عدد الأيام.")
+                    : tr("التأخر اليومي فقط. كل طالب يظهر مرة مع عدد أيام تأخره في المدة.")
               }
             />
-          </h1>
+          </h2>
         </div>
         <Button
           variant="secondary"
@@ -448,7 +462,8 @@ export function AttendanceRoster({
                   className="text-right font-semibold hover:text-primary hover:underline"
                   onClick={() => setOpenId(group.studentId)}
                 >
-                  {group.studentName}
+                  <DayName studentId={group.studentId}>{group.studentName}</DayName>
+                  <ExitPermitBadge studentId={group.studentId} className="ms-1.5" />
                 </button>
                 <p className="text-xs text-fg-muted">{group.classLabel}</p>
               </div>

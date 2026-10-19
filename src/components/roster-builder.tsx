@@ -252,7 +252,7 @@ export function RosterBuilder({
                     })
                   }
                 />
-                <button type="button" className="text-xs text-danger" onClick={() => removeCol(col.id)}>
+                <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) removeCol(col.id); }}>
                   {tr("حذف")}
                 </button>
               </li>
@@ -368,7 +368,7 @@ export function RosterBuilder({
                   </button>
                 ) : null}
                 {isAdmin || !tpl.public ? (
-                  <button type="button" className="text-xs text-danger" onClick={() => onDelete(tpl.id)}>
+                  <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا القالب؟ لا يمكن التراجع."))) onDelete(tpl.id); }}>
                     {tr("حذف")}
                   </button>
                 ) : null}

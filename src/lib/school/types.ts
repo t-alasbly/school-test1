@@ -166,6 +166,7 @@ export type TodayNote = {
   teacherId: string;
   teacherName: string;
   teacherSubject: string;
+  enteredByName?: string;
   referCounselor: boolean;
 };
 
@@ -179,6 +180,8 @@ export type StudentRow = {
   dailyKind: DailyKind | null;
   arrivedAt: string | null;
   todayNotes: TodayNote[];
+  marks?: { subject: string; total: number; lesson: number }[];
+  todayTaps?: { label: string; points: number; subject: string }[];
 };
 
 export type NoteRecord = {
@@ -192,6 +195,7 @@ export type NoteRecord = {
   teacherId: string;
   teacherName: string;
   teacherSubject: string;
+  enteredByName?: string;
   type: NoteType;
   details: string;
   behaviorTypeId: number | null;
@@ -232,6 +236,8 @@ export type DailyAttendanceRow = {
   excused: boolean;
   details: string;
   arrivedAt: string | null;
+  hasLeave?: boolean;
+  leaveDetails?: string;
 };
 
 export type CounselingCase = {
@@ -266,6 +272,7 @@ export type StudentMail = {
   dest: MailDest;
   status: "open" | "closed";
   lastBody: string;
+  parentPhone: string;
   createdAt: string;
   updatedAt: string;
   mine: boolean;
@@ -292,6 +299,7 @@ export type BehaviorImprovement = {
   teacherId: string;
   teacherName: string;
   teacherSubject: string;
+  enteredByName?: string;
   noteId: number | null;
   plan: string;
   teacherFollowup: string | null;
@@ -311,4 +319,5 @@ export type Workspace = {
   healthConditions: CatalogItem[];
   compensations: CatalogItem[];
   improvementOptions: CatalogItem[];
+  studyNotes: CatalogItem[];
 };

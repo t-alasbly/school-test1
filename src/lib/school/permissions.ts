@@ -40,7 +40,7 @@ export const PERMISSION_META: {
     key: "viewAllViolations",
     label: "الاطلاع على جميع المخالفات المدخلة من المعلمين",
     short: "كل المخالفات",
-    hint: "رؤية ملاحظات الزملاء في الفصل والتقرير وسجل الطالب",
+    hint: "رؤية ملاحظات الزملاء في الفصل والتقرير وسجل الطالب، وفتح مكاتبهم والطباعة منها",
   },
   {
     key: "editStaff",
@@ -310,6 +310,11 @@ export function staffCan(
 ) {
   if (staff.role === "admin") return true;
   return Boolean(staff.permissions?.[key]);
+}
+
+export function canSeeClassMoves(staff: Pick<Staff, "role" | "permissions">) {
+  if (staff.role === "admin" || staff.role === "principal" || staff.role === "counselor" || staff.role === "student_counselor") return true;
+  return staffCan(staff, "takeActions") || staffCan(staff, "editStudents");
 }
 
 export function canSeeParentPhone(staff: Pick<Staff, "role" | "permissions">) {

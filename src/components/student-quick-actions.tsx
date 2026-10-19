@@ -5,6 +5,8 @@ export function StudentQuickActions({
   studentId,
   studentName,
   classId,
+  presetSubject,
+  presetPeriod,
 }: {
   studentId: number;
   studentName: string;
@@ -12,11 +14,19 @@ export function StudentQuickActions({
   parentPhone?: string;
   className?: string;
   shortName?: string;
+  presetSubject?: string;
+  presetPeriod?: string;
 }) {
   return (
     <div className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
       <ImproveDialog studentId={studentId} studentName={studentName} classId={classId} />
-      <NoteActions studentId={studentId} studentName={studentName} classId={classId} />
+      <NoteActions
+        studentId={studentId}
+        studentName={studentName}
+        classId={classId}
+        presetSubject={presetSubject}
+        presetPeriod={presetPeriod}
+      />
     </div>
   );
 }

@@ -39,6 +39,12 @@
   --shadow-card: 0 1px 0 rgba(28, 36, 46, 0.04), 0 8px 24px -12px rgba(28, 36, 46, 0.12);
 }
 
+@keyframes eval-count-burst {
+  0% { transform: scale(0.35); opacity: 0; }
+  45% { transform: scale(1.45); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -203,6 +209,11 @@
   }
 }
 
+.grade-equal { table-layout: fixed; width: 100%; }
+.grade-equal .grade-no { width: 2rem; }
+.grade-equal .grade-name { width: 34%; text-align: right; }
+.print-only { display: none !important; }
+
 @media print {
   @page {
     size: A4;
@@ -313,7 +324,18 @@
     max-width: none !important;
     padding: 0 !important;
   }
-  body.printing-form #school-print-mount .print-form.attendance-print {
+  body.printing-form #school-print-mount .print-only {
+    display: block !important;
+  }
+  body.printing-form #school-print-mount .grade-equal {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+  body.printing-form #school-print-mount .grade-name {
+    width: 34% !important;
+    text-align: right !important;
+  }
+  body.printing-form #school-print-mount .attendance-print {
     box-sizing: border-box !important;
     width: 100% !important;
     max-width: 210mm !important;

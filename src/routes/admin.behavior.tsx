@@ -1,14 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Printer } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { NoteSession } from "@/components/note-session";
 import { PageHelp } from "@/components/page-help";
-import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
+import { PrintFormsButton } from "@/components/print-forms";
 import { ImprovementRecordTools, NoteRecordTools } from "@/components/record-actions";
 import { StudentSheet } from "@/components/student-sheet";
+import { ExitPermitBadge } from "@/components/exit-permit";
+import { DayName } from "@/components/day-name";
 import { WhatsAppDialog } from "@/components/whatsapp-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,7 @@ import {
   NOTE_META,
   classLabel,
   degreeLabel,
-  formatDay,
   formatStamp,
-  hijriDate,
   isOtherChoice,
   noteTone,
   occurrenceLabel,
@@ -42,9 +41,14 @@ import {
   proceduresFor,
   resolveOther,
   stageIndexFor,
-  todayLabel,
+  deductionPhrase,
+  deductionMessageLine,
+  formatDay,
+  isWeekendDate,
+  nextSchoolDateInput,
+  shiftToSchoolDay,
+  weekdayName,
 } from "@/lib/school/constants";
-import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
 import type { BehaviorImprovement, ImprovementStatus, NoteRecord } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -54,6 +58,42 @@ function noteDay(iso: string) {
   if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function procedureFollowUp(lines: string[]) {
+  const papers: { kind: "pledge" | "invite" | "deduction" | "notice" | "incident" | "committee" | "plan" | "violence"; label: string }[] = [];
+  const messages: { id: "notice" | "deduction" | "invite"; title: string }[] = [];
+  if (lines.some((line) => line.includes("تعهد"))) {
+    papers.push({ kind: "pledge", label: "طباعة التعهد" });
+  }
+  if (lines.some((line) => /استدعاء|دعوة/.test(line))) {
+    papers.push({ kind: "invite", label: "طباعة الاستدعاء" });
+    messages.push({ id: "invite", title: "رسالة الاستدعاء" });
+  }
+  if (lines.some((line) => /إشعار خصم|خصم|حسم/.test(line))) {
+    papers.push({ kind: "deduction", label: "طباعة إشعار الخصم" });
+    messages.push({ id: "deduction", title: "رسالة إشعار الخصم" });
+  }
+  if (lines.some((line) => /إشعار ولي الأمر/.test(line) && !/خصم|حسم/.test(line))) {
+    messages.push({ id: "notice", title: "إشعار ولي الأمر" });
+    const phoneOnly = lines
+      .filter((line) => /إشعار ولي الأمر/.test(line) && !/خصم|حسم/.test(line))
+      .every((line) => /هاتف/.test(line));
+    if (!phoneOnly) papers.push({ kind: "notice", label: "طباعة إشعار ولي الأمر" });
+  }
+  if (lines.some((line) => /خطة تعديل/.test(line))) {
+    papers.push({ kind: "plan", label: "طباعة خطة تعديل السلوك" });
+  }
+  if (lines.some((line) => /محضر/.test(line))) {
+    papers.push({ kind: "incident", label: "طباعة محضر الواقعة" });
+  }
+  if (lines.some((line) => /لجنة التوجيه/.test(line))) {
+    papers.push({ kind: "committee", label: "طباعة محضر اللجنة" });
+  }
+  if (lines.some((line) => /1919|إيذاء/.test(line))) {
+    papers.push({ kind: "violence", label: "طباعة بلاغ الإيذاء" });
+  }
+  return { papers, messages, wantsMessage: messages.length > 0 };
 }
 
 function dayCountLabel(n: number) {
@@ -81,7 +121,6 @@ function AdminBody() {
   const allowed = canAct || canImprove;
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const bounds = rangeFromPreset(rangeParam);
-  const sheetRef = useRef<HTMLElement>(null);
   const query = useQuery({
     queryKey: ["admin"],
     queryFn: () => getAdminDashboard(),
@@ -167,12 +206,6 @@ function AdminBody() {
               />
             </h2>
           </div>
-          {periodMode ? (
-            <Button type="button" variant="secondary" onClick={() => sheetRef.current && printElement(sheetRef.current)}>
-              <Printer className="size-4" />
-              {tr("طباعة الكشف")}
-            </Button>
-          ) : null}
         </div>
         <div className="no-print flex flex-wrap gap-1.5">
           {(
@@ -246,7 +279,10 @@ function AdminBody() {
               <li key={group.studentId} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <button type="button" onClick={() => setActiveStudent(group.studentId)} className="min-w-0 text-right">
-                    <p className="font-semibold hover:text-primary hover:underline">{group.studentName}</p>
+                    <p className="font-semibold hover:text-primary hover:underline">
+                      <DayName studentId={group.studentId}>{group.studentName}</DayName>
+                      <ExitPermitBadge studentId={group.studentId} className="ms-1.5" />
+                    </p>
                     <p className="text-xs text-fg-muted">{group.classLabel}</p>
                   </button>
                   <span
@@ -287,65 +323,6 @@ function AdminBody() {
             </ul>
           </>
         ) : null}
-        {periodMode ? (
-          <article ref={sheetRef} className="print-form attendance-print official-sheet hidden bg-white font-naskh text-black">
-            <OfficialLetterhead school={school} />
-            <h2 className="mt-2 text-center text-[20px] font-semibold">{typeLabel}</h2>
-            <p className="text-center text-[13px] text-[#00857c]">
-              {todayLabel()} — {hijriDate()} — {bounds.label}
-            </p>
-            <table className="official-table mb-3">
-              <thead>
-                <tr>
-                  <th>{tr("الفترة")}</th>
-                  <th>{tr("الطلاب")}</th>
-                  <th>{tr("عدد الأيام")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="py-2 font-semibold">
-                    {formatDay(`${bounds.from}T12:00:00`)}
-                    {bounds.from !== bounds.to ? ` — ${formatDay(`${bounds.to}T12:00:00`)}` : ""}
-                  </td>
-                  <td className="font-semibold">{periodGroups.length}</td>
-                  <td className="font-semibold">{periodGroups.reduce((sum, group) => sum + group.count, 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-            <table className="official-table">
-              <thead>
-                <tr>
-                  <th className="w-10">{tr("م")}</th>
-                  <th>{tr("اسم الطالب")}</th>
-                  <th>{tr("الصف")}</th>
-                  <th className="w-16">{tr("عدد الأيام")}</th>
-                  <th>{tr("الأيام والحصص")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periodGroups.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8">{tr("لا توجد سجلات في هذا النطاق.")}</td>
-                  </tr>
-                ) : (
-                  periodGroups.map((group, index) => (
-                    <tr key={group.studentId}>
-                      <td>{index + 1}</td>
-                      <td className="text-[15px] font-semibold">{group.studentName}</td>
-                      <td>{group.classLabel}</td>
-                      <td className="font-semibold">{group.count}</td>
-                      <td className="text-right align-top text-[12px]"><MonthDays days={group.days} /></td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            <p className="mt-6 text-center text-[13px] leading-7">
-              {school.principalName ? `${school.principalName} — ` : ""}التوقيع: ……………… — الختم
-            </p>
-          </article>
-        ) : null}
       </section>
       ) : null}
       {canImprove && !typeParam ? (
@@ -379,7 +356,7 @@ function AdminBody() {
   );
 }
 
-function AdminNoteCard({
+export function AdminNoteCard({
   note,
   onOpenStudent,
 }: {
@@ -388,7 +365,11 @@ function AdminNoteCard({
 }) {
   const { actionTypes, school, behaviorTypes, compensations = [] } = useWorkspace();
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [held, setHeld] = useState(false);
+  const [savedKey, setSavedKey] = useState("");
+  const [meetDate, setMeetDate] = useState(nextSchoolDateInput);
+  const [meetTime, setMeetTime] = useState("09:00");
   const [picked, setPicked] = useState<string[]>([]);
   const [stageIdx, setStageIdx] = useState(0);
   const [actionNote, setActionNote] = useState("");
@@ -435,8 +416,26 @@ function AdminNoteCard({
 
   const compensationText = resolveOther(pickedComp, compOther).join(" — ");
 
+  function refreshAfterAction() {
+    void queryClient.invalidateQueries({ queryKey: ["admin"] });
+    void queryClient.invalidateQueries({ queryKey: ["home-desk"] });
+    void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    void queryClient.invalidateQueries({ queryKey: ["student"] });
+  }
+
+  function resetActionDraft() {
+    setStep(1);
+    setActionNote("");
+    setActionOther("");
+    setPicked([]);
+    setPickedComp([]);
+    setCompOther("");
+  }
+
   const mutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (mode: "close" | "continue") => {
       const custom = resolveOther(pickedComp, compOther).filter(
         (name) => !compOptions.some((o) => o === name),
       );
@@ -447,27 +446,28 @@ function AdminNoteCard({
           /* already in list or not permitted */
         }
       }
-      return closeNote({
+      await closeNote({
         data: {
           noteId: note.id,
           actionTaken: composedAction(),
           compensation: compensationText || undefined,
         },
       });
+      return mode;
     },
-    onSuccess: () => {
+    onSuccess: (mode) => {
+      if (mode === "continue") {
+        toast.success(tr("تم حفظ الإجراء. أكمل الطباعة والإرسال."));
+        setHeld(true);
+        setSavedKey(`${composedAction()}||${compensationText}`);
+        setStep(3);
+        return;
+      }
       toast.success(tr("تم حفظ الإجراء وإشعار المعلم"));
+      setHeld(false);
       setOpen(false);
-      setStep(1);
-      setActionNote("");
-      setActionOther("");
-      setPicked([]);
-      setPickedComp([]);
-      setCompOther("");
-      void queryClient.invalidateQueries({ queryKey: ["admin"] });
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
-      void queryClient.invalidateQueries({ queryKey: ["student"] });
+      resetActionDraft();
+      refreshAfterAction();
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
   });
@@ -476,6 +476,8 @@ function AdminNoteCard({
     onSuccess: (res) => {
       toast.success(`أُحيل ${res.studentName} إلى الإرشاد الطلابي`);
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
+      void queryClient.invalidateQueries({ queryKey: ["home-desk"] });
+      void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
       void queryClient.invalidateQueries({ queryKey: ["counseling-desk"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["student"] });
@@ -488,6 +490,69 @@ function AdminNoteCard({
       ? `${tr(note.behaviorTypeName || "")} — ${note.details}`
       : note.behaviorTypeName || note.details;
   const actionText = composedAction();
+  const chosenLines = resolveOther(picked, actionOther);
+  const followUp = procedureFollowUp(chosenLines);
+  const needsFollowUp = followUp.wantsMessage || followUp.papers.length > 0;
+  const actionKey = `${actionText}||${compensationText}`;
+  const cutPhrase = deductionPhrase(chosenLines, note.behaviorDegree);
+  const cutLine = deductionMessageLine(chosenLines, note.behaviorDegree);
+  const meetIso = meetDate ? `${meetDate}T${meetTime || "09:00"}` : "";
+  const meetWhen = meetIso ? `يوم ${weekdayName(meetIso)} الموافق ${formatDay(meetIso)} الساعة ${meetTime}` : "";
+  const meetWeekend = isWeekendDate(meetDate);
+  const needsInvite = followUp.papers.some((paper) => paper.kind === "invite") || followUp.messages.some((item) => item.id === "invite");
+
+  function parentMessage(kind: "notice" | "deduction" | "invite") {
+    const who = note.studentName;
+    const violation = note.behaviorTypeName || note.details || "مخالفة سلوكية";
+    const place = classLabel(note.shortName, note.className);
+    const facts = [
+      note.behaviorDegree ? `درجة المخالفة: ${degreeLabel(note.behaviorDegree)}.` : "",
+      `تكرار المخالفة: ${occurrenceLabel(occurrence)}.`,
+      cutLine,
+    ].filter(Boolean).join("\n");
+    if (kind === "invite") {
+      return `السلام عليكم ولي أمر الطالب ${who}،\nنأمل حضوركم ${meetWhen || "في يوم دراسي من الأحد إلى الخميس"} لمقابلة إدارة المدرسة بخصوص المخالفة (${violation}) في صف ${place}.\n${facts}\n${school.name}`;
+    }
+    if (kind === "deduction") {
+      return `السلام عليكم ولي أمر الطالب ${who}،\nنشعركم بأنه خُصم ${cutPhrase} من درجات السلوك بسبب المخالفة (${violation}) في صف ${place}.\n${facts}\n${school.name}`;
+    }
+    return `السلام عليكم ولي أمر الطالب ${who}،\nنود إعلامكم بتسجيل مخالفة سلوكية (${violation}) على ابنكم في صف ${place}.\n${facts}\n${school.name}`;
+  }
+
+  const printStudent = {
+    name: note.studentName,
+    classLabel: classLabel(note.shortName, note.className),
+    className: note.className,
+    stageName: note.stageName,
+    parentPhone: note.parentPhone,
+  };
+  const printNotes = [
+    {
+      type: note.type,
+      details: note.details,
+      behaviorTypeName: note.behaviorTypeName,
+      behaviorDegree: note.behaviorDegree,
+      periodKey: note.periodKey,
+      actionTaken: actionText,
+      createdAt: note.createdAt,
+      teacherName: note.teacherName,
+      teacherSubject: note.teacherSubject,
+      occurrence: note.occurrence,
+      compensation: compensationText,
+    },
+  ];
+  const appointment = meetIso
+    ? { day: formatDay(meetIso), weekday: weekdayName(meetIso), time: meetTime }
+    : undefined;
+
+  function finishDialog() {
+    const shouldRefresh = held;
+    setOpen(false);
+    setHeld(false);
+    setSavedKey("");
+    resetActionDraft();
+    if (shouldRefresh) refreshAfterAction();
+  }
 
   function toggle(item: string) {
     setPicked((prev) => (prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item]));
@@ -520,7 +585,8 @@ function AdminNoteCard({
             onClick={onOpenStudent}
             className="text-right text-base font-semibold hover:text-primary hover:underline"
           >
-            {note.studentName}
+            <DayName studentId={note.studentId}>{note.studentName}</DayName>
+            <ExitPermitBadge studentId={note.studentId} className="ms-1.5" />
           </button>
           <p className="text-sm text-fg-muted">
             {classLabel(note.shortName, note.className)} · المعلم {note.teacherName}
@@ -609,6 +675,10 @@ function AdminNoteCard({
             subject={note.teacherSubject}
             createdAt={note.createdAt}
             periodKey={note.periodKey}
+            noteId={note.id}
+            occurrenceText={occurrenceLabel(note.occurrence || 1)}
+            behaviorDegree={note.type === "behavior" ? note.behaviorDegree : null}
+            deductionText={note.type === "behavior" ? deductionPhrase([note.actionTaken || ""], note.behaviorDegree) : ""}
           />
           {note.status === "open" ? (
             <Button
@@ -639,20 +709,18 @@ function AdminNoteCard({
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) {
-            setStep(1);
-            setActionNote("");
-            setActionOther("");
-            setPickedComp([]);
-            setCompOther("");
-          }
+          if (next) setOpen(true);
+          else finishDialog();
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {step === 1 ? tr("سجل المخالفة — المرحلة الأولى") : tr("اختيار الإجراء — المرحلة الثانية")}
+              {step === 1
+                ? tr("سجل المخالفة — المرحلة الأولى")
+                : step === 2
+                  ? tr("اختيار الإجراء — المرحلة الثانية")
+                  : tr("الإرسال والطباعة")}
             </DialogTitle>
           </DialogHeader>
           {step === 1 ? (
@@ -718,7 +786,7 @@ function AdminNoteCard({
                 التالي — اختيار الإجراء
               </Button>
             </div>
-          ) : (
+          ) : step === 2 ? (
             <div className="space-y-4">
               <p className="text-sm text-fg-muted">
                 اختر الإجراء المناسب لهذه المرة ({occurrenceLabel(occurrence)}
@@ -851,9 +919,137 @@ function AdminNoteCard({
                     (picked.some(isOtherChoice) && actionOther.trim().length < 2) ||
                     (pickedComp.some(isOtherChoice) && compOther.trim().length < 2)
                   }
-                  onClick={() => mutation.mutate()}
+                  onClick={() => {
+                    if (!needsFollowUp) {
+                      mutation.mutate("close");
+                      return;
+                    }
+                    if (held && savedKey === actionKey) {
+                      setStep(3);
+                      return;
+                    }
+                    mutation.mutate("continue");
+                  }}
                 >
-                  حفظ وإغلاق الحالة
+                  {needsFollowUp ? tr("حفظ والانتقال للطباعة والإرسال") : tr("حفظ وإغلاق الحالة")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-fg-muted">
+                {tr("تم حفظ الإجراء. قائمة الرسائل المطلوبة، ثم قائمة الطباعة، حسب الإجراء.")}
+              </p>
+              <ul className="list-disc space-y-1 pr-5 text-sm">
+                {chosenLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              {needsInvite ? (
+                <div className="space-y-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+                  <p className="text-sm font-semibold">{tr("موعد الاستدعاء")}</p>
+                  <p className="text-xs leading-5 text-fg-muted">
+                    {tr("الاستدعاء في يوم دراسي من الأحد إلى الخميس. يمكن تغيير اليوم والتاريخ والوقت.")}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`meet-date-${note.id}`}>{tr("التاريخ")}</Label>
+                      <Input
+                        id={`meet-date-${note.id}`}
+                        type="date"
+                        value={meetDate}
+                        onChange={(e) => setMeetDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`meet-time-${note.id}`}>{tr("الوقت")}</Label>
+                      <Input
+                        id={`meet-time-${note.id}`}
+                        type="time"
+                        value={meetTime}
+                        onChange={(e) => setMeetTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {meetWhen ? <p className="text-sm">{meetWhen}</p> : null}
+                  {meetWeekend ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm text-danger">{tr("الجمعة والسبت ليسا من أيام الدراسة.")}</p>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => setMeetDate(shiftToSchoolDay(meetDate))}>
+                        {tr("انقل إلى أقرب يوم دراسي")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">{tr("الرسائل المطلوب إرسالها")}</h3>
+                {followUp.messages.length === 0 ? (
+                  <p className="text-sm text-fg-muted">{tr("هذا الإجراء لا يطلب رسالة لولي الأمر.")}</p>
+                ) : (
+                  followUp.messages.map((item) => (
+                    <div key={item.id} className="space-y-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+                      <p className="text-sm font-semibold">{tr(item.title)}</p>
+                      <WhatsAppDialog
+                        embedded
+                        studentId={note.studentId}
+                        studentName={note.studentName}
+                        parentPhone={note.parentPhone}
+                        className={note.className}
+                        shortName={note.shortName}
+                        defaultType="behavior"
+                        details={details}
+                        sharedText={note.details}
+                        subject={note.teacherSubject}
+                        createdAt={note.createdAt}
+                        periodKey={note.periodKey}
+                        noteId={note.id}
+                        occurrenceText={occurrenceLabel(occurrence)}
+                        behaviorDegree={note.behaviorDegree}
+                        deductionText={cutPhrase}
+                        initialDraft={parentMessage(item.id)}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">{tr("الطباعة المطلوبة")}</h3>
+                {followUp.papers.length === 0 ? (
+                  <p className="text-sm text-fg-muted">{tr("هذا الإجراء لا يطلب ورقة للطباعة.")}</p>
+                ) : (
+                  followUp.papers.map((paper) => (
+                    <div key={paper.kind} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+                      <div>
+                        <p className="text-sm font-semibold">{tr(paper.label)}</p>
+                        <p className="text-xs text-fg-muted">
+                          {paper.kind === "invite"
+                            ? tr("ورقة الاستدعاء بالموعد المختار.")
+                            : paper.kind === "deduction"
+                              ? tr("ورقة إشعار الخصم بالإجراء المحفوظ.")
+                              : paper.kind === "notice"
+                                ? tr("ورقة إشعار ولي الأمر بالإجراء المحفوظ.")
+                                : tr("ورقة التعهد بالإجراء المحفوظ.")}
+                        </p>
+                      </div>
+                      <PrintFormsButton
+                        student={printStudent}
+                        notes={printNotes}
+                        studentId={note.studentId}
+                        defaultKind={paper.kind}
+                        label={tr(paper.label)}
+                        appointment={paper.kind === "invite" ? appointment : undefined}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setStep(2)}>
+                  {tr("رجوع")}
+                </Button>
+                <Button className="flex-1" onClick={finishDialog}>
+                  {tr("تم")}
                 </Button>
               </div>
             </div>
@@ -890,7 +1086,8 @@ function CounselorImproveCard({
     <li className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="font-semibold hover:underline" onClick={onOpenStudent}>
-          {item.studentName}
+          <DayName studentId={item.studentId}>{item.studentName}</DayName>
+          <ExitPermitBadge studentId={item.studentId} className="ms-1.5" />
         </button>
         <span className="text-xs text-fg-muted">{item.classLabel}</span>
         <Badge tone={tone}>{IMPROVEMENT_STATUS[item.status]}</Badge>
