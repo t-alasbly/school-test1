@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Search, Upload, CheckCircle2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { SettingsBack } from "@/components/settings-back";
@@ -471,6 +471,24 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   const [auditedStudents, setAuditedStudents] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
 
+  // تفعيل اختصار لوحة المفاتيح Ctrl + Shift + Q لتشغيل تدقيق المكررات مباشرة
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "q") {
+        e.preventDefault();
+        if (headers.length > 0) {
+          handleRunAudit();
+          toast.info("تم تفعيل الاختصار: جاري تشغيل تدقيق المكررات...");
+        } else {
+          toast.warning("يرجى اختيار ملف الإكسل وتعيين الأعمدة أولاً.");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [headers, rows, mapping]);
+
   const mutation = useMutation({
     mutationFn: (payload: any[]) =>
       importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty, preserveRecords: keepEmpty } }),
@@ -560,7 +578,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4">
       <DropZone
-        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، هاتف العمل، الجنسية، المرحلة، الفصل. السجل المدني هو مفتاح الطالب.")}
+        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، هاتف العمل، الجنسية، المرحلة والفصل. (اختصار تدقيق المكررات: Ctrl + Shift + Q)")}
         onFile={onFile}
       />
       {headers.length > 0 ? (
@@ -591,7 +609,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
               row.className,
             ])}
           />
-          <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد</p>
+          <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد (اضغط Ctrl + Shift + Q للتدقيق السريع)</p>
           <label className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
             <input
               type="checkbox"
@@ -608,7 +626,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             disabled={!mapping.name || !mapping.stageName || !mapping.className}
             onClick={handleRunAudit}
           >
-            تدقيق المكررات وعرض ملخص الدمج ({rows.length} سجل)
+            تدقيق المكررات وعرض ملخص الدمج ({rows.length} سجل) [Ctrl + Shift + Q]
           </Button>
 
           {showAuditModal && (
