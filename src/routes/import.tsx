@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Search, Upload } from "lucide-react";
+import { ChevronDown, Search, Upload, CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
@@ -31,6 +31,7 @@ type StudentMapping = {
   name: string;
   parentPhone: string;
   parentPhone2: string;
+  workPhone: string; // تم إضافة حقل هاتف العمل
   nationalId: string;
   nationality: string;
   stageName: string;
@@ -47,7 +48,8 @@ const STUDENT_FIELDS: { key: keyof StudentMapping; label: string }[] = [
   { key: "name", label: tr("اسم الطالب") },
   { key: "nationalId", label: tr("السجل المدني") },
   { key: "parentPhone", label: tr("جوال ولي الأمر") },
-  { key: "parentPhone2", label: tr("جوال آخر") },
+  { key: "parentPhone2", label: tr("جوال آخر (المنزل)") },
+  { key: "workPhone", label: tr("هاتف العمل") }, // تم إضافة حقل هاتف العمل هنا
   { key: "nationality", label: tr("الجنسية") },
   { key: "stageName", label: tr("المرحلة") },
   { key: "className", label: tr("الفصل") },
@@ -400,7 +402,7 @@ function NoorImport({ onImported }: { onImported: () => void }) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-lg">سحب كشف الطلاب من نور</CardTitle>
         <p className="text-sm text-fg-muted">
-          ارفع ملف PDF «كشف الطلاب» كما يخرجه نور. يُحدَّث الطالب في مكانه بالسجل المدني، ثم بالاسم.
+          ارفع ملف PDF «كشف الطلاب» كما يخرجه نور. يُحدَّث الطالب في مكانه بالسجل المدني، ثم بالاسم.
           المخالفات والملاحظات والرسائل لا تُحذف ولا تُنقل، ومن ليس في الملف يبقى كما هو.
         </p>
       </CardHeader>
@@ -458,14 +460,20 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     name: "",
     parentPhone: "",
     parentPhone2: "",
+    workPhone: "",
     nationalId: "",
     nationality: "",
     stageName: "",
     className: "",
   });
 
+  // حالة زر التدقيق والمعاينة قبل الاعتماد النهائي
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditedStudents, setAuditedStudents] = useState<any[]>([]);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+
   const mutation = useMutation({
-    mutationFn: (payload: Parameters<typeof importStudents>[0]["data"]["rows"]) =>
+    mutationFn: (payload: any[]) =>
       importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty, preserveRecords: keepEmpty } }),
     onSuccess: (result) => {
       const extra =
@@ -475,6 +483,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
       toast.success(
         `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز${extra}`,
       );
+      setShowAuditModal(false);
       onImported();
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الاستيراد")),
@@ -489,7 +498,8 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     setMapping({
       name: guess(parsed.headers, ["اسم", "name", "الطالب"]),
       parentPhone: phone,
-      parentPhone2: guess(parsed.headers.filter((header) => header !== phone), ["جوال", "هاتف", "phone", "آخر", "ثاني"]),
+      parentPhone2: guess(parsed.headers.filter((header) => header !== phone), ["جوال", "هاتف", "phone", "آخر", "ثاني", "منزل"]),
+      workPhone: guess(parsed.headers, ["عمل", "work", "هاتف العمل"]),
       nationalId: guess(parsed.headers, ["سجل", "هوية", "وطني", "national"]),
       nationality: guess(parsed.headers, ["جنسية", "nationality"]),
       stageName: guess(parsed.headers, ["مرحلة", "صف", "stage"]),
@@ -502,6 +512,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
       name: headers.indexOf(mapping.name),
       parentPhone: headers.indexOf(mapping.parentPhone),
       parentPhone2: headers.indexOf(mapping.parentPhone2),
+      workPhone: headers.indexOf(mapping.workPhone),
       nationalId: headers.indexOf(mapping.nationalId),
       nationality: headers.indexOf(mapping.nationality),
       stageName: headers.indexOf(mapping.stageName),
@@ -511,6 +522,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
       name: index.name >= 0 ? row[index.name] ?? "" : "",
       parentPhone: index.parentPhone >= 0 ? row[index.parentPhone] ?? "" : "",
       parentPhone2: index.parentPhone2 >= 0 ? row[index.parentPhone2] ?? "" : "",
+      workPhone: index.workPhone >= 0 ? row[index.workPhone] ?? "" : "",
       nationalId: index.nationalId >= 0 ? row[index.nationalId] ?? "" : "",
       nationality: index.nationality >= 0 ? row[index.nationality] ?? "" : "",
       stageName: index.stageName >= 0 ? row[index.stageName] ?? "" : "",
@@ -518,12 +530,41 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     }));
   }
 
+  // دالة التدقيق ودمج المكررات قبل الاعتماد
+  function handleRunAudit() {
+    const raw = mappedRows();
+    const map = new Map();
+    let dups = 0;
+
+    raw.forEach((st) => {
+      // المفتاح الفرعي للمطابقة (السجل المدني أولاً، وإلا تطابق الاسم مع المرحلة والفصل)
+      const key = st.nationalId ? st.nationalId.trim() : `${st.name.trim()}_${st.stageName.trim()}_${st.className.trim()}`;
+
+      if (map.has(key)) {
+        dups++;
+        const existing = map.get(key);
+        // دمج البيانات والأرقام الناقصة
+        if (!existing.parentPhone && st.parentPhone) existing.parentPhone = st.parentPhone;
+        if (!existing.parentPhone2 && st.parentPhone2) existing.parentPhone2 = st.parentPhone2;
+        if (!existing.workPhone && st.workPhone) existing.workPhone = st.workPhone;
+        if (!existing.nationalId && st.nationalId) existing.nationalId = st.nationalId;
+        if (!existing.nationality && st.nationality) existing.nationality = st.nationality;
+      } else {
+        map.set(key, { ...st });
+      }
+    });
+
+    setAuditedStudents(Array.from(map.values()));
+    setDuplicateCount(dups);
+    setShowAuditModal(true);
+  }
+
   const preview = mappedRows().slice(0, 6);
 
   return (
     <div className="space-y-4">
       <DropZone
-        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، الجنسية، المرحلة، الفصل. السجل المدني هو مفتاح الطالب. إن خلا الجوال الأول يُستخدم الثاني.")}
+        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، هاتف العمل، الجنسية، المرحلة، الفصل. السجل المدني هو مفتاح الطالب.")}
         onFile={onFile}
       />
       {headers.length > 0 ? (
@@ -548,6 +589,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
               row.nationalId,
               row.parentPhone,
               row.parentPhone2,
+              row.workPhone,
               row.nationality,
               row.stageName,
               row.className,
@@ -563,12 +605,72 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             />
             حماية السجلات: لا تُحذف الفصول ولا يُدمج الطلاب، وتبقى المخالفات كما هي
           </label>
+          
+          {/* زر التدقيق الجديد قبل الاعتماد */}
           <Button
-            disabled={mutation.isPending || !mapping.name || !mapping.stageName || !mapping.className}
-            onClick={() => mutation.mutate(mappedRows())}
+            variant="secondary"
+            className="w-full sm:w-auto"
+            disabled={!mapping.name || !mapping.stageName || !mapping.className}
+            onClick={handleRunAudit}
           >
-            {mutation.isPending ? tr("جارٍ الحفظ…") : tr("اعتماد استيراد الطلاب")}
+            تدقيق المكررات وعرض ملخص الدمج ({rows.length} سجل)
           </Button>
+
+          {/* نافذة أو قسم التدقيق والمعاينة المندمجة */}
+          {showAuditModal && (
+            <div className="rounded-xl border border-primary/30 bg-bg-elevated p-5 space-y-4 shadow-md mt-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="font-bold text-base text-fg flex items-center gap-2">
+                    <CheckCircle2 className="size-5 text-primary" />
+                    تقرير تدقيق ودمج السجلات المكررة
+                  </h3>
+                  <p className="text-xs text-fg-muted mt-1">
+                    تم فحص السجلات وإزالة التكرارات ودمج الأرقام (الجوال، المنزل، العمل). عدد الطلاب الصافي بعد التدقيق: <span className="font-semibold text-primary">{auditedStudents.length}</span> طالب (تم دمج {duplicateCount} سجل مكرر).
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setShowAuditModal(false)}>
+                    إلغاء وتعديل الأعمدة
+                  </Button>
+                  <Button
+                    disabled={mutation.isPending}
+                    onClick={() => mutation.mutate(auditedStudents)}
+                  >
+                    {mutation.isPending ? tr("جارٍ الحفظ…") : tr("اعتماد ورفع السجلات النهائية")}
+                  </Button>
+                </div>
+              </div>
+
+              {/* جدول معاينة السجلات بعد الدمج والتدقيق */}
+              <div className="overflow-x-auto rounded-lg border border-border max-h-72">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="p-2.5 border border-border">اسم الطالب</th>
+                      <th className="p-2.5 border border-border">السجل المدني</th>
+                      <th className="p-2.5 border border-border">الجوال الأساسي</th>
+                      <th className="p-2.5 border border-border">جوال المنزل</th>
+                      <th className="p-2.5 border border-border">هاتف العمل</th>
+                      <th className="p-2.5 border border-border">المرحلة والفصل</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditedStudents.map((st, i) => (
+                      <tr key={i} className="hover:bg-bg/50">
+                        <td className="p-2.5 border border-border font-medium text-fg">{st.name}</td>
+                        <td className="p-2.5 border border-border text-fg-muted">{st.nationalId || "—"}</td>
+                        <td className="p-2.5 border border-border text-primary font-mono">{st.parentPhone || "—"}</td>
+                        <td className="p-2.5 border border-border text-fg-muted font-mono">{st.parentPhone2 || "—"}</td>
+                        <td className="p-2.5 border border-border text-fg-muted font-mono">{st.workPhone || "—"}</td>
+                        <td className="p-2.5 border border-border text-fg-muted">{st.stageName} - {st.className}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>
