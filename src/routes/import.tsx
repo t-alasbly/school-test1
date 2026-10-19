@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { tr } from "@/lib/school/i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Search, Upload, CheckCircle2 } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
+import { ChevronDown, Search, Upload, CheckCircle2, AlertTriangle, ArrowLeftRight } from "lucide-react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { AppGate } from "@/components/app-gate";
 import { SettingsBack } from "@/components/settings-back";
@@ -69,6 +69,8 @@ type RosterStudent = {
   nationalId?: string;
   nationality?: string;
   classId: number;
+  violationsCount?: number;
+  notesCount?: number;
 };
 
 type RosterClass = {
@@ -84,6 +86,68 @@ type RosterStage = {
   name: string;
   classes: RosterClass[];
 };
+
+type DuplicatePair = {
+  pairId: string;
+  stageName: string;
+  classLabel: string;
+  keep: RosterStudent;
+  remove: RosterStudent;
+  reason: string;
+  selected: boolean;
+};
+
+// دالة توحيد النص العربي لمقارنة الأسماء المتشابهة بدقة
+function normalizeArabicName(raw: string): string {
+  return String(raw ?? "")
+    .normalize("NFKC")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // إزالة التشكيل والمد
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/عبد\s+/g, "عبد") // توحيد (عبد الله -> عبدالله)
+    .replace(/ابو\s+/g, "ابو")
+    .replace(/آل\s+/g, "ال")
+    .replace(/بن\s+/g, "") // تجاهل كلمة (بن) عند المقارنة
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// فحص درجة التشابه بين اسمين داخل نفس الفصل
+function checkNameSimilarity(name1: string, name2: string): { isSimilar: boolean; reason: string } {
+  const n1 = normalizeArabicName(name1);
+  const n2 = normalizeArabicName(name2);
+
+  if (!n1 || !n2) return { isSimilar: false, reason: "" };
+  if (n1 === n2) return { isSimilar: true, reason: "تطابق تام في الاسم" };
+
+  const w1 = n1.split(" ").filter(Boolean);
+  const w2 = n2.split(" ").filter(Boolean);
+
+  if (w1.length >= 3 && w2.length >= 3) {
+    // تطابق الاسم الأول والثاني والأخير (مثل اسم ثلاثي مع رباعي)
+    const firstTwoMatch = w1[0] === w2[0] && w1[1] === w2[1];
+    const lastMatch = w1[w1.length - 1] === w2[w2.length - 1];
+    if (firstTwoMatch && lastMatch) {
+      return { isSimilar: true, reason: "تطابق الاسم الأول والأب والعائلة" };
+    }
+
+    // إذا كانت كل كلمات الاسم الأقصر موجودة بالترتيب داخل الاسم الأطول
+    const shorter = w1.length <= w2.length ? w1 : w2;
+    const longer = w1.length <= w2.length ? w2 : w1;
+    let idx = 0;
+    for (const word of longer) {
+      if (word === shorter[idx]) idx++;
+    }
+    if (idx === shorter.length) {
+      return { isSimilar: true, reason: "أحد الاسمين مختصر للآخر" };
+    }
+  }
+
+  return { isSimilar: false, reason: "" };
+}
 
 function ImportPage() {
   return (
@@ -136,6 +200,10 @@ function StudentImport() {
   const [openStage, setOpenStage] = useState<Record<string, boolean>>({});
   const [showExcel, setShowExcel] = useState(false);
 
+  // حالات نافذة تدقيق المكررات للبيانات الحالية الموجودة في النظام
+  const [showExistingAudit, setShowExistingAudit] = useState(false);
+  const [duplicatePairs, setDuplicatePairs] = useState<DuplicatePair[]>([]);
+
   const bulkMutation = useMutation({
     mutationFn: (input: { scope: "all" | "stage" | "class"; stageId?: number; classId?: number }) =>
       bulkDeleteStudents({ data: input }),
@@ -147,6 +215,106 @@ function StudentImport() {
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحذف")),
   });
+
+  // دالة فحص الطلاب الموجودين حالياً في قاعدة البيانات واكتشاف المكرر بالتشابه
+  const scanExistingDuplicates = useCallback(() => {
+    const allStages: RosterStage[] = roster.data?.stages ?? [];
+    if (!allStages.length) {
+      toast.warning("لا توجد بيانات طلاب محملة حالياً لفحصها.");
+      return;
+    }
+
+    const foundPairs: DuplicatePair[] = [];
+
+    for (const stage of allStages) {
+      for (const cls of stage.classes) {
+        const students = cls.students ?? [];
+        const usedIds = new Set<number>();
+
+        for (let i = 0; i < students.length; i++) {
+          const stA = students[i];
+          if (!stA || usedIds.has(stA.id)) continue;
+
+          for (let j = i + 1; j < students.length; j++) {
+            const stB = students[j];
+            if (!stB || usedIds.has(stB.id)) continue;
+
+            const sameNationalId =
+              Boolean(stA.nationalId && stB.nationalId) &&
+              stA.nationalId?.trim() === stB.nationalId?.trim();
+
+            const sim = checkNameSimilarity(stA.name, stB.name);
+
+            if (sameNationalId || sim.isSimilar) {
+              usedIds.add(stB.id);
+
+              // تحديد الطالب الأحق بالبقاء (الأكثر ملاحظات/مخالفات، ثم المكتمل بياناته)
+              const scoreA =
+                ((stA.violationsCount ?? 0) + (stA.notesCount ?? 0)) * 10 +
+                (stA.parentPhone ? 2 : 0) +
+                (stA.nationalId ? 1 : 0);
+              const scoreB =
+                ((stB.violationsCount ?? 0) + (stB.notesCount ?? 0)) * 10 +
+                (stB.parentPhone ? 2 : 0) +
+                (stB.nationalId ? 1 : 0);
+
+              const keep = scoreB > scoreA ? stB : stA;
+              const remove = scoreB > scoreA ? stA : stB;
+
+              foundPairs.push({
+                pairId: `${keep.id}_${remove.id}`,
+                stageName: stage.name,
+                classLabel: cls.label,
+                keep,
+                remove,
+                reason: sameNationalId ? "تطابق السجل المدني" : sim.reason,
+                selected: true,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    setDuplicatePairs(foundPairs);
+    setShowExistingAudit(true);
+    if (foundPairs.length > 0) {
+      toast.info(`تم العثور على ${foundPairs.length} حالة تكرار في البيانات الحالية.`);
+    } else {
+      toast.success("لم يتم العثور على أي أسماء مكررة في الفصول الحالية!");
+    }
+  }, [roster.data]);
+
+  // تفعيل اختصار لوحة المفاتيح Ctrl + Shift + Q على مستوى صفحة الطلاب بالكامل
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "q") {
+        e.preventDefault();
+        scanExistingDuplicates();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [scanExistingDuplicates]);
+
+  // تبديل الطالب المعتمد مع الطالب المحذوف يدوياً عند رغبة المدير
+  function swapPair(pairId: string) {
+    setDuplicatePairs((prev) =>
+      prev.map((item) =>
+        item.pairId === pairId
+          ? { ...item, keep: item.remove, remove: item.keep }
+          : item,
+      ),
+    );
+  }
+
+  function togglePairSelection(pairId: string) {
+    setDuplicatePairs((prev) =>
+      prev.map((item) =>
+        item.pairId === pairId ? { ...item, selected: !item.selected } : item,
+      ),
+    );
+  }
 
   const stages = useMemo(() => {
     const list: RosterStage[] = roster.data?.stages ?? [];
@@ -179,11 +347,107 @@ function StudentImport() {
             className="pr-10"
           />
         </div>
+        <Button variant="secondary" onClick={scanExistingDuplicates}>
+          <AlertTriangle className="size-4 text-amber-500" />
+          تدقيق المكرر في البيانات الحالية (Ctrl+Shift+Q)
+        </Button>
         <Button variant="secondary" onClick={() => setShowExcel((v) => !v)}>
           <Upload className="size-4" />
           {showExcel ? tr("إخفاء ملف الإكسل") : tr("استيراد من إكسل")}
         </Button>
       </div>
+
+      {/* نافذة تدقيق ومعاينة الأسماء المكررة الموجودة فعلياً في قاعدة البيانات */}
+      {showExistingAudit ? (
+        <Card className="border-amber-500/40 bg-bg-elevated shadow-md">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <AlertTriangle className="size-5 text-amber-500" />
+                تدقيق الأسماء المكررة في البيانات الحالية ({duplicatePairs.length} حالة)
+              </CardTitle>
+              <p className="mt-1 text-xs text-fg-muted">
+                راجع الأسماء المتشابهة المكتشفة داخل الفصول. يمكنك عكس الاختيار بزر التبديل لتحديد الاسم الذي سيبقى وتُنقل إليه الملاحظات.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setShowExistingAudit(false)}>
+                إغلاق النافذة
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {duplicatePairs.length === 0 ? (
+              <p className="py-6 text-center text-sm text-fg-muted">
+                لا توجد أي أسماء مكررة أو متشابهة داخل الفصول الحالية.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border max-h-96">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="p-2.5 border border-border text-center">تحديد</th>
+                      <th className="p-2.5 border border-border">الفصل</th>
+                      <th className="p-2.5 border border-border">الاسم المعتمد (يبقى وتُنقل له الملاحظات)</th>
+                      <th className="p-2.5 border border-border text-center">تبديل</th>
+                      <th className="p-2.5 border border-border">الاسم المكرر (سيُحذف بعد النقل)</th>
+                      <th className="p-2.5 border border-border">سبب التشابه</th>
+                      <th className="p-2.5 border border-border text-center">حذف يدوي سريع</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {duplicatePairs.map((pair) => (
+                      <tr key={pair.pairId} className="hover:bg-bg/50">
+                        <td className="p-2.5 border border-border text-center">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={pair.selected}
+                            onChange={() => togglePairSelection(pair.pairId)}
+                          />
+                        </td>
+                        <td className="p-2.5 border border-border text-fg-muted">
+                          {pair.stageName} - {pair.classLabel}
+                        </td>
+                        <td className="p-2.5 border border-border font-semibold text-primary">
+                          <div>{pair.keep.name}</div>
+                          <div className="text-[11px] font-normal text-fg-muted" dir="ltr">
+                            ID: #{pair.keep.id} {pair.keep.parentPhone ? `· ${pair.keep.parentPhone}` : "· بدون جوال"}
+                          </div>
+                        </td>
+                        <td className="p-2.5 border border-border text-center">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            title="تبديل أيهما يبقى وأيهما يُحذف"
+                            onClick={() => swapPair(pair.pairId)}
+                          >
+                            <ArrowLeftRight className="size-3.5" />
+                          </Button>
+                        </td>
+                        <td className="p-2.5 border border-border font-medium text-danger">
+                          <div>{pair.remove.name}</div>
+                          <div className="text-[11px] font-normal text-fg-muted" dir="ltr">
+                            ID: #{pair.remove.id} {pair.remove.parentPhone ? `· ${pair.remove.parentPhone}` : "· بدون جوال"}
+                          </div>
+                        </td>
+                        <td className="p-2.5 border border-border text-fg-muted">
+                          {pair.reason}
+                        </td>
+                        <td className="p-2.5 border border-border text-center">
+                          <DeleteStudentButton student={pair.remove} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <NoorImport
         onImported={() => {
           void queryClient.invalidateQueries({ queryKey: ["roster"] });
@@ -214,21 +478,32 @@ function StudentImport() {
             <p className="text-sm text-fg-muted">
               {roster.data?.studentCount ?? 0} طالب في {roster.data?.classCount ?? 0} فصل
             </p>
-            {(roster.data?.studentCount ?? 0) > 0 ? (
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={bulkMutation.isPending}
-                onClick={() => {
-                  const n = roster.data?.studentCount ?? 0;
-                  if (window.confirm(`حذف جميع الطلاب (${n}) من كل المراحل؟ لا يمكن التراجع.`)) {
-                    bulkMutation.mutate({ scope: "all" });
-                  }
-                }}
-              >
-                حذف جميع الطلاب
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {(roster.data?.studentCount ?? 0) > 0 ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={scanExistingDuplicates}
+                  >
+                    تدقيق الأسماء المكررة (Ctrl+Shift+Q)
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={bulkMutation.isPending}
+                    onClick={() => {
+                      const n = roster.data?.studentCount ?? 0;
+                      if (window.confirm(`حذف جميع الطلاب (${n}) من كل المراحل؟ لا يمكن التراجع.`)) {
+                        bulkMutation.mutate({ scope: "all" });
+                      }
+                    }}
+                  >
+                    حذف جميع الطلاب
+                  </Button>
+                </>
+              ) : null}
+            </div>
           </div>
           {stages.length === 0 ? (
             <Card>
@@ -245,34 +520,34 @@ function StudentImport() {
             return (
               <section key={stage.id ?? stage.name} className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] bg-muted px-3 py-2">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-center justify-between text-right"
-                  onClick={() =>
-                    setOpenStage((prev) => ({ ...prev, [stage.name]: !open }))
-                  }
-                >
-                  <span className="font-semibold">{stage.name}</span>
-                  <span className="flex items-center gap-2 text-sm text-fg-muted">
-                    {count} طالب · {stage.classes.length} فصل
-                    <ChevronDown className={cn("size-4 transition", open ? "rotate-180" : "")} />
-                  </span>
-                </button>
-                {count > 0 ? (
-                  <Button
+                  <button
                     type="button"
-                    size="sm"
-                    variant="danger"
-                    disabled={bulkMutation.isPending}
-                    onClick={() => {
-                      if (window.confirm(`حذف ${count} طالب في «${stage.name}»؟ لا يمكن التراجع.`)) {
-                        bulkMutation.mutate({ scope: "stage", stageId: stage.id });
-                      }
-                    }}
+                    className="flex min-w-0 flex-1 items-center justify-between text-right"
+                    onClick={() =>
+                      setOpenStage((prev) => ({ ...prev, [stage.name]: !open }))
+                    }
                   >
-                    حذف المرحلة
-                  </Button>
-                ) : null}
+                    <span className="font-semibold">{stage.name}</span>
+                    <span className="flex items-center gap-2 text-sm text-fg-muted">
+                      {count} طالب · {stage.classes.length} فصل
+                      <ChevronDown className={cn("size-4 transition", open ? "rotate-180" : "")} />
+                    </span>
+                  </button>
+                  {count > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      disabled={bulkMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`حذف ${count} طالب في «${stage.name}»؟ لا يمكن التراجع.`)) {
+                          bulkMutation.mutate({ scope: "stage", stageId: stage.id });
+                        }
+                      }}
+                    >
+                      حذف المرحلة
+                    </Button>
+                  ) : null}
                 </div>
                 {open
                   ? stage.classes.map((cls: RosterClass) => (
@@ -471,24 +746,6 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   const [auditedStudents, setAuditedStudents] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
 
-  // تفعيل اختصار لوحة المفاتيح Ctrl + Shift + Q لتشغيل تدقيق المكررات مباشرة
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "q") {
-        e.preventDefault();
-        if (headers.length > 0) {
-          handleRunAudit();
-          toast.info("تم تفعيل الاختصار: جاري تشغيل تدقيق المكررات...");
-        } else {
-          toast.warning("يرجى اختيار ملف الإكسل وتعيين الأعمدة أولاً.");
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [headers, rows, mapping]);
-
   const mutation = useMutation({
     mutationFn: (payload: any[]) =>
       importStudents({ data: { rows: payload, replaceEmpty: !keepEmpty, preserveRecords: keepEmpty } }),
@@ -553,7 +810,9 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     let dups = 0;
 
     raw.forEach((st) => {
-      const key = st.nationalId ? st.nationalId.trim() : `${st.name.trim()}_${st.stageName.trim()}_${st.className.trim()}`;
+      const key = st.nationalId
+        ? st.nationalId.trim()
+        : `${normalizeArabicName(st.name)}_${st.stageName.trim()}_${st.className.trim()}`;
 
       if (map.has(key)) {
         dups++;
@@ -578,7 +837,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4">
       <DropZone
-        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، هاتف العمل، الجنسية، المرحلة والفصل. (اختصار تدقيق المكررات: Ctrl + Shift + Q)")}
+        hint={tr("الأعمدة: الاسم، السجل المدني، الجوال، جوال آخر، هاتف العمل، الجنسية، المرحلة والفصل.")}
         onFile={onFile}
       />
       {headers.length > 0 ? (
@@ -609,7 +868,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
               row.className,
             ])}
           />
-          <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد (اضغط Ctrl + Shift + Q للتدقيق السريع)</p>
+          <p className="text-sm text-fg-muted">{rows.length} صف جاهز للاستيراد</p>
           <label className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
             <input
               type="checkbox"
@@ -619,14 +878,14 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             />
             حماية السجلات: لا تُحذف الفصول ولا يُدمج الطلاب، وتبقى المخالفات كما هي
           </label>
-          
+
           <Button
             variant="secondary"
             className="w-full sm:w-auto"
             disabled={!mapping.name || !mapping.stageName || !mapping.className}
             onClick={handleRunAudit}
           >
-            تدقيق المكررات وعرض ملخص الدمج ({rows.length} سجل) [Ctrl + Shift + Q]
+            تدقيق المكررات في ملف الإكسل ({rows.length} سجل)
           </Button>
 
           {showAuditModal && (
