@@ -31,7 +31,7 @@ type StudentMapping = {
   name: string;
   parentPhone: string;
   parentPhone2: string;
-  workPhone: string; // تم إضافة حقل هاتف العمل
+  workPhone: string;
   nationalId: string;
   nationality: string;
   stageName: string;
@@ -49,7 +49,7 @@ const STUDENT_FIELDS: { key: keyof StudentMapping; label: string }[] = [
   { key: "nationalId", label: tr("السجل المدني") },
   { key: "parentPhone", label: tr("جوال ولي الأمر") },
   { key: "parentPhone2", label: tr("جوال آخر (المنزل)") },
-  { key: "workPhone", label: tr("هاتف العمل") }, // تم إضافة حقل هاتف العمل هنا
+  { key: "workPhone", label: tr("هاتف العمل") },
   { key: "nationality", label: tr("الجنسية") },
   { key: "stageName", label: tr("المرحلة") },
   { key: "className", label: tr("الفصل") },
@@ -467,7 +467,6 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     className: "",
   });
 
-  // حالة زر التدقيق والمعاينة قبل الاعتماد النهائي
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditedStudents, setAuditedStudents] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
@@ -530,20 +529,17 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
     }));
   }
 
-  // دالة التدقيق ودمج المكررات قبل الاعتماد
   function handleRunAudit() {
     const raw = mappedRows();
     const map = new Map();
     let dups = 0;
 
     raw.forEach((st) => {
-      // المفتاح الفرعي للمطابقة (السجل المدني أولاً، وإلا تطابق الاسم مع المرحلة والفصل)
       const key = st.nationalId ? st.nationalId.trim() : `${st.name.trim()}_${st.stageName.trim()}_${st.className.trim()}`;
 
       if (map.has(key)) {
         dups++;
         const existing = map.get(key);
-        // دمج البيانات والأرقام الناقصة
         if (!existing.parentPhone && st.parentPhone) existing.parentPhone = st.parentPhone;
         if (!existing.parentPhone2 && st.parentPhone2) existing.parentPhone2 = st.parentPhone2;
         if (!existing.workPhone && st.workPhone) existing.workPhone = st.workPhone;
@@ -606,7 +602,6 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             حماية السجلات: لا تُحذف الفصول ولا يُدمج الطلاب، وتبقى المخالفات كما هي
           </label>
           
-          {/* زر التدقيق الجديد قبل الاعتماد */}
           <Button
             variant="secondary"
             className="w-full sm:w-auto"
@@ -616,7 +611,6 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
             تدقيق المكررات وعرض ملخص الدمج ({rows.length} سجل)
           </Button>
 
-          {/* نافذة أو قسم التدقيق والمعاينة المندمجة */}
           {showAuditModal && (
             <div className="rounded-xl border border-primary/30 bg-bg-elevated p-5 space-y-4 shadow-md mt-4">
               <div className="flex items-center justify-between flex-wrap gap-3">
@@ -642,7 +636,6 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
                 </div>
               </div>
 
-              {/* جدول معاينة السجلات بعد الدمج والتدقيق */}
               <div className="overflow-x-auto rounded-lg border border-border max-h-72">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-muted sticky top-0">
