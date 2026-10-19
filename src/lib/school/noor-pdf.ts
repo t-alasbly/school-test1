@@ -4,14 +4,12 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { create as createFont } from "fontkit";
 
-// تسجيل الوركر في الذاكرة العامة لمنع البحث عن ملف خارجي في Vercel
 if (typeof globalThis !== "undefined" && !globalThis.pdfjsWorker) {
     globalThis.pdfjsWorker = pdfjsWorker;
 }
 
 const AR = /[\u0600-\u06FF]/;
 
-/** Noor prints this report with an empty ToUnicode map. Glyph ids live in the embedded Arial. */
 function preferUnicode(unis) {
     const bases = unis.map((u) => {
         const n = String.fromCodePoint(u).normalize("NFKC");
@@ -173,9 +171,14 @@ function phoneOf(text) {
     if (!digits) return "";
     if (digits.startsWith("00966")) digits = digits.slice(5);
     else if (digits.startsWith("966")) digits = digits.slice(3);
-    if (digits.startsWith("5") && digits.length === 9) digits = `0${digits}`;
-    if (digits.length > 10 && digits.startsWith("0")) return digits.slice(0, 10);
-    return digits;
+    
+    if (digits.startsWith("5") && digits.length === 9) {
+        digits = `0${digits}`;
+    }
+    if (digits.length >= 10 && digits.startsWith("05")) {
+        return digits.slice(0, 10);
+    }
+    return digits.length === 10 ? digits : "";
 }
 
 function readForm(items, headerY) {
@@ -192,10 +195,6 @@ function readForm(items, headerY) {
     return { stage, className };
 }
 
-/**
- * Read Noor «كشف الطلاب» (EL_StudentInfoReport).
- * Returns one row per student who is still enrolled (مستمر). Does not touch the database.
- */
 export async function parseNoorStudentPdf(bytes) {
     const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
     const fonts = extractFonts(buf);
@@ -206,9 +205,12 @@ export async function parseNoorStudentPdf(bytes) {
         isEvalSupported: false,
         verbosity: 0,
     }).promise;
-    const students = [];
+    
+    // خريطة لدمج بيانات الطلاب بدقة منعاً لأي تكرار ومع جمع البيانات الناقصة
+    const studentMap = new Map();
     let carry = { stage: "", className: "" };
     let cols = FALLBACK_COLS.map(([key, floor]) => ({ key, floor }));
+    
     try {
         for (let pageNo = 1; pageNo <= doc.numPages; pageNo += 1) {
             const page = await doc.getPage(pageNo);
@@ -241,6 +243,7 @@ export async function parseNoorStudentPdf(bytes) {
             const anchors = body
                 .filter((it) => colOf(it.r, cols) === "n" && /^\d+$/.test(it.t))
                 .sort((a, b) => b.y - a.y);
+            
             for (let i = 0; i < anchors.length; i += 1) {
                 const yTop = anchors[i].y + 10;
                 const yBot = i + 1 < anchors.length ? (anchors[i].y + anchors[i + 1].y) / 2 : anchors[i].y - 18;
@@ -252,28 +255,46 @@ export async function parseNoorStudentPdf(bytes) {
                 }
                 const status = (bucket.status ?? "").replace(/\s+/g, " ").trim();
                 if (!status.includes("مستمر")) continue;
+                
                 const name = tidyName(bucket.name ?? "");
                 if ([...name.replace(/\s/g, "")].length < 4) continue;
+                
                 const nationalId = String(bucket.nationalId ?? "").replace(/\D/g, "");
                 const mobile = phoneOf(bucket.mobile);
                 const home = phoneOf(bucket.home);
                 const work = phoneOf(bucket.work);
                 const parentPhone = mobile || home || work;
                 const parentPhone2 = [home, work].find((phone) => phone && phone !== parentPhone) ?? "";
+                
                 if (!carry.stage || !carry.className) continue;
-                students.push({
-                    name,
-                    parentPhone,
-                    parentPhone2,
-                    nationalId: nationalId.length >= 8 ? nationalId.slice(0, 10) : "",
-                    nationality: tidyName(bucket.nationality ?? "").slice(0, 40),
-                    stageName: carry.stage,
-                    className: carry.className,
-                });
+
+                // مفتاح البصمة الفريدة للطالب (الاسم + المرحلة + الفصل) لضمان مطابقة الطالب في كشفه
+                const uniqueKey = `${name}_${carry.stage}_${carry.className}`;
+
+                if (studentMap.has(uniqueKey)) {
+                    // إذا كان الطالب موجوداً مسبقاً، نقوم بـ "دمج" وتحديث البيانات الناقصة
+                    const existing = studentMap.get(uniqueKey);
+                    if (!existing.parentPhone && parentPhone) existing.parentPhone = parentPhone;
+                    if (!existing.parentPhone2 && parentPhone2) existing.parentPhone2 = parentPhone2;
+                    if (!existing.nationalId && nationalId.length >= 8) existing.nationalId = nationalId.slice(0, 10);
+                    if (!existing.nationality && bucket.nationality) existing.nationality = tidyName(bucket.nationality).slice(0, 40);
+                } else {
+                    // إضافة الطالب لأول مرة
+                    studentMap.set(uniqueKey, {
+                        name,
+                        parentPhone,
+                        parentPhone2,
+                        nationalId: nationalId.length >= 8 ? nationalId.slice(0, 10) : "",
+                        nationality: tidyName(bucket.nationality ?? "").slice(0, 40),
+                        stageName: carry.stage,
+                        className: carry.className,
+                    });
+                }
             }
         }
     } finally {
         await doc.destroy();
     }
-    return students;
+    
+    return Array.from(studentMap.values());
 }
