@@ -166,6 +166,7 @@ function colOf(r, cols) {
     return "mobile";
 }
 
+// دالة تنظيف وتوحيد صيغة الأرقام (05, 9665, +9665, 009665)
 function phoneOf(text) {
     let digits = String(text ?? "").replace(/\D/g, "");
     if (!digits) return "";
@@ -206,7 +207,6 @@ export async function parseNoorStudentPdf(bytes) {
         verbosity: 0,
     }).promise;
     
-    // خريطة لدمج بيانات الطلاب بدقة منعاً لأي تكرار ومع جمع البيانات الناقصة
     const studentMap = new Map();
     let carry = { stage: "", className: "" };
     let cols = FALLBACK_COLS.map(([key, floor]) => ({ key, floor }));
@@ -260,30 +260,30 @@ export async function parseNoorStudentPdf(bytes) {
                 if ([...name.replace(/\s/g, "")].length < 4) continue;
                 
                 const nationalId = String(bucket.nationalId ?? "").replace(/\D/g, "");
+                
+                // استخراج الأرقام بشكل مستقل ومنفصل
                 const mobile = phoneOf(bucket.mobile);
                 const home = phoneOf(bucket.home);
-                const work = phoneOf(bucket.work);
-                const parentPhone = mobile || home || work;
-                const parentPhone2 = [home, work].find((phone) => phone && phone !== parentPhone) ?? "";
+                const work = phoneOf(bucket.work); // تم إتاحة هاتف العمل بشكل مستقل تماماً
                 
                 if (!carry.stage || !carry.className) continue;
 
-                // مفتاح البصمة الفريدة للطالب (الاسم + المرحلة + الفصل) لضمان مطابقة الطالب في كشفه
                 const uniqueKey = `${name}_${carry.stage}_${carry.className}`;
 
                 if (studentMap.has(uniqueKey)) {
-                    // إذا كان الطالب موجوداً مسبقاً، نقوم بـ "دمج" وتحديث البيانات الناقصة
+                    // دمج البيانات في حال تكرار السجل للطالب لضمان عدم ضياع أي رقم (جوال أو عمل أو منزل)
                     const existing = studentMap.get(uniqueKey);
-                    if (!existing.parentPhone && parentPhone) existing.parentPhone = parentPhone;
-                    if (!existing.parentPhone2 && parentPhone2) existing.parentPhone2 = parentPhone2;
+                    if (!existing.mobile && mobile) existing.mobile = mobile;
+                    if (!existing.home && home) existing.home = home;
+                    if (!existing.work && work) existing.work = work;
                     if (!existing.nationalId && nationalId.length >= 8) existing.nationalId = nationalId.slice(0, 10);
                     if (!existing.nationality && bucket.nationality) existing.nationality = tidyName(bucket.nationality).slice(0, 40);
                 } else {
-                    // إضافة الطالب لأول مرة
                     studentMap.set(uniqueKey, {
                         name,
-                        parentPhone,
-                        parentPhone2,
+                        mobile,       // جوال الطالب / ولي الأمر
+                        home,         // هاتف المنزل
+                        work,         // هاتف العمل (مستقل تماماً)
                         nationalId: nationalId.length >= 8 ? nationalId.slice(0, 10) : "",
                         nationality: tidyName(bucket.nationality ?? "").slice(0, 40),
                         stageName: carry.stage,
