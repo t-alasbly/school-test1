@@ -5857,49 +5857,26 @@ async function ensureTeacherEval(sql) {
     exam numeric not null default 0,
     primary key (staff_id, student_id)
   )`;
-	await sql`create table if not exists staff_timetable (
-    staff_id text not null,
-    school_id integer not null references schools (id) on delete cascade,
-    day smallint not null check (day between 0 and 4),
-    period_key text not null,
-    class_id integer references classes (id) on delete set null,
-    place text not null default '',
-    subject text not null default '',
-    primary key (staff_id, day, period_key)
-  )`;
-	await sql`alter table staff_timetable add column if not exists subject text not null default ''`;
-	await sql`alter table eval_scales add column if not exists plan text not null default ''`;
-	await sql`alter table student_evals add column if not exists period_no integer not null default 1`;
-	await sql`alter table student_evals add column if not exists lesson_key text not null default ''`;
-	await sql`alter table student_evals add column if not exists column_id text not null default ''`;
-	await sql`alter table eval_cards add column if not exists column_id text not null default ''`;
-	await sql`alter table eval_cards add column if not exists column_ref text not null default ''`;
-	await sql`create table if not exists grade_formats (
-    id serial primary key,
-    school_id integer not null references schools (id) on delete cascade,
-    owner_id text not null,
-    owner_name text not null default '',
-    name text not null,
-    payload text not null default '{}',
-    created_at timestamptz not null default now()
-  )`;
-	await sql`create table if not exists student_period_marks (
-    school_id integer not null references schools (id) on delete cascade,
-    staff_id text not null,
-    student_id integer not null references students (id) on delete cascade,
-    class_id integer not null references classes (id) on delete cascade,
-    period_no integer not null,
-    participation numeric not null default 0,
-    exam numeric not null default 0,
-    subject text not null default '',
-    primary key (staff_id, student_id, period_no, subject)
-  )`;
-	await sql`alter table student_period_marks add column if not exists subject text not null default ''`;
-	await sql`alter table student_period_marks add column if not exists extras text not null default '{}'`;
-	try {
-		await sql.query(`alter table student_period_marks drop constraint if exists student_period_marks_pkey`);
-		await sql.query(`alter table student_period_marks add primary key (staff_id, student_id, period_no, subject)`);
-	} catch {}
+    
+    // ==========================================
+    // أضف هذه السطور هنا لضمان عدم حدوث خطأ ON CONFLICT
+    // ==========================================
+    try {
+        await sql.query(`
+            drop index if exists student_period_marks_unique_idx;
+            create unique index if not exists student_period_marks_unique_idx 
+            on student_period_marks (staff_id, student_id, period_no, subject);
+        `);
+    } catch {}
+
+    try {
+        await sql.query(`
+            drop index if exists student_subject_marks_unique_idx;
+            create unique index if not exists student_subject_marks_unique_idx 
+            on student_subject_marks (staff_id, student_id);
+        `);
+    } catch {}
+    // ==========================================
 }
 async function seedTeacherEval(sql, staff) {
 	const scale = (await sql`select staff_id from eval_scales where staff_id = ${staff.user_id}`)[0];
