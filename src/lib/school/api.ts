@@ -6115,27 +6115,27 @@ export const setTeacherPins = createServerFn({ method: "POST" }).middleware([aut
 	return { ok: true };
 });
 export const getClassEval = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	classId: z.number(),
-	subject: z.string().max(40).optional(),
-	lessonKey: z.string().max(20).optional()
+    classId: z.number(),
+    subject: z.string().max(40).optional(),
+    lessonKey: z.string().max(20).optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireDesk(context.userId);
-	await ensureTeacherEval(sql);
-	await seedTeacherEval(sql, staff);
-	const cls = (await sql`
+    const { sql, staff } = await requireDesk(context.userId);
+    await ensureTeacherEval(sql);
+    await seedTeacherEval(sql, staff);
+    const cls = (await sql`
     select c.id, c.name, st.short_name, st.name as stage_name
     from classes c
     join stages st on st.id = c.stage_id
     where c.id = ${data.classId} and c.school_id = ${staff.school_id}
   `)[0];
-	if (!cls) throw new Error("الفصل غير موجود");
-	const cards = await sql`
+    if (!cls) throw new Error("الفصل غير موجود");
+    const cards = await sql`
     select id, label, points, bucket, enabled, sort_order, coalesce(column_id, '') as column_id
     from eval_cards
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
     order by sort_order, id
   `;
-	const students = await sql`
+    const students = await sql`
     select s.id, s.name, coalesce(s.national_id, '') as national_id,
            coalesce(s.nationality, '') as nationality,
            coalesce(s.parent_phone, '') as parent_phone,
@@ -6146,10 +6146,10 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     where s.class_id = ${cls.id} and s.school_id = ${staff.school_id}
     order by s.roster_order nulls last, s.id
   `;
-	let attendanceRows = [];
-	let attendanceDays = 0;
-	try {
-		attendanceRows = await sql`
+    let attendanceRows = [];
+    let attendanceDays = 0;
+    try {
+        attendanceRows = await sql`
       select student_id,
         count(*) filter (where kind = 'absence' and coalesce(excused, false) = false)::int as absent,
         count(*) filter (where kind = 'late')::int as late,
@@ -6161,59 +6161,59 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
         and student_id in (select id from students where class_id = ${cls.id} and school_id = ${staff.school_id})
       group by student_id
     `;
-		const dayRow = (await sql`
+        const dayRow = (await sql`
       select count(distinct day)::int as days
       from daily_attendance
       where school_id = ${staff.school_id}
         and student_id in (select id from students where class_id = ${cls.id} and school_id = ${staff.school_id})
     `)[0];
-		attendanceDays = Number(dayRow?.days) || 0;
-	} catch {
-		attendanceRows = [];
-		attendanceDays = 0;
-	}
-	const attendanceOf = new Map(attendanceRows.map((row) => [row.student_id, row]));
-	const listed = parseSubjects(staff.subject);
-	const chosen = (data.subject ?? "").trim();
-	const lessonSubject = listed.length === 1 ? listed[0] : chosen;
-	const plan = await subjectPlanOf(sql, staff, lessonSubject);
-	const periods = plan.periods;
-	const combine = plan.combine;
-	const yearMax = periods.length ? roundMark(periods.reduce((sum, period) => sum + period.tasksMax + period.examMax, 0) / periods.length) : 60;
-	const finalExamMax = plan.finalExamMax || 40;
-	const tasksMax = periods[0]?.tasksMax || 40;
-	const quizzesMax = periods[0]?.examMax || 20;
-	const openPeriod = periods.find((period) => !period.closed)?.no ?? null;
-	const evals = lessonSubject ? await sql`
+        attendanceDays = Number(dayRow?.days) || 0;
+    } catch {
+        attendanceRows = [];
+        attendanceDays = 0;
+    }
+    const attendanceOf = new Map(attendanceRows.map((row) => [row.student_id, row]));
+    const listed = parseSubjects(staff.subject);
+    const chosen = (data.subject ?? "").trim();
+    const lessonSubject = listed.length === 1 ? listed[0] : chosen;
+    const plan = await subjectPlanOf(sql, staff, lessonSubject);
+    const periods = plan.periods;
+    const combine = plan.combine;
+    const yearMax = periods.length ? roundMark(periods.reduce((sum, period) => sum + period.tasksMax + period.examMax, 0) / periods.length) : 60;
+    const finalExamMax = plan.finalExamMax || 40;
+    const tasksMax = periods[0]?.tasksMax || 40;
+    const quizzesMax = periods[0]?.examMax || 20;
+    const openPeriod = periods.find((period) => !period.closed)?.no ?? null;
+    const evals = lessonSubject ? await sql`
     select student_id, bucket, points, period_no, coalesce(column_id, '') as column_id
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (subject = ${lessonSubject} or subject = '')
   ` : [];
-	const marks = await sql`
+    const marks = await sql`
     select student_id, participation, exam
     from student_subject_marks
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
   `;
-	let periodRows = await sql`
+    let periodRows = await sql`
     select student_id, period_no, participation, exam, coalesce(subject, '') as subject, coalesce(extras, '{}') as extras
     from student_period_marks
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (${lessonSubject} = '' or subject = ${lessonSubject} or subject = '')
   `;
-	if (periodRows.length === 0 && marks.length && lessonSubject) {
-		for (const row of marks) {
-			await sql`
+    if (periodRows.length === 0 && marks.length && lessonSubject) {
+        for (const row of marks) {
+            await sql`
         insert into student_period_marks (school_id, staff_id, student_id, class_id, period_no, participation, exam, subject)
         values (${staff.school_id}, ${staff.user_id}, ${row.student_id}, ${cls.id}, 1, ${row.participation}, ${row.exam}, ${lessonSubject})
         on conflict (staff_id, student_id, period_no, subject) do nothing
       `;
-			periodRows.push({ student_id: row.student_id, period_no: 1, participation: row.participation, exam: row.exam, subject: lessonSubject });
-		}
-	}
-	const periodMarkOf = new Map(periodRows.map((row) => [`${row.student_id}:${row.period_no}`, row]));
-	const lessonKey = (data.lessonKey ?? "").trim();
-	const noteRows = await sql`
+            periodRows.push({ student_id: row.student_id, period_no: 1, participation: row.participation, exam: row.exam, subject: lessonSubject });
+        }
+    }
+    const periodMarkOf = new Map(periodRows.map((row) => [`${row.student_id}:${row.period_no}`, row]));
+    const lessonKey = (data.lessonKey ?? "").trim();
+    const noteRows = await sql`
     select student_id, label, count(*)::int as count, coalesce(sum(points), 0) as points
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
@@ -6222,33 +6222,34 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
       and (${lessonSubject} = '' or subject = ${lessonSubject} or subject = '')
     group by student_id, label
   `;
-	const tapsOf = new Map();
-	for (const row of noteRows) {
-		const list = tapsOf.get(Number(row.student_id)) ?? [];
-		list.push({ label: row.label, count: Number(row.count), points: Number(row.points) });
-		tapsOf.set(Number(row.student_id), list);
-	}
-	const tally = new Map();
-	const periodTally = new Map();
-	for (const row of evals) {
-		const periodNo = Number(row.period_no) || 1;
-		const key = `${row.student_id}:${periodNo}`;
-		const bucket = periodTally.get(key) ?? { tasks: 0, quizzes: 0 };
-		const points = Number(row.points);
-		if (!row.column_id) {
-			if (row.bucket === "quizzes") bucket.quizzes += points;
-			else bucket.tasks += points;
-			periodTally.set(key, bucket);
-		}
-		if (openPeriod != null && periodNo !== openPeriod) continue;
-		const cur = tally.get(row.student_id) ?? { tasks: 0, quizzes: 0, positive: 0, negative: 0 };
-		if (row.bucket === "quizzes") cur.quizzes += points;
-		else cur.tasks += points;
-		if (points >= 0) cur.positive += 1;
-		else cur.negative += 1;
-		tally.set(row.student_id, cur);
-	}
-	const recent = lessonSubject ? await sql`
+    const tapsOf = new Map();
+    for (const row of noteRows) {
+        const list = tapsOf.get(Number(row.student_id)) ?? [];
+        list.push({ label: row.label, count: Number(row.count), points: Number(row.points) });
+        tapsOf.set(Number(row.student_id), list);
+    }
+    const tally = new Map();
+    const periodTally = new Map();
+    for (const row of evals) {
+        const periodNo = Number(row.period_no) || 1;
+        const key = `${row.student_id}:${periodNo}`;
+        const bucket = periodTally.get(key) ?? { tasks: 0, quizzes: 0 };
+        const points = Number(row.points);
+        if (!row.column_id) {
+            if (row.bucket === "quizzes") bucket.quizzes += points;
+            else bucket.tasks += points;
+            periodTally.set(key, bucket);
+        }
+        // ربط نقاط المتابعة اليومية حصرياً بفترتها الخاصة وعدم ترحيلها للفترات الأخرى عند الإغلاق
+        if (openPeriod != null && periodNo !== openPeriod) continue;
+        const cur = tally.get(row.student_id) ?? { tasks: 0, quizzes: 0, positive: 0, negative: 0 };
+        if (row.bucket === "quizzes") cur.quizzes += points;
+        else cur.tasks += points;
+        if (points >= 0) cur.positive += 1;
+        else cur.negative += 1;
+        tally.set(row.student_id, cur);
+    }
+    const recent = lessonSubject ? await sql`
     select id, student_id, label, points, coalesce(subject, '') as subject, coalesce(lesson_key, '') as lesson_key, created_at::text as created_at
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
@@ -6256,106 +6257,110 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     order by id desc
     limit 40
   ` : [];
-	return {
-		class: {
-			id: cls.id,
-			label: classLabel(cls.short_name, cls.name),
-			stageName: cls.stage_name
-		},
-		teacherName: staff.display_name || "",
-		subject: lessonSubject,
-		dutyDays: attendanceDays,
-		combine,
-		openPeriod,
-		periods,
-		scale: { tasksMax, quizzesMax, totalMax: yearMax + finalExamMax, yearMax, finalExamMax },
-		finalColumns: plan.finalColumns ?? [],
-		cards: cards.map((card) => ({
-			id: card.id,
-			label: card.label,
-			points: Number(card.points),
-			bucket: card.bucket,
-			enabled: card.enabled !== false,
-			sortOrder: Number(card.sort_order) || 0,
-			columnId: card.column_id || ""
-		})),
-		students: students.map((student) => {
-			const byPeriod = periods.map((period) => {
-				const marked = periodMarkOf.get(`${student.id}:${period.no}`);
-				const rawPeriod = periodTally.get(`${student.id}:${period.no}`) ?? { tasks: 0, quizzes: 0 };
-				const extras = parseExtras(marked?.extras);
-				const columns = period.columns ?? [];
-				const taskParts = columns.some((column) => columnGroup(column) === "tasks");
-				const examParts = columns.some((column) => columnGroup(column) === "exam");
-				const participation = taskParts ? clampScore(sumColumnGroup(columns, extras, "tasks"), period.tasksMax) : clampScore(Number(marked?.participation ?? 0), period.tasksMax);
-				const exam = examParts ? clampScore(sumColumnGroup(columns, extras, "exam"), period.examMax) : clampScore(Number(marked?.exam ?? 0), period.examMax);
-				const evalPoints = rawPeriod.tasks + rawPeriod.quizzes;
-				const periodCap = period.tasksMax + period.examMax;
-				return { no: period.no, participation, exam, evalPoints, extras, total: clampScore(participation + exam + evalPoints + sumColumnGroup(columns, extras, "eval"), periodCap) };
-			});
-			const raw = tally.get(student.id) ?? { tasks: 0, quizzes: 0, positive: 0, negative: 0 };
-			const current = byPeriod.find((period) => period.no === openPeriod) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0 };
-			const count = Math.max(byPeriod.length, 1);
-			const yearWork = roundMark(byPeriod.reduce((sum, period) => sum + period.total, 0) / count);
-			const examKey = `${student.id}:0`;
-			const examRow = periodMarkOf.get(examKey);
-			const finalExtras = parseExtras(examRow?.extras);
-			const fromParts = (plan.finalColumns ?? []).reduce((sum, column) => {
-				const cap = Number(column.max) || 0;
-				const value = Number(finalExtras[column.id]) || 0;
-				return sum + (cap > 0 ? Math.min(Math.max(value, 0), cap) : value);
-			}, 0);
-			const sheetExam = clampScore((plan.finalColumns?.length && fromParts) ? fromParts : Number(examRow?.exam ?? 0), finalExamMax);
-			const finalTotal = roundMark(yearWork + sheetExam);
-			const attend = attendanceOf.get(student.id);
-			const absent = Number(attend?.absent) || 0;
-			const late = Number(attend?.late) || 0;
-			const leave = Number(attend?.leave_count) || 0;
-			const excusedAbsence = Number(attend?.excused_absence) || 0;
-			const excused = leave + excusedAbsence;
-			const presentDays = Math.max(0, attendanceDays - absent);
-			const attendancePercent = attendanceDays > 0 ? Math.max(0, Math.round((presentDays / attendanceDays) * 100)) : 100;
-			return {
-				id: student.id,
-				name: student.name,
-				nationalId: student.national_id,
-				nationality: student.nationality,
-				phone: phoneOf(student),
-				today: student.daily_kind === "absence" || student.daily_kind === "late" ? student.daily_kind : "present",
-				tasks: current.participation,
-				quizzes: current.exam,
-				participation: current.participation,
-				exam: current.exam,
-				evalPoints: current.evalPoints,
-				total: finalTotal,
-				yearWork,
-				sheetExam,
-				finalExtras,
-				finalTotal,
-				positive: raw.positive,
-				negative: raw.negative,
-				absent,
-				late,
-				excused,
-				leave,
-				excusedAbsence,
-				presentDays,
-				absenceDates: attend?.absence_dates || "—",
-				attendancePercent,
-				taps: tapsOf.get(Number(student.id)) ?? [],
-				byPeriod
-			};
-		}),
-		recent: recent.map((row) => ({
-			id: row.id,
-			studentId: row.student_id,
-			label: row.label,
-			points: Number(row.points),
-			subject: row.subject || "",
-			lessonKey: row.lesson_key || "",
-			createdAt: row.created_at
-		}))
-	};
+    return {
+        class: {
+            id: cls.id,
+            label: classLabel(cls.short_name, cls.name),
+            stageName: cls.stage_name
+        },
+        teacherName: staff.display_name || "",
+        subject: lessonSubject,
+        dutyDays: attendanceDays,
+        combine,
+        openPeriod,
+        periods,
+        scale: { tasksMax, quizzesMax, totalMax: yearMax + finalExamMax, yearMax, finalExamMax },
+        finalColumns: plan.finalColumns ?? [],
+        cards: cards.map((card) => ({
+            id: card.id,
+            label: card.label,
+            points: Number(card.points),
+            bucket: card.bucket,
+            enabled: card.enabled !== false,
+            sortOrder: Number(card.sort_order) || 0,
+            columnId: card.column_id || ""
+        })),
+        students: students.map((student) => {
+            const byPeriod = periods.map((period) => {
+                const marked = periodMarkOf.get(`${student.id}:${period.no}`);
+                const rawPeriod = periodTally.get(`${student.id}:${period.no}`) ?? { tasks: 0, quizzes: 0 };
+                const extras = parseExtras(marked?.extras);
+                const columns = period.columns ?? [];
+                const taskParts = columns.some((column) => columnGroup(column) === "tasks");
+                const examParts = columns.some((column) => columnGroup(column) === "exam");
+                
+                const pMax = Number(period.tasksMax) || 40;
+                const eMax = Number(period.examMax) || 20;
+                
+                const participation = taskParts ? clampScore(sumColumnGroup(columns, extras, "tasks"), pMax) : clampScore(Number(marked?.participation ?? 0), pMax);
+                const exam = examParts ? clampScore(sumColumnGroup(columns, extras, "exam"), eMax) : clampScore(Number(marked?.exam ?? 0), eMax);
+                const evalPoints = rawPeriod.tasks + rawPeriod.quizzes;
+                const periodCap = pMax + eMax;
+                return { no: period.no, participation, exam, evalPoints, extras, total: clampScore(participation + exam + evalPoints + sumColumnGroup(columns, extras, "eval"), periodCap) };
+            });
+            const raw = tally.get(student.id) ?? { tasks: 0, quizzes: 0, positive: 0, negative: 0 };
+            const current = byPeriod.find((period) => period.no === openPeriod) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0 };
+            const count = Math.max(byPeriod.length, 1);
+            const yearWork = roundMark(byPeriod.reduce((sum, period) => sum + period.total, 0) / count);
+            const examKey = `${student.id}:0`;
+            const examRow = periodMarkOf.get(examKey);
+            const finalExtras = parseExtras(examRow?.extras);
+            const fromParts = (plan.finalColumns ?? []).reduce((sum, column) => {
+                const cap = Number(column.max) || 0;
+                const value = Number(finalExtras[column.id]) || 0;
+                return sum + (cap > 0 ? Math.min(Math.max(value, 0), cap) : value);
+            }, 0);
+            const sheetExam = clampScore((plan.finalColumns?.length && fromParts) ? fromParts : Number(examRow?.exam ?? 0), finalExamMax);
+            const finalTotal = roundMark(yearWork + sheetExam);
+            const attend = attendanceOf.get(student.id);
+            const absent = Number(attend?.absent) || 0;
+            const late = Number(attend?.late) || 0;
+            const leave = Number(attend?.leave_count) || 0;
+            const excusedAbsence = Number(attend?.excused_absence) || 0;
+            const excused = leave + excusedAbsence;
+            const presentDays = Math.max(0, attendanceDays - absent);
+            const attendancePercent = attendanceDays > 0 ? Math.max(0, Math.round((presentDays / attendanceDays) * 100)) : 100;
+            return {
+                id: student.id,
+                name: student.name,
+                nationalId: student.national_id,
+                nationality: student.nationality,
+                phone: phoneOf(student),
+                today: student.daily_kind === "absence" || student.daily_kind === "late" ? student.daily_kind : "present",
+                tasks: current.participation,
+                quizzes: current.exam,
+                participation: current.participation,
+                exam: current.exam,
+                evalPoints: current.evalPoints,
+                total: finalTotal,
+                yearWork,
+                sheetExam,
+                finalExtras,
+                finalTotal,
+                positive: raw.positive,
+                negative: raw.negative,
+                absent,
+                late,
+                excused,
+                leave,
+                excusedAbsence,
+                presentDays,
+                absenceDates: attend?.absence_dates || "—",
+                attendancePercent,
+                taps: tapsOf.get(Number(student.id)) ?? [],
+                byPeriod
+            };
+        }),
+        recent: recent.map((row) => ({
+            id: row.id,
+            studentId: row.student_id,
+            label: row.label,
+            points: Number(row.points),
+            subject: row.subject || "",
+            lessonKey: row.lesson_key || "",
+            createdAt: row.created_at
+        }))
+    };
 });
 export const applyClassEval = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	classId: z.number(),
@@ -6933,60 +6938,74 @@ export const setPeriodClosed = createServerFn({ method: "POST" }).middleware([au
 	return { periods: next };
 });
 export const savePeriodMark = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
-	classId: z.number(),
-	studentId: z.number(),
-	periodNo: z.number().min(0).max(4),
-	participation: z.number().min(0).max(100),
-	exam: z.number().min(0).max(100),
-	subject: z.string().max(40).optional(),
-	extras: z.record(z.string(), z.number()).optional()
+    classId: z.number(),
+    studentId: z.number(),
+    periodNo: z.number().min(0).max(4),
+    participation: z.number().min(0).max(100),
+    exam: z.number().min(0).max(100),
+    subject: z.string().max(40).optional(),
+    extras: z.record(z.string(), z.number()).optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireApproved(context.userId);
-	await ensureTeacherEval(sql);
-	const student = (await sql`
+    const { sql, staff } = await requireApproved(context.userId);
+    await ensureTeacherEval(sql);
+    const student = (await sql`
     select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
   `)[0];
-	if (!student) throw new Error("الطالب ليس في هذا الفصل");
-	const subject = (data.subject ?? "").trim();
-	const plan = await subjectPlanOf(sql, staff, subject);
-	if (data.periodNo === 0) {
-		const columns = plan.finalColumns ?? [];
-		const extras = { ...(data.extras ?? {}) };
-		let exam = clampScore(data.exam, plan.finalExamMax || 40);
-		if (columns.length && data.extras) {
-			for (const column of columns) {
-				const cap = Number(column.max) || 0;
-				const value = Number(extras[column.id]) || 0;
-				extras[column.id] = cap > 0 ? Math.min(Math.max(value, 0), cap) : Math.max(value, 0);
-			}
-			exam = clampScore(columns.reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0), plan.finalExamMax || 40);
-		}
-		const extrasJson = JSON.stringify(columns.length && data.extras ? extras : {});
-		await sql`
+    if (!student) throw new Error("الطالب ليس في هذا الفصل");
+    const subject = (data.subject ?? "").trim();
+    const plan = await subjectPlanOf(sql, staff, subject);
+
+    if (data.periodNo === 0) {
+        const columns = plan.finalColumns ?? [];
+        const extras = { ...(data.extras ?? {}) };
+        let exam = clampScore(data.exam, plan.finalExamMax || 40);
+        if (columns.length && data.extras) {
+            for (const column of columns) {
+                const cap = Number(column.max) || 0;
+                const value = Number(extras[column.id]) || 0;
+                extras[column.id] = cap > 0 ? Math.min(Math.max(value, 0), cap) : Math.max(value, 0);
+            }
+            exam = clampScore(columns.reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0), plan.finalExamMax || 40);
+        }
+        const extrasJson = JSON.stringify(columns.length && data.extras ? extras : {});
+        await sql`
       insert into student_period_marks (school_id, staff_id, student_id, class_id, period_no, participation, exam, subject, extras)
       values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, 0, 0, ${exam}, ${subject}, ${extrasJson})
       on conflict (staff_id, student_id, period_no, subject) do update
         set class_id = ${data.classId}, exam = ${exam}, extras = case when ${Boolean(columns.length && data.extras)} then ${extrasJson} else student_period_marks.extras end
     `;
-		return { participation: 0, exam };
-	}
-	const period = plan.periods.find((item) => item.no === data.periodNo);
-	if (!period) throw new Error("الفترة غير موجودة");
-	if (period.closed) throw new Error("الفترة مغلقة. أعد فتحها للتعديل.");
-	const extras = data.extras ?? {};
-	const columns = period.columns ?? [];
-	const taskParts = columns.some((column) => columnGroup(column) === "tasks");
-	const examParts = columns.some((column) => columnGroup(column) === "exam");
-	const participation = taskParts ? clampScore(sumColumnGroup(columns, extras, "tasks"), period.tasksMax) : clampScore(data.participation, period.tasksMax);
-	const exam = examParts ? clampScore(sumColumnGroup(columns, extras, "exam"), period.examMax) : clampScore(data.exam, period.examMax);
-	const extrasJson = JSON.stringify(extras);
-	await sql`
+        return { participation: 0, exam };
+    }
+
+    const period = plan.periods.find((item) => item.no === data.periodNo);
+    if (!period) throw new Error("الفترة غير موجودة");
+    if (period.closed) throw new Error("الفترة مغلقة. أعد فتحها للتعديل.");
+
+    const extras = data.extras ?? {};
+    const columns = period.columns ?? [];
+    const taskParts = columns.some((column) => columnGroup(column) === "tasks");
+    const examParts = columns.some((column) => columnGroup(column) === "exam");
+
+    // الالتزام التام بالحد الأقصى المخصص للفترة الحالية (period.tasksMax و period.examMax)
+    const maxTasks = Number(period.tasksMax) || 40;
+    const maxExam = Number(period.examMax) || 20;
+
+    const participation = taskParts 
+        ? clampScore(sumColumnGroup(columns, extras, "tasks"), maxTasks) 
+        : clampScore(data.participation, maxTasks);
+        
+    const exam = examParts 
+        ? clampScore(sumColumnGroup(columns, extras, "exam"), maxExam) 
+        : clampScore(data.exam, maxExam);
+
+    const extrasJson = JSON.stringify(extras);
+    await sql`
     insert into student_period_marks (school_id, staff_id, student_id, class_id, period_no, participation, exam, subject, extras)
     values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, ${data.periodNo}, ${participation}, ${exam}, ${subject}, ${extrasJson})
     on conflict (staff_id, student_id, period_no, subject) do update
       set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}, extras = ${extrasJson}
   `;
-	return { participation, exam };
+    return { participation, exam };
 });
 export const getTeacherStudentReport = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	studentId: z.number()
