@@ -166,7 +166,7 @@ function colOf(r, cols) {
     return "mobile";
 }
 
-// دالة تنظيف وتوحيد صيغة الأرقام (05, 9665, +9665, 009665)
+// دالة تنظيف وتوحيد صيغة الأرقام السعودية (05, 9665, +9665)
 function phoneOf(text) {
     let digits = String(text ?? "").replace(/\D/g, "");
     if (!digits) return "";
@@ -180,6 +180,19 @@ function phoneOf(text) {
         return digits.slice(0, 10);
     }
     return digits.length === 10 ? digits : "";
+}
+
+// استخراج أي رقم جوال سعودي صالح من أي نص عشوائي في السطر
+function extractPhoneAnywhere(text) {
+    const raw = String(text ?? "");
+    // البحث عن أرقام تبدأ بـ 05 أو 966 أو 5 وتتكون من 9 إلى 12 رقم
+    const matches = raw.match(/(?:0?5\d{8}|9665\d{8}|009665\d{8})/g);
+    if (!matches || !matches.length) return "";
+    for (const m of matches) {
+        const p = phoneOf(m);
+        if (p) return p;
+    }
+    return "";
 }
 
 function readForm(items, headerY) {
@@ -248,11 +261,16 @@ export async function parseNoorStudentPdf(bytes) {
                 const yTop = anchors[i].y + 10;
                 const yBot = i + 1 < anchors.length ? (anchors[i].y + anchors[i + 1].y) / 2 : anchors[i].y - 18;
                 const spans = body.filter((it) => it.y <= yTop && it.y > yBot).sort((a, b) => b.y - a.y);
+                
                 const bucket = {};
+                let fullRowText = ""; // تجميع كل نصوص السطر للبحث الآمن عن الجوال
+                
                 for (const span of spans) {
+                    fullRowText += ` ${span.t}`;
                     const key = colOf(span.r, cols);
                     bucket[key] = bucket[key] ? `${bucket[key]} ${span.t}` : span.t;
                 }
+                
                 const status = (bucket.status ?? "").replace(/\s+/g, " ").trim();
                 if (!status.includes("مستمر")) continue;
                 
@@ -261,17 +279,16 @@ export async function parseNoorStudentPdf(bytes) {
                 
                 const nationalId = String(bucket.nationalId ?? "").replace(/\D/g, "");
                 
-                // استخراج الأرقام بشكل مستقل ومنفصل
-                const mobile = phoneOf(bucket.mobile);
+                // استخراج الجوال من الأعمدة المخصصة أو من كامل نص السطر كاحتياط نهائي
+                const mobile = phoneOf(bucket.mobile) || extractPhoneAnywhere(fullRowText);
                 const home = phoneOf(bucket.home);
-                const work = phoneOf(bucket.work); // تم إتاحة هاتف العمل بشكل مستقل تماماً
+                const work = phoneOf(bucket.work);
                 
                 if (!carry.stage || !carry.className) continue;
 
                 const uniqueKey = `${name}_${carry.stage}_${carry.className}`;
 
                 if (studentMap.has(uniqueKey)) {
-                    // دمج البيانات في حال تكرار السجل للطالب لضمان عدم ضياع أي رقم (جوال أو عمل أو منزل)
                     const existing = studentMap.get(uniqueKey);
                     if (!existing.mobile && mobile) existing.mobile = mobile;
                     if (!existing.home && home) existing.home = home;
@@ -281,9 +298,9 @@ export async function parseNoorStudentPdf(bytes) {
                 } else {
                     studentMap.set(uniqueKey, {
                         name,
-                        mobile,       // جوال الطالب / ولي الأمر
-                        home,         // هاتف المنزل
-                        work,         // هاتف العمل (مستقل تماماً)
+                        mobile,
+                        home,
+                        work,
                         nationalId: nationalId.length >= 8 ? nationalId.slice(0, 10) : "",
                         nationality: tidyName(bucket.nationality ?? "").slice(0, 40),
                         stageName: carry.stage,
