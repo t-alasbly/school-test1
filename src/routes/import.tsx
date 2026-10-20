@@ -723,29 +723,91 @@ function NoorImport({ onImported }: { onImported: () => void }) {
     withPhone: number;
     withId: number;
     classes: { label: string; count: number }[];
-    rows: {
-      name: string;
-      parentPhone: string;
-      parentPhone2: string;
-      nationalId: string;
-      nationality: string;
-      stageName: string;
-      className: string;
-    }[];
+    rows: Record<string, string>[];
   } | null>(null);
   const [fileName, setFileName] = useState("");
 
+  // تعيين الأعمدة لملف الـ PDF ليتمكن المستخدم من تغيير اختيار الخلية بحرية
+  const [pdfMapping, setPdfMapping] = useState<StudentMapping>({
+    name: "name",
+    nationalId: "nationalId",
+    parentPhone: "parentPhone",
+    parentPhone2: "parentPhone2",
+    workPhone: "workPhone",
+    nationality: "nationality",
+    stageName: "stageName",
+    className: "className",
+  });
+
+  const pdfHeaders = useMemo(() => {
+    if (!preview?.rows?.length) return [];
+    const keys = new Set<string>();
+    for (const r of preview.rows.slice(0, 20)) {
+      Object.keys(r).forEach((k) => keys.add(k));
+    }
+    return Array.from(keys);
+  }, [preview]);
+
+  const headerLabels: Record<string, string> = {
+    name: "اسم الطالب (تلقائي)",
+    nationalId: "السجل المدني (تلقائي)",
+    parentPhone: "الجوال الأساسي / جوال الطالب",
+    parentPhone2: "جوال آخر / هاتف المنزل",
+    workPhone: "هاتف العمل",
+    nationality: "الجنسية",
+    stageName: "الصف / المرحلة",
+    className: "الفصل",
+  };
+
+  // تجهيز الصفوف بناءً على اختيار المستخدم للأعمدة مع التعويض التلقائي للجوال الفارغ
+  const mappedPdfRows = useMemo(() => {
+    if (!preview?.rows) return [];
+    return preview.rows.map((row) => {
+      const p1 = (row[pdfMapping.parentPhone] ?? "").trim();
+      const p2 = (row[pdfMapping.parentPhone2] ?? "").trim();
+      const p3 = (row[pdfMapping.workPhone] ?? "").trim();
+      return {
+        name: (row[pdfMapping.name] ?? "").trim(),
+        nationalId: (row[pdfMapping.nationalId] ?? "").trim(),
+        parentPhone: p1 || p2 || p3, // إن خلا الجوال الأول يُستخدم الثاني أو الثالث تلقائياً
+        parentPhone2: p1 ? p2 || p3 : p3,
+        workPhone: p3,
+        nationality: (row[pdfMapping.nationality] ?? "").trim(),
+        stageName: (row[pdfMapping.stageName] ?? "").trim(),
+        className: (row[pdfMapping.className] ?? "").trim(),
+      };
+    });
+  }, [preview, pdfMapping]);
+
+  const withPhoneCount = useMemo(
+    () => mappedPdfRows.filter((r) => Boolean(r.parentPhone)).length,
+    [mappedPdfRows],
+  );
+
   const read = useMutation({
     mutationFn: (pdfBase64: string) => previewNoorPdf({ data: { pdfBase64 } }),
-    onSuccess: (data) => setPreview(data),
-    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر قراءة الكشف")),
+    onSuccess: (data) => {
+      setPreview(data as any);
+      setPdfMapping({
+        name: "name",
+        nationalId: "nationalId",
+        parentPhone: "parentPhone",
+        parentPhone2: "parentPhone2",
+        workPhone: "workPhone",
+        nationality: "nationality",
+        stageName: "stageName",
+        className: "className",
+      });
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر قراءة الكشف")),
   });
 
   const commit = useMutation({
     mutationFn: () => {
       if (!preview) throw new Error("اختر ملف الكشف أولًا");
       return importStudents({
-        data: { rows: preview.rows, replaceEmpty: false, preserveRecords: true },
+        data: { rows: mappedPdfRows, replaceEmpty: false, preserveRecords: true },
       });
     },
     onSuccess: (result) => {
@@ -759,7 +821,8 @@ function NoorImport({ onImported }: { onImported: () => void }) {
       setFileName("");
       onImported();
     },
-    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر سحب البيانات")),
+    onError: (err) =>
+      toast.error(err instanceof Error ? tr(err.message) : tr("تعذر سحب البيانات")),
   });
 
   async function onFile(file: File | undefined) {
@@ -788,7 +851,9 @@ function NoorImport({ onImported }: { onImported: () => void }) {
       <CardContent className="space-y-4">
         <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-border bg-bg-elevated px-4 text-center">
           <span className="font-medium">{fileName || "اختر ملف PDF"}</span>
-          <span className="mt-1 text-sm text-fg-muted">السجل المدني هو المفتاح. الجوال الأساسي من رقم جوال الطالب، والمنزل جوال ثانٍ.</span>
+          <span className="mt-1 text-sm text-fg-muted">
+            السجل المدني هو المفتاح. الجوال الأساسي من رقم جوال الطالب، والمنزل جوال ثانٍ.
+          </span>
           <input
             type="file"
             accept="application/pdf,.pdf"
@@ -798,9 +863,12 @@ function NoorImport({ onImported }: { onImported: () => void }) {
         </label>
         {read.isPending ? <Skeleton className="h-24 rounded-[var(--radius-lg)]" /> : null}
         {preview ? (
-          <div className="space-y-3">
-            <p className="text-sm">
-              {preview.total} طالب مستمر · {preview.withId} بسجل مدني · {preview.withPhone} بجوال
+          <div className="space-y-4">
+            <p className="text-sm font-medium">
+              {preview.total} طالب مستمر · {preview.withId} بسجل مدني ·{" "}
+              <span className={withPhoneCount > 0 ? "text-primary" : "text-danger"}>
+                {withPhoneCount} بجوال
+              </span>
             </p>
             <div className="flex flex-wrap gap-2">
               {preview.classes.map((item) => (
@@ -809,13 +877,52 @@ function NoorImport({ onImported }: { onImported: () => void }) {
                 </Badge>
               ))}
             </div>
+
+            {/* قسم تعيين وتغيير أعمدة الـ PDF بحرية */}
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
+              <h3 className="text-sm font-semibold">{tr("تعيين وتبديل أعمدة الكشف")}</h3>
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                {STUDENT_FIELDS.map((field) => (
+                  <div key={field.key} className="space-y-1">
+                    <Label htmlFor={`pdf_${field.key}`} className="text-xs">
+                      {field.label}
+                    </Label>
+                    <Select
+                      id={`pdf_${field.key}`}
+                      value={pdfMapping[field.key]}
+                      onChange={(e) =>
+                        setPdfMapping((prev) => ({ ...prev, [field.key]: e.target.value }))
+                      }
+                    >
+                      <option value="">{tr("— غير معيّن —")}</option>
+                      {pdfHeaders.map((h) => (
+                        <option key={h} value={h}>
+                          {headerLabels[h] || h}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <PreviewTable
-              labels={["الاسم", "السجل", "الجوال", "جوال آخر", "الجنسية", "الصف", "الفصل"]}
-              rows={preview.rows.slice(0, 5).map((row) => [
+              labels={[
+                "الاسم",
+                "السجل",
+                "الجوال الأساسي",
+                "جوال المنزل",
+                "هاتف العمل",
+                "الجنسية",
+                "الصف",
+                "الفصل",
+              ]}
+              rows={mappedPdfRows.slice(0, 8).map((row) => [
                 row.name,
                 row.nationalId,
                 row.parentPhone,
                 row.parentPhone2,
+                row.workPhone,
                 row.nationality,
                 row.stageName,
                 row.className,
