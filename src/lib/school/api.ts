@@ -6364,7 +6364,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 });
 export const applyClassEval = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
 	classId: z.number(),
-	studentIds: z.array(z.number()).min(1).max(80),
+	studentIds: z.array(z.number()).max(80).optional(),
 	cardId: z.number().optional(),
 	label: z.string().max(40).optional(),
 	points: z.number().min(-30).max(30).optional(),
@@ -6377,6 +6377,13 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	await ensureTeacherEval(sql);
 	const cls = (await sql`select id from classes where id = ${data.classId} and school_id = ${staff.school_id}`)[0];
 	if (!cls) throw new Error("الفصل غير موجود");
+
+	let targetIds = data.studentIds ?? [];
+	if (!targetIds.length) {
+		const allSts = await sql`select id from students where class_id = ${cls.id} and school_id = ${staff.school_id}`;
+		targetIds = allSts.map((s) => s.id);
+	}
+
 	let label = String(data.label ?? "").trim();
 	let points = data.points;
 	let bucket = data.bucket;
@@ -6385,9 +6392,9 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	let cardRef = "";
 	if (data.cardId) {
 		const card = (await sql`
-      select id, label, points, bucket, coalesce(column_id, '') as column_id, coalesce(column_ref, '') as column_ref from eval_cards
-      where id = ${data.cardId} and school_id = ${staff.school_id} and staff_id = ${staff.user_id}
-    `)[0];
+	 select id, label, points, bucket, coalesce(column_id, '') as column_id, coalesce(column_ref, '') as column_ref from eval_cards
+	 where id = ${data.cardId} and school_id = ${staff.school_id} and staff_id = ${staff.user_id}
+	`)[0];
 		if (!card) throw new Error("بطاقة التقييم غير موجودة");
 		label = card.label;
 		points = Number(card.points);
@@ -6419,16 +6426,16 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	}
 	const lessonKey = (data.lessonKey ?? "").trim().slice(0, 20);
 	const ids = [];
-	for (const studentId of [...new Set(data.studentIds)]) {
+	for (const studentId of [...new Set(targetIds)]) {
 		const student = (await sql`
-      select id from students where id = ${studentId} and class_id = ${cls.id} and school_id = ${staff.school_id}
-    `)[0];
+	 select id from students where id = ${studentId} and class_id = ${cls.id} and school_id = ${staff.school_id}
+	`)[0];
 		if (!student) continue;
 		const row = (await sql`
-      insert into student_evals (school_id, staff_id, student_id, class_id, card_id, label, points, bucket, subject, period_no, lesson_key, column_id, entered_by)
-      values (${staff.school_id}, ${staff.user_id}, ${studentId}, ${cls.id}, ${cardId}, ${label}, ${points}, ${bucket}, ${lessonSubject}, ${open.no}, ${lessonKey}, ${columnId}, ${actorId})
-      returning id
-    `)[0];
+	 insert into student_evals (school_id, staff_id, student_id, class_id, card_id, label, points, bucket, subject, period_no, lesson_key, column_id, entered_by)
+	 values (${staff.school_id}, ${staff.user_id}, ${studentId}, ${cls.id}, ${cardId}, ${label}, ${points}, ${bucket}, ${lessonSubject}, ${open.no}, ${lessonKey}, ${columnId}, ${actorId})
+	 returning id
+	`)[0];
 		if (columnId && periodOpen) await shiftMarkColumn(sql, staff, studentId, cls.id, open, lessonSubject, columnId, Number(points));
 		ids.push(row.id);
 	}
@@ -6948,6 +6955,7 @@ export const savePeriodMark = createServerFn({ method: "POST" }).middleware([aut
 })).handler(async ({ context, data }) => {
     const { sql, staff } = await requireApproved(context.userId);
     await ensureTeacherEval(sql);
+    await seedTeacherEval(sql, staff);
     const student = (await sql`
     select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
   `)[0];
@@ -6958,14 +6966,14 @@ export const savePeriodMark = createServerFn({ method: "POST" }).middleware([aut
     if (data.periodNo === 0) {
         const columns = plan.finalColumns ?? [];
         const extras = { ...(data.extras ?? {}) };
-        let exam = clampScore(data.exam, plan.finalExamMax || 40);
+        let exam = Number(data.exam) || 0;
         if (columns.length && data.extras) {
             for (const column of columns) {
                 const cap = Number(column.max) || 0;
                 const value = Number(extras[column.id]) || 0;
                 extras[column.id] = cap > 0 ? Math.min(Math.max(value, 0), cap) : Math.max(value, 0);
             }
-            exam = clampScore(columns.reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0), plan.finalExamMax || 40);
+            exam = columns.reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0);
         }
         const extrasJson = JSON.stringify(columns.length && data.extras ? extras : {});
         await sql`
@@ -6986,17 +6994,16 @@ export const savePeriodMark = createServerFn({ method: "POST" }).middleware([aut
     const taskParts = columns.some((column) => columnGroup(column) === "tasks");
     const examParts = columns.some((column) => columnGroup(column) === "exam");
 
-    // الالتزام التام بالحد الأقصى المخصص للفترة الحالية (period.tasksMax و period.examMax)
     const maxTasks = Number(period.tasksMax) || 40;
     const maxExam = Number(period.examMax) || 20;
 
     const participation = taskParts 
-        ? clampScore(sumColumnGroup(columns, extras, "tasks"), maxTasks) 
-        : clampScore(data.participation, maxTasks);
+        ? sumColumnGroup(columns, extras, "tasks") 
+        : Math.min(Math.max(Number(data.participation) || 0, 0), maxTasks);
         
     const exam = examParts 
-        ? clampScore(sumColumnGroup(columns, extras, "exam"), maxExam) 
-        : clampScore(data.exam, maxExam);
+        ? sumColumnGroup(columns, extras, "exam") 
+        : Math.min(Math.max(Number(data.exam) || 0, 0), maxExam);
 
     const extrasJson = JSON.stringify(extras);
     await sql`
@@ -7005,6 +7012,14 @@ export const savePeriodMark = createServerFn({ method: "POST" }).middleware([aut
     on conflict (staff_id, student_id, period_no, subject) do update
       set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}, extras = ${extrasJson}
   `;
+
+    await sql`
+    insert into student_subject_marks (school_id, staff_id, student_id, class_id, participation, exam)
+    values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, ${participation}, ${exam})
+    on conflict (staff_id, student_id) do update
+      set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}
+  `;
+
     return { participation, exam };
 });
 export const getTeacherStudentReport = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(z.object({
@@ -7245,25 +7260,33 @@ export const saveSubjectMark = createServerFn({ method: "POST" }).middleware([au
 	classId: z.number(),
 	studentId: z.number(),
 	participation: z.number().min(0).max(100),
-	exam: z.number().min(0).max(100)
+	exam: z.number().min(0).max(100),
+	subject: z.string().max(40).optional(),
+	periodNo: z.number().int().min(0).max(4).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireApproved(context.userId);
 	await ensureTeacherEval(sql);
+	await seedTeacherEval(sql, staff);
 	const student = (await sql`
-    select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
-  `)[0];
+	 select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
+	`)[0];
 	if (!student) throw new Error("الطالب ليس في هذا الفصل");
-	const scaleRow = (await sql`select tasks_max, quizzes_max from eval_scales where staff_id = ${staff.user_id}`)[0];
-	const tasksMax = Number(scaleRow?.tasks_max ?? 40);
-	const quizzesMax = Number(scaleRow?.quizzes_max ?? 20);
-	const participation = clampScore(data.participation, tasksMax);
-	const exam = clampScore(data.exam, quizzesMax);
+	const subject = (data.subject ?? "").trim();
+	const periodNo = data.periodNo ?? 1;
+	const participation = Number(data.participation) || 0;
+	const exam = Number(data.exam) || 0;
 	await sql`
-    insert into student_subject_marks (school_id, staff_id, student_id, class_id, participation, exam)
-    values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, ${participation}, ${exam})
-    on conflict (staff_id, student_id) do update
-      set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}
-  `;
+	 insert into student_subject_marks (school_id, staff_id, student_id, class_id, participation, exam)
+	 values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, ${participation}, ${exam})
+	 on conflict (staff_id, student_id) do update
+	  set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}
+	`;
+	await sql`
+	 insert into student_period_marks (school_id, staff_id, student_id, class_id, period_no, participation, exam, subject)
+	 values (${staff.school_id}, ${staff.user_id}, ${data.studentId}, ${data.classId}, ${periodNo}, ${participation}, ${exam}, ${subject})
+	 on conflict (staff_id, student_id, period_no, subject) do update
+	  set class_id = ${data.classId}, participation = ${participation}, exam = ${exam}
+	`;
 	return { participation, exam };
 });
 export const getMyTimetable = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
