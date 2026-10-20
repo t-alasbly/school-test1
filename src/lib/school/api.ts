@@ -7624,6 +7624,15 @@ export const mergeDuplicateStudents = createServerFn({ method: "POST" })
 	.handler(async ({ context, data }) => {
 		const { sql, staff } = await requirePerm(context.userId, "editStudents");
 		await ensureStudentProfile(sql);
+
+		// إصلاح الفهرس الفريد للسجل المدني ليتجاهل الخانات الفارغة ولا يسبب تعارضاً
+		try {
+			await sql.query(`drop index if exists students_national_id_idx`);
+			await sql.query(
+				`create unique index if not exists students_national_id_idx on students (school_id, national_id) where national_id is not null and national_id <> ''`,
+			);
+		} catch {}
+
 		let merged = 0;
 		let movedNotes = 0;
 
@@ -7654,40 +7663,7 @@ export const mergeDuplicateStudents = createServerFn({ method: "POST" })
 				)[0]?.cnt ?? 0;
 			movedNotes += Number(nCount) || 0;
 
-			// اعتماد الاسم الأكمل (مثل اعتماد الاسم الرباعي بدلاً من الثلاثي الناقص)
-			const keepWords = String(keepRow.name || "").trim().split(/\s+/).filter(Boolean).length;
-			const removeWords = String(removeRow.name || "").trim().split(/\s+/).filter(Boolean).length;
-			const bestName = removeWords > keepWords ? removeRow.name.trim() : keepRow.name.trim();
-			const bestNameEn = englishName(bestName, keepRow.name_en || removeRow.name_en);
-
-			// توحيد ودمج أرقام الجوال والسجل المدني والجنسية والملاحظات الصحية
-			const phone1 = keepRow.parent_phone
-				? normalizeSaudiPhone(keepRow.parent_phone)
-				: removeRow.parent_phone
-					? normalizeSaudiPhone(removeRow.parent_phone)
-					: "";
-			const phone2 = keepRow.parent_phone_2
-				? normalizeSaudiPhone(keepRow.parent_phone_2)
-				: removeRow.parent_phone_2
-					? normalizeSaudiPhone(removeRow.parent_phone_2)
-					: "";
-			const natId = keepRow.national_id || removeRow.national_id || "";
-			const nationality = keepRow.nationality || removeRow.nationality || "";
-			const healthNote = keepRow.health_note || removeRow.health_note || "";
-
-			await sql`
-				update students set
-					name = ${bestName},
-					name_en = ${bestNameEn},
-					parent_phone = ${phone1},
-					parent_phone_2 = ${phone2},
-					national_id = ${natId},
-					nationality = ${nationality},
-					health_note = ${healthNote}
-				where id = ${keepId} and school_id = ${staff.school_id}
-			`;
-
-			// نقل جميع السجلات المرتبطة من السجل المكرر إلى السجل الأساسي قبل حذفه
+			// 1. نقل جميع السجلات المرتبطة أولاً ثم حذف السجل المكرر لتحرير السجل المدني
 			try {
 				await sql`update exit_permits set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
 			} catch {}
@@ -7726,8 +7702,49 @@ export const mergeDuplicateStudents = createServerFn({ method: "POST" })
 				await sql`update student_period_marks set student_id = ${keepId} where student_id = ${removeId}`;
 			} catch {}
 
-			// نقل الملاحظات والمخالفات والرسائل والغياب وحذف السجل الزائد
+			// نقل الملاحظات والمخالفات والغياب وحذف السجل الزائد (removeId)
 			await reassignStudent(sql, removeId, keepId);
+
+			// 2. بعد حذف السجل المكرر، نحدّث بيانات السجل الأساسي بأمان تام
+			const keepWords = String(keepRow.name || "").trim().split(/\s+/).filter(Boolean).length;
+			const removeWords = String(removeRow.name || "").trim().split(/\s+/).filter(Boolean).length;
+			const bestName = removeWords > keepWords ? removeRow.name.trim() : keepRow.name.trim();
+			const bestNameEn = englishName(bestName, keepRow.name_en || removeRow.name_en);
+
+			const phone1 = keepRow.parent_phone
+				? normalizeSaudiPhone(keepRow.parent_phone)
+				: removeRow.parent_phone
+					? normalizeSaudiPhone(removeRow.parent_phone)
+					: "";
+			const phone2 = keepRow.parent_phone_2
+				? normalizeSaudiPhone(keepRow.parent_phone_2)
+				: removeRow.parent_phone_2
+					? normalizeSaudiPhone(removeRow.parent_phone_2)
+					: "";
+			const natId = String(keepRow.national_id || removeRow.national_id || "").trim();
+			const nationality = keepRow.nationality || removeRow.nationality || "";
+			const healthNote = keepRow.health_note || removeRow.health_note || "";
+
+			await sql`
+				update students set
+					name = ${bestName},
+					name_en = ${bestNameEn},
+					parent_phone = ${phone1},
+					parent_phone_2 = ${phone2},
+					nationality = ${nationality},
+					health_note = ${healthNote}
+				where id = ${keepId} and school_id = ${staff.school_id}
+			`;
+
+			if (natId) {
+				try {
+					await sql`
+						update students set national_id = ${natId}
+						where id = ${keepId} and school_id = ${staff.school_id}
+					`;
+				} catch {}
+			}
+
 			merged += 1;
 		}
 
