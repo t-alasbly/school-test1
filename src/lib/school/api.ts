@@ -7565,3 +7565,171 @@ export const importSmartTimetable = createServerFn({ method: "POST" }).middlewar
 	return { saved, teachers: staffIds.length, unmatched: [...unmatched] };
 });
 
+export const getStudentRecordCounts = createServerFn({ method: "GET" })
+	.middleware([authMiddleware])
+	.handler(async ({ context }) => {
+		const { sql, staff } = await requireAdmin(context.userId);
+		const noteRows = await sql`
+			select student_id, count(*)::int as cnt
+			from notes
+			where school_id = ${staff.school_id}
+			group by student_id
+		`;
+		const attRows = await sql`
+			select student_id, count(*)::int as cnt
+			from daily_attendance
+			where school_id = ${staff.school_id}
+			group by student_id
+		`;
+		const evalRows = await sql`
+			select student_id, count(*)::int as cnt
+			from student_evals
+			where school_id = ${staff.school_id}
+			group by student_id
+		`;
+		const counts = {};
+		for (const r of noteRows) {
+			const id = Number(r.student_id);
+			counts[id] = counts[id] || { notes: 0, attendance: 0, evals: 0 };
+			counts[id].notes = Number(r.cnt) || 0;
+		}
+		for (const r of attRows) {
+			const id = Number(r.student_id);
+			counts[id] = counts[id] || { notes: 0, attendance: 0, evals: 0 };
+			counts[id].attendance = Number(r.cnt) || 0;
+		}
+		for (const r of evalRows) {
+			const id = Number(r.student_id);
+			counts[id] = counts[id] || { notes: 0, attendance: 0, evals: 0 };
+			counts[id].evals = Number(r.cnt) || 0;
+		}
+		return { counts };
+	});
+
+export const mergeDuplicateStudents = createServerFn({ method: "POST" })
+	.middleware([authMiddleware])
+	.validator(
+		z.object({
+			pairs: z
+				.array(
+					z.object({
+						keepId: z.number(),
+						removeId: z.number(),
+					}),
+				)
+				.min(1)
+				.max(500),
+		}),
+	)
+	.handler(async ({ context, data }) => {
+		const { sql, staff } = await requirePerm(context.userId, "editStudents");
+		await ensureStudentProfile(sql);
+		let merged = 0;
+		let movedNotes = 0;
+
+		for (const pair of data.pairs) {
+			const { keepId, removeId } = pair;
+			if (!keepId || !removeId || keepId === removeId) continue;
+
+			const keepRow = (
+				await sql`
+					select * from students
+					where id = ${keepId} and school_id = ${staff.school_id}
+				`
+			)[0];
+			const removeRow = (
+				await sql`
+					select * from students
+					where id = ${removeId} and school_id = ${staff.school_id}
+				`
+			)[0];
+			if (!keepRow || !removeRow) continue;
+
+			const nCount =
+				(
+					await sql`
+						select count(*)::int as cnt from notes
+						where student_id = ${removeId} and school_id = ${staff.school_id}
+					`
+				)[0]?.cnt ?? 0;
+			movedNotes += Number(nCount) || 0;
+
+			// اعتماد الاسم الأكمل (مثل اعتماد الاسم الرباعي بدلاً من الثلاثي الناقص)
+			const keepWords = String(keepRow.name || "").trim().split(/\s+/).filter(Boolean).length;
+			const removeWords = String(removeRow.name || "").trim().split(/\s+/).filter(Boolean).length;
+			const bestName = removeWords > keepWords ? removeRow.name.trim() : keepRow.name.trim();
+			const bestNameEn = englishName(bestName, keepRow.name_en || removeRow.name_en);
+
+			// توحيد ودمج أرقام الجوال والسجل المدني والجنسية والملاحظات الصحية
+			const phone1 = keepRow.parent_phone
+				? normalizeSaudiPhone(keepRow.parent_phone)
+				: removeRow.parent_phone
+					? normalizeSaudiPhone(removeRow.parent_phone)
+					: "";
+			const phone2 = keepRow.parent_phone_2
+				? normalizeSaudiPhone(keepRow.parent_phone_2)
+				: removeRow.parent_phone_2
+					? normalizeSaudiPhone(removeRow.parent_phone_2)
+					: "";
+			const natId = keepRow.national_id || removeRow.national_id || "";
+			const nationality = keepRow.nationality || removeRow.nationality || "";
+			const healthNote = keepRow.health_note || removeRow.health_note || "";
+
+			await sql`
+				update students set
+					name = ${bestName},
+					name_en = ${bestNameEn},
+					parent_phone = ${phone1},
+					parent_phone_2 = ${phone2},
+					national_id = ${natId},
+					nationality = ${nationality},
+					health_note = ${healthNote}
+				where id = ${keepId} and school_id = ${staff.school_id}
+			`;
+
+			// نقل جميع السجلات المرتبطة من السجل المكرر إلى السجل الأساسي قبل حذفه
+			try {
+				await sql`update exit_permits set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
+			} catch {}
+			try {
+				await sql`update student_mail set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
+			} catch {}
+			try {
+				await sql`update notifications set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
+			} catch {}
+			try {
+				await sql`update class_move_requests set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
+			} catch {}
+			try {
+				await sql`update student_evals set student_id = ${keepId} where student_id = ${removeId} and school_id = ${staff.school_id}`;
+			} catch {}
+			try {
+				await sql`
+					delete from student_subject_marks m
+					where m.student_id = ${removeId}
+					and exists (
+						select 1 from student_subject_marks k
+						where k.student_id = ${keepId} and k.staff_id = m.staff_id
+					)
+				`;
+				await sql`update student_subject_marks set student_id = ${keepId} where student_id = ${removeId}`;
+			} catch {}
+			try {
+				await sql`
+					delete from student_period_marks m
+					where m.student_id = ${removeId}
+					and exists (
+						select 1 from student_period_marks k
+						where k.student_id = ${keepId} and k.staff_id = m.staff_id and k.period_no = m.period_no and k.subject = m.subject
+					)
+				`;
+				await sql`update student_period_marks set student_id = ${keepId} where student_id = ${removeId}`;
+			} catch {}
+
+			// نقل الملاحظات والمخالفات والرسائل والغياب وحذف السجل الزائد
+			await reassignStudent(sql, removeId, keepId);
+			merged += 1;
+		}
+
+		return { ok: true, merged, movedNotes };
+	});
