@@ -5823,8 +5823,10 @@ async function ensureTeacherEval(sql) {
     staff_id text primary key,
     school_id integer not null references schools (id) on delete cascade,
     tasks_max numeric not null default 40,
-    quizzes_max numeric not null default 20
+    quizzes_max numeric not null default 20,
+    plan text not null default '{}'
   )`;
+	await sql`alter table eval_scales add column if not exists plan text not null default '{}'`;
 	await sql`create table if not exists eval_cards (
     id serial primary key,
     school_id integer not null references schools (id) on delete cascade,
@@ -5833,11 +5835,17 @@ async function ensureTeacherEval(sql) {
     points numeric not null,
     bucket text not null check (bucket in ('tasks', 'quizzes')),
     enabled boolean not null default true,
-    sort_order integer not null default 0
-  )`;
+	  sort_order integer not null default 0,
+	  column_id text not null default '',
+	  column_ref text not null default '',
+	  is_award boolean not null default false
+	)`;
+	await sql`alter table eval_cards add column if not exists column_id text not null default ''`;
+	await sql`alter table eval_cards add column if not exists column_ref text not null default ''`;
+	await sql`alter table eval_cards add column if not exists is_award boolean not null default false`;
 	await sql`create table if not exists student_evals (
-    id serial primary key,
-    school_id integer not null references schools (id) on delete cascade,
+	  id serial primary key,
+	  school_id integer not null references schools (id) on delete cascade,
     staff_id text not null,
     student_id integer not null references students (id) on delete cascade,
     class_id integer not null references classes (id) on delete cascade,
@@ -5846,8 +5854,18 @@ async function ensureTeacherEval(sql) {
     points numeric not null,
     bucket text not null,
     subject text not null default '',
+    period_no integer not null default 1,
+    lesson_key text not null default '',
+    column_id text not null default '',
+    entered_by text not null default '',
+    is_award boolean not null default false,
     created_at timestamptz not null default now()
   )`;
+	await sql`alter table student_evals add column if not exists period_no integer not null default 1`;
+	await sql`alter table student_evals add column if not exists lesson_key text not null default ''`;
+	await sql`alter table student_evals add column if not exists column_id text not null default ''`;
+	await sql`alter table student_evals add column if not exists entered_by text not null default ''`;
+	await sql`alter table student_evals add column if not exists is_award boolean not null default false`;
 	await sql`create table if not exists student_subject_marks (
     school_id integer not null references schools (id) on delete cascade,
     staff_id text not null,
@@ -5857,17 +5875,21 @@ async function ensureTeacherEval(sql) {
     exam numeric not null default 0,
     primary key (staff_id, student_id)
   )`;
-    
-    // ==========================================
-    // أضف هذه السطور هنا لضمان عدم حدوث خطأ ON CONFLICT
-    // ==========================================
-    try {
-        await sql.query(`
-            drop index if exists student_period_marks_unique_idx;
-            create unique index if not exists student_period_marks_unique_idx 
-            on student_period_marks (staff_id, student_id, period_no, subject);
-        `);
-    } catch {}
+	await sql`create table if not exists student_period_marks (
+    school_id integer not null references schools (id) on delete cascade,
+    staff_id text not null,
+    student_id integer not null references students (id) on delete cascade,
+    class_id integer not null references classes (id) on delete cascade,
+    period_no integer not null,
+    participation numeric not null default 0,
+    exam numeric not null default 0,
+    subject text not null default '',
+    extras jsonb not null default '{}'::jsonb
+  )`;
+	await sql`alter table student_period_marks add column if not exists subject text not null default ''`;
+	await sql`alter table student_period_marks add column if not exists extras jsonb not null default '{}'::jsonb`;
+	await sql`create unique index if not exists student_period_marks_unique_idx
+    on student_period_marks (staff_id, student_id, period_no, subject)`;
 
     try {
         await sql.query(`
@@ -5903,6 +5925,18 @@ async function seedTeacherEval(sql, staff) {
 		await sql`
       insert into eval_cards (school_id, staff_id, label, points, bucket, sort_order)
       values (${staff.school_id}, ${staff.user_id}, ${card.label}, ${card.points}, ${card.bucket}, ${order})
+    `;
+	}
+	const award = (await sql`
+    select id from eval_cards
+    where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and is_award = true
+    limit 1
+  `)[0];
+	if (!award) {
+		order += 1;
+		await sql`
+      insert into eval_cards (school_id, staff_id, label, points, bucket, sort_order, is_award)
+      values (${staff.school_id}, ${staff.user_id}, 'وسام التميز', 0, 'tasks', ${order}, true)
     `;
 	}
 }
@@ -5997,6 +6031,11 @@ function loadPlanBook(raw) {
 		if (parsed && typeof parsed === "object") return parsed;
 	} catch {}
 	return {};
+}
+function resolveEvalSubject(staff, subject) {
+	const listed = parseSubjects(staff.subject);
+	const chosen = (subject ?? "").trim();
+	return listed.length === 1 ? listed[0] : chosen;
 }
 async function subjectPlanOf(sql, staff, subject) {
 	const row = (await sql`select tasks_max, quizzes_max, coalesce(plan, '') as plan from eval_scales where staff_id = ${staff.user_id}`)[0];
@@ -6107,7 +6146,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
   `)[0];
     if (!cls) throw new Error("الفصل غير موجود");
     const cards = await sql`
-    select id, label, points, bucket, enabled, sort_order, coalesce(column_id, '') as column_id
+    select id, label, points, bucket, enabled, sort_order, coalesce(column_id, '') as column_id, is_award
     from eval_cards
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
     order by sort_order, id
@@ -6150,9 +6189,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
         attendanceDays = 0;
     }
     const attendanceOf = new Map(attendanceRows.map((row) => [row.student_id, row]));
-    const listed = parseSubjects(staff.subject);
-    const chosen = (data.subject ?? "").trim();
-    const lessonSubject = listed.length === 1 ? listed[0] : chosen;
+    const lessonSubject = resolveEvalSubject(staff, data.subject);
     const plan = await subjectPlanOf(sql, staff, lessonSubject);
     const periods = plan.periods;
     const combine = plan.combine;
@@ -6162,7 +6199,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     const quizzesMax = periods[0]?.examMax || 20;
     const openPeriod = periods.find((period) => !period.closed)?.no ?? null;
     const evals = lessonSubject ? await sql`
-    select student_id, bucket, points, period_no, coalesce(column_id, '') as column_id
+    select student_id, card_id, bucket, points, period_no, coalesce(column_id, '') as column_id, is_award
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (subject = ${lessonSubject} or subject = '')
@@ -6188,10 +6225,16 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
             periodRows.push({ student_id: row.student_id, period_no: 1, participation: row.participation, exam: row.exam, subject: lessonSubject });
         }
     }
-    const periodMarkOf = new Map(periodRows.map((row) => [`${row.student_id}:${row.period_no}`, row]));
+    const periodMarkPriority = (row) => row.subject === lessonSubject ? 2 : row.subject === "" ? 1 : 0;
+    const periodMarkOf = new Map();
+    for (const row of periodRows) {
+        const key = `${row.student_id}:${row.period_no}`;
+        const current = periodMarkOf.get(key);
+        if (!current || periodMarkPriority(row) > periodMarkPriority(current)) periodMarkOf.set(key, row);
+    }
     const lessonKey = (data.lessonKey ?? "").trim();
     const noteRows = await sql`
-    select student_id, label, count(*)::int as count, coalesce(sum(points), 0) as points
+    select student_id, label, count(*)::int as count, coalesce(sum(points), 0) as points, bool_or(is_award) as is_award
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (created_at at time zone 'Asia/Riyadh')::date = (now() at time zone 'Asia/Riyadh')::date
@@ -6202,12 +6245,20 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     const tapsOf = new Map();
     for (const row of noteRows) {
         const list = tapsOf.get(Number(row.student_id)) ?? [];
-        list.push({ label: row.label, count: Number(row.count), points: Number(row.points) });
+        list.push({ label: row.label, count: Number(row.count), points: Number(row.points), isAward: Boolean(row.is_award) });
         tapsOf.set(Number(row.student_id), list);
     }
     const tally = new Map();
     const periodTally = new Map();
+    const awardCounts = new Map();
     for (const row of evals) {
+        if (row.is_award) {
+            const studentAwards = awardCounts.get(Number(row.student_id)) ?? new Map();
+            const cardId = Number(row.card_id) || 0;
+            studentAwards.set(cardId, (studentAwards.get(cardId) ?? 0) + 1);
+            awardCounts.set(Number(row.student_id), studentAwards);
+            continue;
+        }
         const periodNo = Number(row.period_no) || 1;
         const key = `${row.student_id}:${periodNo}`;
         const bucket = periodTally.get(key) ?? { tasks: 0, quizzes: 0 };
@@ -6255,9 +6306,14 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
             bucket: card.bucket,
             enabled: card.enabled !== false,
             sortOrder: Number(card.sort_order) || 0,
-            columnId: card.column_id || ""
+            columnId: card.column_id || "",
+            isAward: Boolean(card.is_award)
         })),
         students: students.map((student) => {
+            const awards = [...(awardCounts.get(Number(student.id)) ?? new Map())].map(([cardId, count]) => ({
+                cardId,
+                count
+            }));
             const byPeriod = periods.map((period) => {
                 const marked = periodMarkOf.get(`${student.id}:${period.no}`);
                 const rawPeriod = periodTally.get(`${student.id}:${period.no}`) ?? { tasks: 0, quizzes: 0 };
@@ -6324,6 +6380,8 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
                 presentDays,
                 absenceDates: attend?.absence_dates || "—",
                 attendancePercent,
+                badges: awards.reduce((sum, award) => sum + award.count, 0),
+                awards,
                 taps: tapsOf.get(Number(student.id)) ?? [],
                 byPeriod
             };
@@ -6367,17 +6425,19 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	let cardId = null;
 	let columnId = "";
 	let cardRef = "";
+	let isAward = false;
 	if (data.cardId) {
 		const card = (await sql`
-	 select id, label, points, bucket, coalesce(column_id, '') as column_id, coalesce(column_ref, '') as column_ref from eval_cards
+	 select id, label, points, bucket, coalesce(column_id, '') as column_id, coalesce(column_ref, '') as column_ref, is_award from eval_cards
 	 where id = ${data.cardId} and school_id = ${staff.school_id} and staff_id = ${staff.user_id}
 	`)[0];
 		if (!card) throw new Error("بطاقة التقييم غير موجودة");
 		label = card.label;
-		points = Number(card.points);
-		bucket = card.bucket;
+		isAward = Boolean(card.is_award);
+		points = isAward ? 0 : Number(card.points);
+		bucket = isAward ? "tasks" : card.bucket;
 		cardId = card.id;
-		columnId = card.column_id || "";
+		columnId = isAward ? "" : card.column_id || "";
 		cardRef = card.column_ref || "";
 	}
 	if (!label || points == null || !bucket) throw new Error("حدد التقييم");
@@ -6409,8 +6469,8 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	`)[0];
 		if (!student) continue;
 		const row = (await sql`
-	 insert into student_evals (school_id, staff_id, student_id, class_id, card_id, label, points, bucket, subject, period_no, lesson_key, column_id, entered_by)
-	 values (${staff.school_id}, ${staff.user_id}, ${studentId}, ${cls.id}, ${cardId}, ${label}, ${points}, ${bucket}, ${lessonSubject}, ${open.no}, ${lessonKey}, ${columnId}, ${actorId})
+	 insert into student_evals (school_id, staff_id, student_id, class_id, card_id, label, points, bucket, subject, period_no, lesson_key, column_id, entered_by, is_award)
+	 values (${staff.school_id}, ${staff.user_id}, ${studentId}, ${cls.id}, ${cardId}, ${label}, ${points}, ${bucket}, ${lessonSubject}, ${open.no}, ${lessonKey}, ${columnId}, ${actorId}, ${isAward})
 	 returning id
 	`)[0];
 		if (columnId && periodOpen) await shiftMarkColumn(sql, staff, studentId, cls.id, open, lessonSubject, columnId, Number(points));
@@ -6470,6 +6530,7 @@ export const undoLastClassEval = createServerFn({ method: "POST" }).middleware([
           or subject = ''
           or replace(subject, 'ال', '') = replace($6, 'ال', '')
         )
+        and ($7::int is null or card_id = $7)
       order by student_id, id desc
     )
     returning id, student_id, class_id, points, period_no, coalesce(subject, '') as subject, coalesce(column_id, '') as column_id
@@ -6479,9 +6540,10 @@ export const undoLastClassEval = createServerFn({ method: "POST" }).middleware([
 		data.classId,
 		studentIds,
 		label,
-		lessonSubject
+		lessonSubject,
+		data.cardId ?? null
 	]);
-	const found = rows?.length ? rows : label ? await sql.query(`
+	const found = rows?.length ? rows : label && !data.cardId ? await sql.query(`
     delete from student_evals
     where school_id = $1 and staff_id = $2 and id in (
       select distinct on (student_id) id
@@ -6509,18 +6571,22 @@ export const saveEvalCard = createServerFn({ method: "POST" }).middleware([authM
 	points: z.number().min(-30).max(30),
 	bucket: z.enum(["tasks", "quizzes"]),
 	enabled: z.boolean().optional(),
-	columnId: z.string().max(20).optional()
+	columnId: z.string().max(20).optional(),
+	isAward: z.boolean().optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	await seedTeacherEval(sql, staff);
 	const label = data.label.trim();
-	const columnId = (data.columnId ?? "").trim().slice(0, 20);
+	const isAward = data.isAward === true;
+	const points = isAward ? 0 : data.points;
+	const bucket = isAward ? "tasks" : data.bucket;
+	const columnId = isAward ? "" : (data.columnId ?? "").trim().slice(0, 20);
 	if (data.id) {
 		await sql`
       update eval_cards
-      set label = ${label}, points = ${data.points}, bucket = ${data.bucket},
-          enabled = ${data.enabled !== false}, column_id = ${columnId}
+      set label = ${label}, points = ${points}, bucket = ${bucket},
+          enabled = ${data.enabled !== false}, column_id = ${columnId}, is_award = ${isAward}
       where id = ${data.id} and school_id = ${staff.school_id} and staff_id = ${staff.user_id}
     `;
 		return { ok: true };
@@ -6530,8 +6596,8 @@ export const saveEvalCard = createServerFn({ method: "POST" }).middleware([authM
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
   `)[0]?.n ?? 0) + 1;
 	await sql`
-    insert into eval_cards (school_id, staff_id, label, points, bucket, enabled, sort_order, column_id)
-    values (${staff.school_id}, ${staff.user_id}, ${label}, ${data.points}, ${data.bucket}, ${data.enabled !== false}, ${order}, ${columnId})
+    insert into eval_cards (school_id, staff_id, label, points, bucket, enabled, sort_order, column_id, is_award)
+    values (${staff.school_id}, ${staff.user_id}, ${label}, ${points}, ${bucket}, ${data.enabled !== false}, ${order}, ${columnId}, ${isAward})
   `;
 	return { ok: true };
 });
@@ -6646,7 +6712,7 @@ async function applyFormatToStaff(sql, staff, data) {
 	const open = linked.periods.find((period) => !period.closed) ?? linked.periods[0];
 	const existing = await sql`
     select id, label from eval_cards
-    where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
+    where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and is_award = false
   `;
 	let order = 0;
 	for (const card of payload.cards) {
@@ -6676,6 +6742,7 @@ async function applyFormatToStaff(sql, staff, data) {
 		await sql.query(`
       update eval_cards set enabled = false
       where school_id = $1 and staff_id = $2
+        and is_award = false
         and not (label = any($3::text[]))
         and not (label = any($4::text[]))
     `, [staff.school_id, staff.user_id, kept, protectedLabels]);
@@ -6695,7 +6762,7 @@ export const getGradeStudio = createServerFn({ method: "GET" }).middleware([auth
 	const cards = await sql`
     select id, label, points, bucket, enabled, sort_order, coalesce(column_ref, '') as column_ref
     from eval_cards
-    where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
+    where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and is_award = false
     order by sort_order, id
   `;
 	const formats = await sql`
@@ -6898,7 +6965,7 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 			max: Math.min(100, Math.max(0, Number(column.max) || 0))
 		}))
 	}));
-	const key = (data.subject ?? "").trim() || "*";
+	const key = resolveEvalSubject(owner, data.subject) || "*";
 	const current = await subjectPlanOf(sql, owner, key === "*" ? "" : key);
 	const book = current.book;
 	book[key] = { combine: data.combine === "avg" ? "avg" : "sum", periods };
@@ -6912,7 +6979,7 @@ export const setPeriodClosed = createServerFn({ method: "POST" }).middleware([au
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
-	const key = (data.subject ?? "").trim();
+	const key = resolveEvalSubject(staff, data.subject);
 	const current = await subjectPlanOf(sql, staff, key);
 	const next = current.periods.map((period) => period.no === data.no ? { ...period, closed: data.closed } : period);
 	if (!next.some((period) => period.no === data.no)) throw new Error("الفترة غير موجودة");
@@ -6930,14 +6997,14 @@ export const savePeriodMark = createServerFn({ method: "POST" }).middleware([aut
     subject: z.string().max(40).optional(),
     extras: z.record(z.string(), z.number()).optional()
 })).handler(async ({ context, data }) => {
-    const { sql, staff } = await requireApproved(context.userId);
+    const { sql, staff } = await requireDesk(context.userId);
     await ensureTeacherEval(sql);
     await seedTeacherEval(sql, staff);
     const student = (await sql`
     select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
   `)[0];
     if (!student) throw new Error("الطالب ليس في هذا الفصل");
-    const subject = (data.subject ?? "").trim();
+    const subject = resolveEvalSubject(staff, data.subject);
     const plan = await subjectPlanOf(sql, staff, subject);
 
     if (data.periodNo === 0) {
@@ -7241,14 +7308,14 @@ export const saveSubjectMark = createServerFn({ method: "POST" }).middleware([au
 	subject: z.string().max(40).optional(),
 	periodNo: z.number().int().min(0).max(4).optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireApproved(context.userId);
+	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	await seedTeacherEval(sql, staff);
 	const student = (await sql`
 	 select id from students where id = ${data.studentId} and class_id = ${data.classId} and school_id = ${staff.school_id}
 	`)[0];
 	if (!student) throw new Error("الطالب ليس في هذا الفصل");
-	const subject = (data.subject ?? "").trim();
+	const subject = resolveEvalSubject(staff, data.subject);
 	const periodNo = data.periodNo ?? 1;
 	const participation = Number(data.participation) || 0;
 	const exam = Number(data.exam) || 0;

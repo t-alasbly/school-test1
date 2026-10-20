@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 
 type Tab = "eval" | "grades" | "reports" | "cards";
 type PinClass = { id: number; label: string; stageName: string; studentCount: number };
-type EvalCard = { id: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; sortOrder?: number; columnId?: string };
+type EvalCard = { id: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; sortOrder?: number; columnId?: string; isAward?: boolean };
 type EvalStudent = {
   id: number;
   name: string;
@@ -54,15 +54,30 @@ type EvalStudent = {
   total: number;
   positive: number;
   negative: number;
-  taps?: { label: string; count: number; points: number }[];
+  absent?: number;
+  late?: number;
+  badges?: number;
+  awards?: { cardId: number; count: number }[];
+  taps?: { label: string; count: number; points: number; isAward?: boolean }[];
+  byPeriod?: PeriodScore[];
+  yearWork?: number;
+  sheetExam?: number;
+  finalTotal?: number;
+  finalExtras?: Record<string, number>;
 };
 type EvalPayload = {
   class: { label: string; stageName: string };
   subject: string;
-  scale: { tasksMax: number; quizzesMax: number; totalMax: number };
+  scale: { tasksMax: number; quizzesMax: number; totalMax: number; finalExamMax?: number };
   cards: EvalCard[];
   students: EvalStudent[];
 };
+const CLASS_ROSTER_COLUMN_IDS = ["number", "name", "absence", "late", "awards", "tasks", "quizzes", "finalExam", "total", "percent", "grade"] as const;
+type ClassRosterColumnId = (typeof CLASS_ROSTER_COLUMN_IDS)[number];
+
+function isClassRosterColumnId(value: unknown): value is ClassRosterColumnId {
+  return typeof value === "string" && CLASS_ROSTER_COLUMN_IDS.some((columnId) => columnId === value);
+}
 
 export function TeacherStudio() {
   const { classes, staff } = useWorkspace();
@@ -203,6 +218,8 @@ export function ClassBoard({
   const [grantPoints, setGrantPoints] = useState("1");
   const [grantLabel, setGrantLabel] = useState("منح");
   const [grantBucket, setGrantBucket] = useState<"tasks" | "quizzes">("tasks");
+  const [awardManagerOpen, setAwardManagerOpen] = useState(false);
+  const [awardDraft, setAwardDraft] = useState("");
   const [draftLabel, setDraftLabel] = useState("");
   const [draftPoints, setDraftPoints] = useState("1");
   const [draftBucket, setDraftBucket] = useState<"tasks" | "quizzes">("tasks");
@@ -218,7 +235,9 @@ export function ClassBoard({
   const data = query.data as EvalPayload | undefined;
   const students = data?.students ?? [];
   const active = onlyStudentId != null ? [onlyStudentId] : (selected ?? students.map((student) => student.id));
-  const cards = (data?.cards ?? []).filter((card) => card.enabled);
+  const allCards = data?.cards ?? [];
+  const cards = allCards.filter((card) => card.enabled && !card.isAward);
+  const awardCards = allCards.filter((card) => card.isAward);
   const cardRows = pairEvalCards([...cards].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
 
   useEffect(() => {
@@ -245,7 +264,11 @@ export function ClassBoard({
         setSolidIds((prev) => (prev.includes(payload.cardId!) ? prev : [...prev, payload.cardId!]));
       }
       const score = Number(done.points) || 0;
-      toast.success(`${tr("سُجّل")} ${done.label || tr("التقييم")} ${score > 0 ? "+" : ""}${score}`);
+      if (payload.cardId && data?.cards.some((card) => card.id === payload.cardId && card.isAward)) {
+        toast.success(`مُنح ${done.label || tr("الوسام")} لـ ${done.count} طالب`);
+      } else {
+        toast.success(`${tr("سُجّل")} ${done.label || tr("التقييم")} ${score > 0 ? "+" : ""}${score}`);
+      }
       refresh();
       void queryClient.invalidateQueries({ queryKey: ["class"] });
       void queryClient.invalidateQueries({ queryKey: ["follow-ledger"] });
@@ -289,10 +312,11 @@ export function ClassBoard({
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الترتيب")),
   });
   const saveCard = useMutation({
-    mutationFn: (payload: { id?: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled?: boolean; columnId?: string }) =>
+    mutationFn: (payload: { id?: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled?: boolean; columnId?: string; isAward?: boolean }) =>
       saveEvalCard({ data: payload }),
-    onSuccess: () => {
-      setDraftLabel("");
+    onSuccess: (_result, payload) => {
+      if (!payload.isAward && !payload.id) setDraftLabel("");
+      if (payload.isAward && !payload.id) setAwardDraft("");
       refresh();
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
@@ -442,6 +466,99 @@ export function ClassBoard({
             <p className="text-xs text-fg-muted">{tr("اختر الطلاب ثم اضغط البطاقة. الموجب يمين والسالب يسار. هذه درجات تقييم إضافية، وليست درجة السلوك.")}</p>
             </>
             ) : null}
+            <section className="space-y-2 rounded-[var(--radius-md)] border border-amber-300 bg-amber-50/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-amber-950">🏅 {tr("أوسمة الطلاب")}</h3>
+                  <p className="text-xs text-amber-900/80">{tr("امنح الوسام للطلاب المحددين، أو عدّل أسماء الأوسمة من الإدارة.")}</p>
+                </div>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setAwardManagerOpen((open) => !open)}>
+                  {awardManagerOpen ? tr("إخفاء الإدارة") : tr("إدارة الأوسمة")}
+                </Button>
+              </div>
+              {awardCards.some((card) => card.enabled) ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {awardCards.filter((card) => card.enabled).map((card) => {
+                    const count = active.reduce((sum, studentId) => {
+                      const student = students.find((item) => item.id === studentId);
+                      return sum + (student?.awards?.find((award) => award.cardId === card.id)?.count ?? 0);
+                    }, 0);
+                    return (
+                      <div key={card.id} className="flex min-w-0 items-stretch gap-1">
+                        <button
+                          type="button"
+                          disabled={apply.isPending || active.length === 0 || (subjects.length > 1 && !lessonSubject)}
+                          onClick={() => apply.mutate({ cardId: card.id })}
+                          className="flex min-h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-[var(--radius-md)] border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="truncate">🏅 {card.label}</span>
+                          <span className="shrink-0 text-xs">{count ? `${tr("ممنوح")} ${count}` : tr("منح")}</span>
+                        </button>
+                        {count > 0 ? (
+                          <button
+                            type="button"
+                            disabled={undoLast.isPending}
+                            onClick={() => undoLast.mutate({ cardId: card.id })}
+                            className="shrink-0 rounded-[var(--radius-md)] border border-danger bg-white px-2 text-xs font-semibold text-danger disabled:opacity-50"
+                          >
+                            {tr("إلغاء آخر منح")}
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-fg-muted">{tr("لا توجد أوسمة مفعّلة بعد.")}</p>
+              )}
+              {awardManagerOpen ? (
+                <div className="space-y-2 border-t border-amber-200 pt-3">
+                  <p className="text-sm font-medium">{tr("يمكنك تعديل أسماء الأوسمة أو إخفاء ما لا تحتاجه.")}</p>
+                  <div className="space-y-2">
+                    {awardCards.map((card) => (
+                      <div key={card.id} className="flex flex-wrap items-center gap-2">
+                        <Input
+                          className="min-w-48 flex-1 bg-white"
+                          key={`${card.id}-${card.label}`}
+                          defaultValue={card.label}
+                          aria-label={`${tr("اسم الوسام")} ${card.label}`}
+                          onBlur={(event) => {
+                            const label = event.target.value.trim();
+                            if (!label || label === card.label) return;
+                            saveCard.mutate({ id: card.id, label, points: 0, bucket: "tasks", enabled: card.enabled, columnId: "", isAward: true });
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={saveCard.isPending}
+                          onClick={() => saveCard.mutate({ id: card.id, label: card.label, points: 0, bucket: "tasks", enabled: !card.enabled, columnId: "", isAward: true })}
+                        >
+                          {card.enabled ? tr("إخفاء") : tr("إظهار")}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Input
+                      className="min-w-48 flex-1 bg-white"
+                      value={awardDraft}
+                      onChange={(event) => setAwardDraft(event.target.value)}
+                      placeholder={tr("اسم الوسام الجديد")}
+                      aria-label={tr("اسم الوسام الجديد")}
+                    />
+                    <Button
+                      type="button"
+                      disabled={!awardDraft.trim() || saveCard.isPending}
+                      onClick={() => saveCard.mutate({ label: awardDraft.trim(), points: 0, bucket: "tasks", columnId: "", isAward: true })}
+                    >
+                      {tr("إضافة وسام")}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
             <div className="space-y-1">
               {cardRows.map((row, index) => (
                 <div key={index} className="grid grid-cols-2 gap-1">
@@ -612,7 +729,7 @@ export function ClassBoard({
               </div>
             </div>
             <ul className="space-y-2">
-              {[...data.cards].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((card, index, list) => {
+              {[...data.cards].filter((card) => !card.isAward).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((card, index, list) => {
                 const periods = (data as { periods?: PeriodPlan[] }).periods ?? [];
                 const open = periods.find((period) => !period.closed) ?? periods[0];
                 const columns = open?.columns ?? [];
@@ -1458,6 +1575,8 @@ export function ClassRecords({
   const [drafts, setDrafts] = useState<Record<string, { participation: string; exam: string; extras: Record<string, string> }>>({});
   const [bulkTasks, setBulkTasks] = useState("");
   const [bulkExam, setBulkExam] = useState("");
+  const [visibleRosterColumns, setVisibleRosterColumns] = useState<ClassRosterColumnId[]>([...CLASS_ROSTER_COLUMN_IDS]);
+  const [loadedRosterColumnsKey, setLoadedRosterColumnsKey] = useState("");
   const query = useQuery({
     queryKey: ["class-eval", classId, subject],
     queryFn: () => getClassEval({ data: { classId, subject: subject || undefined } }),
@@ -1468,9 +1587,49 @@ export function ClassRecords({
     periods?: PeriodPlan[];
     students: (EvalStudent & { byPeriod?: PeriodScore[]; yearWork?: number; sheetExam?: number; finalTotal?: number; finalExtras?: Record<string, number> })[];
   }) | undefined;
+  const activeSubject = subject || data?.subject || undefined;
+  const rosterColumnsKey = `class-roster-columns:${staff.userId}:${classId}:${activeSubject ?? ""}`;
+  const rosterColumnOptions: { id: ClassRosterColumnId; label: string }[] = [
+    { id: "number", label: tr("م") },
+    { id: "name", label: tr("اسم الطالب") },
+    { id: "absence", label: tr("الغياب") },
+    { id: "late", label: tr("التأخر") },
+    { id: "awards", label: tr("الأوسمة") },
+    { id: "tasks", label: `${tr("المهام الأدائية والمشاركة والتفاعل")} (${formatPoints(data?.scale.tasksMax ?? 40)})` },
+    { id: "quizzes", label: `${tr("تقويمات شفهية وتحريرية")} (${formatPoints(data?.scale.quizzesMax ?? 20)})` },
+    { id: "finalExam", label: `${tr("الاختبار النهائي")} (${formatPoints(data?.scale.finalExamMax ?? 40)})` },
+    { id: "total", label: `${tr("المجموع")} (${formatPoints(data?.scale.totalMax ?? 100)})` },
+    { id: "percent", label: tr("النسبة") },
+    { id: "grade", label: tr("التقدير") },
+  ];
+  const effectiveRosterColumns = loadedRosterColumnsKey === rosterColumnsKey ? visibleRosterColumns : [...CLASS_ROSTER_COLUMN_IDS];
+  const isRosterColumnVisible = (id: ClassRosterColumnId) => effectiveRosterColumns.includes(id);
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
+  useEffect(() => {
+    let next = [...CLASS_ROSTER_COLUMN_IDS];
+    try {
+      const stored = window.localStorage.getItem(rosterColumnsKey);
+      if (stored !== null) {
+        const parsed: unknown = JSON.parse(stored);
+        if (!Array.isArray(parsed)) throw new Error("Invalid roster column preference");
+        next = [...new Set(parsed.filter(isClassRosterColumnId))];
+      }
+    } catch {
+      toast.error(tr("تعذر تحميل تفضيلات الأعمدة"));
+    }
+    setVisibleRosterColumns(next);
+    setLoadedRosterColumnsKey(rosterColumnsKey);
+  }, [rosterColumnsKey]);
+  useEffect(() => {
+    if (loadedRosterColumnsKey !== rosterColumnsKey) return;
+    try {
+      window.localStorage.setItem(rosterColumnsKey, JSON.stringify(visibleRosterColumns));
+    } catch {
+      toast.error(tr("تعذر حفظ تفضيلات الأعمدة"));
+    }
+  }, [loadedRosterColumnsKey, rosterColumnsKey, visibleRosterColumns]);
   useEffect(() => {
     if (data?.openPeriod) setPeriodNo(data.openPeriod);
   }, [data?.openPeriod]);
@@ -1481,7 +1640,7 @@ export function ClassRecords({
     printElement(printRef.current);
   }, [printTick, query.isPending, data]);
   const closePeriod = useMutation({
-    mutationFn: (closed: boolean) => setPeriodClosed({ data: { no: selected?.no ?? 1, closed, subject: subject || undefined } }),
+    mutationFn: (closed: boolean) => setPeriodClosed({ data: { no: selected?.no ?? 1, closed, subject: activeSubject } }),
     onSuccess: () => {
       const closing = selected ? !selected.closed : true;
       if (closing && selected) {
@@ -1495,7 +1654,7 @@ export function ClassRecords({
   });
   const save = useMutation({
     mutationFn: (payload: { studentId: number; participation: number; exam: number; extras?: Record<string, number> }) =>
-      savePeriodMark({ data: { classId, periodNo: selected?.no ?? 1, subject: subject || undefined, ...payload } }),
+      savePeriodMark({ data: { classId, periodNo: selected?.no ?? 1, subject: activeSubject, ...payload } }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }),
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الدرجة")),
   });
@@ -1503,7 +1662,7 @@ export function ClassRecords({
     mutationFn: (next: { periods: PeriodPlan[]; combine: "sum" | "avg" }) =>
       saveSubjectPlan({
         data: {
-          subject: subject || data?.subject || undefined,
+          subject: activeSubject,
           combine: next.combine,
           periods: next.periods.map((period) => ({
             title: period.title,
@@ -1538,7 +1697,7 @@ export function ClassRecords({
           data: {
             classId,
             periodNo: which === "finalExam" ? 0 : (selected?.no ?? 1),
-            subject: subject || undefined,
+            subject: activeSubject,
             studentId: student.id,
             participation: which === "tasks" ? value : score?.participation ?? 0,
             exam: which === "tasks" ? score?.exam ?? 0 : value,
@@ -1598,7 +1757,7 @@ export function ClassRecords({
           data: {
             classId,
             periodNo: selected.no,
-            subject: subject || undefined,
+            subject: activeSubject,
             studentId: student.id,
             participation: tasks ?? grade ?? score?.participation ?? 0,
             exam: exam ?? score?.exam ?? 0,
@@ -1609,13 +1768,13 @@ export function ClassRecords({
         const exam = numberAt(finalExamAt);
         if (exam == null) continue;
         await savePeriodMark({
-          data: { classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam },
+          data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam },
         });
       } else {
         const exam = numberAt(finalExamAt) ?? numberAt(gradeAt);
         if (exam == null) continue;
         await savePeriodMark({
-          data: { classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam },
+          data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam },
         });
       }
       applied += 1;
@@ -1801,7 +1960,7 @@ export function ClassRecords({
             </thead>
             <tbody>
               {data.students.map((student, index) => {
-                const score = student.byPeriod?.find((period) => period.no === selected.no) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0 };
+                const score = student.byPeriod?.find((period) => period.no === selected.no) ?? { participation: 0, exam: 0, evalPoints: 0, extras: {} as Record<string, number>, total: 0 };
                 const key = `${student.id}:${selected.no}`;
                 const draft = drafts[key] ?? {
                   participation: String(score.participation),
@@ -1921,7 +2080,7 @@ export function ClassRecords({
                                 inputMode="decimal"
                                 onBlur={(event) => {
                                   const extras = { ...(student.finalExtras ?? {}), [column.id]: Number(event.target.value) || 0 };
-                                  void savePeriodMark({ data: { classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam: 0, extras } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
+                                  void savePeriodMark({ data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam: 0, extras } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
                                 }}
                               />
                             </label>
@@ -1933,7 +2092,7 @@ export function ClassRecords({
                           defaultValue={String(student.sheetExam ?? 0)}
                           inputMode="decimal"
                           onBlur={(event) => {
-                            void savePeriodMark({ data: { classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam: Number(event.target.value) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
+                            void savePeriodMark({ data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam: Number(event.target.value) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
                           }}
                         />
                       )}
@@ -2054,22 +2213,48 @@ export function ClassRecords({
                 </div>
               ))}
             </div>
-            <table className="w-full border-collapse">
+            <details className="no-print mb-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
+              <summary className="min-h-11 cursor-pointer font-medium">{tr("إظهار أو إخفاء الأعمدة")}</summary>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {rosterColumnOptions.map(({ id, label }) => (
+                  <label key={id} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={isRosterColumnVisible(id)}
+                      onChange={() => {
+                        const next = effectiveRosterColumns.includes(id)
+                          ? effectiveRosterColumns.filter((columnId) => columnId !== id)
+                          : [...effectiveRosterColumns, id];
+                        setVisibleRosterColumns(next);
+                        setLoadedRosterColumnsKey(rosterColumnsKey);
+                      }}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => {
+                  setVisibleRosterColumns([...CLASS_ROSTER_COLUMN_IDS]);
+                  setLoadedRosterColumnsKey(rosterColumnsKey);
+                }}>
+                  {tr("إظهار الكل")}
+                </Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => {
+                  setVisibleRosterColumns([]);
+                  setLoadedRosterColumnsKey(rosterColumnsKey);
+                }}>
+                  {tr("إخفاء الكل")}
+                </Button>
+              </div>
+            </details>
+            <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse">
               <thead>
                 <tr>
-                  {[
-                    "م",
-                    "اسم الطالب",
-                    "الغياب",
-                    "التأخر",
-                    "الأوسمة",
-                    `المهام الأدائية والمشاركة والتفاعل (${formatPoints(data.scale.tasksMax)})`,
-                    `تقويمات شفهية وتحريرية (${formatPoints(data.scale.quizzesMax)})`,
-                    `المجموع (${formatPoints(data.scale.totalMax)})`,
-                    "النسبة",
-                    "التقدير",
-                  ].map((label) => (
-                    <th key={label} className="border border-[#1e5aa8] bg-[#1e5aa8] px-1 py-1 text-center text-[10px] font-semibold text-white">{label}</th>
+                  {rosterColumnOptions.filter(({ id }) => isRosterColumnVisible(id)).map(({ id, label }) => (
+                    <th key={id} className="border border-[#1e5aa8] bg-[#1e5aa8] px-1 py-1 text-center text-[10px] font-semibold text-white">{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -2082,25 +2267,27 @@ export function ClassRecords({
                   const exams = fold(periods.reduce((sum, period) => sum + period.exam, 0));
                   const percent = data.scale.totalMax ? Math.round((student.total / data.scale.totalMax) * 100) : 0;
                   const grade = percent >= 90 ? "ممتاز" : percent >= 80 ? "جيد جداً" : percent >= 70 ? "جيد" : percent >= 60 ? "مقبول" : "راسب";
-                  const badges = (student.taps ?? []).filter((tap) => tap.label.includes("وسام")).reduce((sum, tap) => sum + tap.count, 0);
+                  const badges = student.badges ?? 0;
                   const cell = "border border-[#d7e3dc] px-1 py-1 text-center text-[11px]";
                   return (
                     <tr key={student.id} className={index % 2 ? "bg-[#f4f7fb]" : "bg-white"}>
-                      <td className={cell}>{index + 1}</td>
-                      <td className={`${cell} text-right`}>{student.name}</td>
-                      <td className={cell}>{student.absent ? student.absent : "—"}</td>
-                      <td className={cell}>{student.late ? student.late : "—"}</td>
-                      <td className={cell}>{badges}</td>
-                      <td className={cell}>{formatPoints(tasks)}</td>
-                      <td className={cell}>{formatPoints(exams)}</td>
-                      <td className={cell}>{formatPoints(student.total)}</td>
-                      <td className={cell}>%{percent}</td>
-                      <td className={cell}>{grade}</td>
+                      {isRosterColumnVisible("number") ? <td className={cell}>{index + 1}</td> : null}
+                      {isRosterColumnVisible("name") ? <td className={`${cell} text-right`}>{student.name}</td> : null}
+                      {isRosterColumnVisible("absence") ? <td className={cell}>{student.absent ? student.absent : "—"}</td> : null}
+                      {isRosterColumnVisible("late") ? <td className={cell}>{student.late ? student.late : "—"}</td> : null}
+                      {isRosterColumnVisible("awards") ? <td className={cell}>{badges}</td> : null}
+                      {isRosterColumnVisible("tasks") ? <td className={cell}>{formatPoints(tasks)}</td> : null}
+                      {isRosterColumnVisible("quizzes") ? <td className={cell}>{formatPoints(exams)}</td> : null}
+                      {isRosterColumnVisible("finalExam") ? <td className={cell}>{formatPoints(student.sheetExam ?? 0)}</td> : null}
+                      {isRosterColumnVisible("total") ? <td className={cell}>{formatPoints(student.total)}</td> : null}
+                      {isRosterColumnVisible("percent") ? <td className={cell}>%{percent}</td> : null}
+                      {isRosterColumnVisible("grade") ? <td className={cell}>{grade}</td> : null}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            </div>
             <div className="mt-8 grid grid-cols-2 gap-6 text-center text-sm">
               <div>
                 <p className="font-semibold">معلم/ة المادة</p>
