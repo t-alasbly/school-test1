@@ -1546,7 +1546,8 @@ export function ClassRecords({
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
-  const liveColumns = recordCols ?? selected?.columns ?? [];
+  const firstColumns = (periods.find((period) => period.no === 1) ?? periods[0])?.columns ?? [];
+  const liveColumns = recordCols ?? (sheetMode === "period" ? firstColumns : (selected?.columns ?? firstColumns));
   function acceptGrade(raw: string, max: number, id: string) {
     const next = withinMax(raw, max);
     setCellWarn((prev) => {
@@ -1890,7 +1891,7 @@ export function ClassRecords({
         title: period.title,
         tasksMax: period.tasksMax,
         examMax: period.examMax,
-        columns: (period.no === selected?.no ? liveColumns : (period.columns ?? [])).map((column) => ({
+        columns: liveColumns.map((column) => ({
           id: column.id,
           title: column.title,
           group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
@@ -2013,6 +2014,11 @@ export function ClassRecords({
   function equatedMark(student: { id: number; byPeriod?: { no?: number; total?: number }[] }, target: number) {
     return Math.min(target, Math.max(0, periodRatio(student) * target));
   }
+  function enteredExam(student: { id: number; sheetExam?: number }) {
+    const typed = finalLive[String(student.id)];
+    const raw = typed != null && typed !== "" ? Number(typed) || 0 : Number(student.sheetExam) || 0;
+    return Math.min(needExam, Math.max(0, raw));
+  }
   function storeBlank(marks: Record<string, string>) {
     const ids = sheetIds.length ? sheetIds : [classId];
     for (const id of ids) {
@@ -2093,7 +2099,7 @@ export function ClassRecords({
               const last = periods[periods.length - 1];
               savePlan.mutate({
                 combine: data?.combine === "avg" ? "avg" : "sum",
-                periods: [...periods, { no: periods.length + 1, title: titles[periods.length] || "فترة", tasksMax: last?.tasksMax ?? 20, examMax: 0, closed: false, columns: (last?.columns ?? []).filter((column) => column.group !== "exam") }],
+                periods: [...periods.map((period) => ({ no: period.no, title: period.title, tasksMax: period.tasksMax, examMax: period.examMax, closed: period.closed, columns: liveColumns })), { no: periods.length + 1, title: titles[periods.length] || "فترة", tasksMax: last?.tasksMax ?? 20, examMax: last?.examMax ?? 0, closed: false, columns: liveColumns }],
               });
             }}>{tr("إضافة فترة")}</Button>
           ) : null}
@@ -2171,7 +2177,7 @@ export function ClassRecords({
               void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
             }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
           }}>{tr("حفظ القالب")}</Button>
-          <p className="basis-full text-xs text-fg-muted">{tr("درجة الاختبار = متوسط نسب الفترات، ثم تُعادل إلى السقف المكتوب في هذا الكشف.")}</p>
+          <p className="basis-full text-xs text-fg-muted">{tr("أعمال السنة: متوسط الفترات يُعادل تلقائيًا إلى 60. الاختبار يُدخل يدويًا من 40. المجموع تلقائي من 100.")}</p>
         </div>
       ) : null}
       {view === "year" && formatOpen ? (
@@ -2187,7 +2193,11 @@ export function ClassRecords({
               ...item.payload,
               sheet: item.payload.sheet === "blank" ? "blank" : "record",
               gradeCols: item.payload.gradeCols ?? [],
-              periods: item.payload.periods?.length ? item.payload.periods : [{ title: "الفترة", tasksMax: 40, examMax: 20, columns: [] }],
+              periods: (() => {
+                const rows = item.payload.periods?.length ? item.payload.periods : [{ title: "الفترة", tasksMax: 40, examMax: 20, columns: [] }];
+                const base = rows[0];
+                return rows.map((period) => ({ ...period, tasksMax: base?.tasksMax ?? period.tasksMax, examMax: base?.examMax ?? period.examMax, columns: (base?.columns ?? period.columns).map((column) => ({ ...column })) }));
+              })(),
               cards: item.payload.cards ?? [],
               finalExamMax: item.payload.finalExamMax ?? 40,
               finalColumns: item.payload.finalColumns ?? [],
@@ -2350,7 +2360,7 @@ export function ClassRecords({
                   tasksMax: period.tasksMax,
                   examMax: period.examMax,
                   closed: period.closed,
-                  columns: period.no === selected.no ? liveColumns : (period.columns ?? []),
+                  columns: liveColumns,
                 })),
               });
             }
@@ -2537,12 +2547,21 @@ export function ClassRecords({
                     </>
                   ) : null}
                   {sheetMode === "final" ? (
-                    <p className="flex justify-between text-sm font-semibold"><span>{tr("المعدل")}</span><span>{sheetGrade((needYear + needExam) > 0 ? ((equatedMark(student, needYear) + equatedMark(student, needExam)) / (needYear + needExam)) * 100 : 0)}%</span></p>
+                    <p className="flex justify-between text-sm font-semibold"><span>{tr("المعدل")}</span><span>{sheetGrade((needYear + needExam) > 0 ? ((equatedMark(student, needYear) + enteredExam(student)) / (needYear + needExam)) * 100 : 0)}%</span></p>
                   ) : null}
                   {sheetMode === "exam" ? (
                     <>
-                      <p className="flex justify-between text-sm font-semibold"><span>{tr("أعمال السنة المعادلة")}</span><span>{sheetGrade(equatedMark(student, needYear))}</span></p>
-                      <p className="flex justify-between text-sm font-semibold"><span>{tr("الاختبار النهائي")}</span><span>{sheetGrade(equatedMark(student, needExam))}</span></p>
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("أعمال السنة")}</span><span>{sheetGrade(equatedMark(student, needYear))}</span></p>
+                      <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
+                        <span className="text-sm">{tr("الاختبار من")} {formatPoints(needExam)}</span>
+                        <Input className="h-11 w-24 border text-center text-base" inputMode="decimal" defaultValue={student.sheetExam ? String(student.sheetExam) : ""} placeholder="0" onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))} onBlur={(event) => {
+                          const next = withinMax(event.target.value, needExam);
+                          if (next === null) return;
+                          setFinalLive((prev) => ({ ...prev, [String(student.id)]: next }));
+                          void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
+                        }} />
+                      </label>
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("المجموع")}</span><span>{sheetGrade(equatedMark(student, needYear) + enteredExam(student))}</span></p>
                     </>
                   ) : null}
                 </div>
@@ -2786,8 +2805,9 @@ export function ClassRecords({
                   <th className="border border-black px-2 py-1">{tr("م")}</th>
                   <th className="grade-name border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
                   {periods.map((period) => <th key={period.no} className="border border-black px-2 py-1">{period.title}</th>)}
-                  <th className="border border-black px-2 py-1">{tr("أعمال السنة المعادلة")} ({formatPoints(needYear)})</th>
+                  <th className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(needYear)})</th>
                   <th className="border border-black px-2 py-1">{tr("الاختبار النهائي")} ({formatPoints(needExam)})</th>
+                  <th className="border border-black px-2 py-1">{tr("المجموع")} ({formatPoints(needYear + needExam)})</th>
                 </tr>
               </thead>
               <tbody>
@@ -2797,7 +2817,28 @@ export function ClassRecords({
                     <td className="grade-name border border-black px-2 text-right font-bold" style={{ fontSize: `${nameFont}px` }}>{student.name}</td>
                     {periods.map((period) => <td key={period.no} className="border border-black px-1 text-center">{sheetGrade(periodFigure(student, period.no).score)}</td>)}
                     <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needYear))}</td>
-                    <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needExam))}</td>
+                    <td className="border border-black p-0.5">
+                      <Input
+                        className="grade-cell h-8 w-full border-0 bg-transparent px-1 text-center shadow-none"
+                        inputMode="decimal"
+                        key={`${student.id}-exam-${student.sheetExam ?? 0}`}
+                        defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
+                        placeholder="0"
+                        onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))}
+                        onBlur={(event) => {
+                          const next = withinMax(event.target.value, needExam);
+                          if (next === null) {
+                            setCellWarn((prev) => ({ ...prev, [`final:${student.id}`]: `أعلى من ${formatPoints(needExam)}` }));
+                            return;
+                          }
+                          setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}`]; return copy; });
+                          setFinalLive((prev) => ({ ...prev, [String(student.id)]: next }));
+                          void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
+                        }}
+                      />
+                      {cellWarn[`final:${student.id}`] ? <span className="grade-warn no-print">{cellWarn[`final:${student.id}`]}</span> : null}
+                    </td>
+                    <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needYear) + enteredExam(student))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2822,7 +2863,7 @@ export function ClassRecords({
                 {data.students.map((student, index) => {
                   const scores = periods.map((period) => periodFigure(student, period.no).score);
                   const periodSum = scores.reduce((sum, value) => sum + value, 0);
-                  const exam = equatedMark(student, needExam);
+                  const exam = enteredExam(student);
                   const total = equatedMark(student, needYear) + exam;
                   const ceiling = needYear + needExam;
                   const rate = ceiling > 0 ? (total / ceiling) * 100 : 0;
