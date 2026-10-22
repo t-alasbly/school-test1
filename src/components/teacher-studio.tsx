@@ -1570,6 +1570,9 @@ export function ClassRecords({
     setRecordCols(null);
   }, [periodNo]);
   useEffect(() => {
+    setFormatOpen(false);
+  }, [sheetMode]);
+  useEffect(() => {
     const active = yearPack?.activeFormatId;
     if (!active) return;
     const item = (yearPack?.formats ?? []).find((row) => row.id === active);
@@ -1997,9 +2000,7 @@ export function ClassRecords({
     return data.combine === "sum" ? sum : (student.yearWork ?? (rows.length ? sum / rows.length : 0));
   }
   function pulledCols() {
-    const item = (yearPack?.formats ?? []).find((row) => String(row.id) === pullId);
-    if (item?.payload?.sheet === "blank" && item.payload.gradeCols?.length) return item.payload.gradeCols;
-    if (!pullId && gradeShape === "blank") return gradeCols;
+    if (gradeShape === "blank") return gradeCols;
     return null;
   }
   function periodFigure(student: { id: number; byPeriod?: { no?: number; total?: number }[] }, no: number) {
@@ -2162,13 +2163,7 @@ export function ClassRecords({
       ) : null}
       {view === "year" && (sheetMode === "exam" || sheetMode === "final") ? (
         <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
-          <label className="space-y-1 text-sm">
-            <span>{tr("اسحب الدرجات من")}</span>
-            <Select className="h-9 w-auto min-w-52" value={pullId} onChange={(event) => setPullId(event.target.value)}>
-              <option value="">{tr("القالب الحالي")}</option>
-              {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</option>)}
-            </Select>
-          </label>
+          <p className="basis-full text-sm font-semibold">{sheetMode === "exam" ? tr("كشف الاختبار النهائي") : tr("النتيجة النهائية")}</p>
           <label className="space-y-1 text-sm">
             <span>{tr("سقف أعمال السنة")}</span>
             <Input className="w-20" inputMode="decimal" value={needYear} onChange={(event) => setNeedYear(Math.min(100, Math.max(1, Number(event.target.value) || 60)))} />
@@ -2200,13 +2195,12 @@ export function ClassRecords({
             </label>
           ) : null}
           <Button type="button" size="sm" onClick={() => {
+            const layout = sheetMode === "exam" ? examLayout : finalLayout;
+            localStorage.setItem(`grade-page:${subject}:${sheetMode}`, JSON.stringify(layout));
             localStorage.setItem(`grade-final-layout:${subject}`, JSON.stringify({ pullId, needYear, needExam }));
-            const name = sheetMode === "final" ? "النتيجة النهائية" : "اختبار نهاية السنة";
-            void saveGradeFormat({ data: { name, payload: currentFormatPayload() } }).then(() => {
-              toast.success(tr("حُفظ القالب"));
-              void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
-            }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
-          }}>{tr("حفظ القالب")}</Button>
+            toast.success(tr("حُفظ تنسيق هذه الصفحة فقط"));
+            setFormatOpen(false);
+          }}>{tr("حفظ تنسيق الصفحة")}</Button>
           <p className="basis-full text-xs text-fg-muted">{tr("أعمال السنة: متوسط الفترات يُعادل تلقائيًا إلى 60. الاختبار يُدخل يدويًا من 40. المجموع تلقائي من 100.")}</p>
         </div>
       ) : null}
@@ -2234,11 +2228,11 @@ export function ClassRecords({
           })}
         </div>
       ) : null}
-      {view === "year" && formatOpen ? (
+      {view === "year" && formatOpen && sheetMode === "period" ? (
         <div className="no-print flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <Select className="h-9 w-auto min-w-52" value={yearFormatId} onChange={(event) => setYearFormatId(event.target.value)}>
             <option value="">{tr("اختر قالب أعمال السنة")}</option>
-            {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</option>)}
+            {(yearPack?.formats ?? []).filter((item) => item.name !== "اختبار نهاية السنة" && item.name !== "النتيجة النهائية").map((item) => <option key={item.id} value={item.id}>{item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</option>)}
           </Select>
           <Button type="button" size="sm" disabled={!yearFormatId} onClick={() => {
             const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
@@ -2312,7 +2306,7 @@ export function ClassRecords({
             </label>
         </div>
       ) : null}
-      {view === "year" && formatOpen && gradeShape === "record" ? (
+      {view === "year" && formatOpen && sheetMode === "period" && gradeShape === "record" ? (
         <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <label className="space-y-1 text-sm">
             <span>{tr("ارتفاع الصف")}</span>
@@ -2422,7 +2416,7 @@ export function ClassRecords({
           }}>{tr("حفظ")}</Button>
         </div>
       ) : null}
-      {view === "year" && formatOpen && gradeShape === "blank" ? (
+      {view === "year" && formatOpen && sheetMode === "period" && gradeShape === "blank" ? (
         <div className="no-print mt-2 space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <p className="text-xs text-fg-muted">{tr("الخانات فارغة للتعبئة اليدوية. عدّل اسم العمود وحدّه الأعلى وعرضه، وقدّمه أو أخّره.")}</p>
           <label className="flex max-w-xs items-center gap-2 text-sm">
