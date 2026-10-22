@@ -133,7 +133,7 @@ function TeacherReport({ studentId }: { studentId: number }) {
         <Button type="button" size="sm" variant="secondary" disabled={!data} onClick={() => printRef.current && printElement(printRef.current)}>{tr("طباعة")}</Button>
       </div>
       {shown && query.isPending ? <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p> : null}
-      {data ? (
+      {shown && data ? (
         <>
           <div ref={printRef} className="space-y-3 rounded-[var(--radius-md)] bg-white p-3 text-sm text-black">
             <OfficialLetterhead school={school} />
@@ -298,9 +298,13 @@ export function StudentSheet({
   const student = query.data?.student;
   const shown = student ? studentLabel(locale, student.name, student.nameEn) : "";
   const notes = query.data?.notes ?? [];
+  const violRef = useRef<HTMLDivElement>(null);
+  const violationNotes = notes.some((note) => note.type === "behavior") ? notes.filter((note) => note.type === "behavior") : notes;
   const scoped = query.data?.scopedToTeacher;
   const canEditRecords = staffCan(staff, "editRecords");
   const canMessage = staffCan(staff, "sendMessages");
+  const classFollow = staffCan(staff, "viewClassFollow");
+  const officialPrint = staffCan(staff, "viewOfficialPrint");
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -317,11 +321,13 @@ export function StudentSheet({
           </SheetTitle>
           <p className="text-sm text-fg-muted">
             {student?.classLabel}
-            {canMessage && student?.parentPhone ? ` · ${student.parentPhone}` : ""}
+            {canMessage && [student?.parentPhone, student?.parentPhone2, student?.workPhone].filter(Boolean).length
+              ? ` · ${[student?.parentPhone, student?.parentPhone2, student?.workPhone].filter(Boolean).join(" · ")}`
+              : ""}
           </p>
           {student ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {canMessage ? (
+              {officialPrint && canMessage ? (
               <WhatsAppDialog
                 studentId={student.id}
                 studentName={student.name}
@@ -338,6 +344,7 @@ export function StudentSheet({
                 behaviorDegree={notes[0]?.type === "behavior" ? notes[0]?.behaviorDegree : null}
               />
               ) : null}
+              {officialPrint ? (
               <PrintFormsButton
                 student={{
                   name: student.name,
@@ -356,13 +363,19 @@ export function StudentSheet({
                       : "record"
                 }
               />
+              ) : null}
               <StudentDossier studentId={student.id} />
+              <Button type="button" size="sm" variant="secondary" disabled={violationNotes.length === 0} onClick={() => violRef.current && printElement(violRef.current)}>
+                {tr("طباعة المخالفات")}
+              </Button>
               <EditStudentButton
                 student={{
                   id: student.id,
                   name: student.name,
                   nameEn: student.nameEn,
                   parentPhone: student.parentPhone,
+                  parentPhone2: student.parentPhone2,
+                  workPhone: student.workPhone,
                   classId: student.classId,
                 }}
               />
@@ -387,7 +400,7 @@ export function StudentSheet({
             <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>
           ) : (
             <div className="space-y-6">
-              {studentId ? <TeacherReport studentId={studentId} /> : null}
+              {studentId && classFollow ? <TeacherReport studentId={studentId} /> : null}
               <section className="space-y-2">
                 <h2 className="text-sm font-semibold">{tr("الغياب والتأخر والانصراف")}</h2>
                 <div className="flex flex-wrap gap-2 text-xs">
@@ -431,6 +444,39 @@ export function StudentSheet({
                   يظهر سجل ملاحظاتك فقط. مخالفات المعلمين الآخرين تظهر لمن مُنح صلاحية الاطلاع على جميع المخالفات.
                 </p>
               ) : null}
+              <div ref={violRef} className="hidden bg-white p-3 text-black">
+                <OfficialLetterhead school={school} />
+                <h2 className="my-2 text-center text-lg font-semibold">{tr("تقرير مخالفات الطالب")}</h2>
+                <p className="mb-3 text-center text-sm">
+                  {shown} · {student.classLabel}
+                </p>
+                <div className="space-y-2">
+                  {violationNotes.map((note, index) => (
+                    <article
+                      key={note.id}
+                      className="viol-block overflow-hidden rounded-md border border-black"
+                      style={{ background: index % 2 ? "#f3f6f4" : "#ffffff", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+                    >
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 border-b border-black/10 px-2 py-1 text-[11px] sm:grid-cols-4">
+                        <p><span className="text-[#0f4f4a]">{tr("التاريخ")}: </span>{formatStamp(note.occurredAt || note.createdAt)}</p>
+                        <p><span className="text-[#0f4f4a]">{tr("الحصة / المادة")}: </span>{note.teacherSubject || "—"}</p>
+                        <p><span className="text-[#0f4f4a]">{tr("النوع")}: </span>{tr(NOTE_META[note.type].label)}{note.behaviorDegree ? ` · ${degreeLabel(note.behaviorDegree)}` : ""}</p>
+                        <p><span className="text-[#0f4f4a]">{tr("المعلم")}: </span>{note.teacherName}{note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}</p>
+                      </div>
+                      <p className="px-2 py-2 text-base font-semibold leading-7">
+                        {note.behaviorTypeName ? tr(note.behaviorTypeName) : ""}
+                        {note.behaviorTypeName && note.details ? " — " : ""}
+                        {note.details || tr("بدون وصف")}
+                      </p>
+                      <p className="border-t border-black/10 px-2 py-1 text-xs">
+                        <span className="font-semibold">{tr("الإجراء")}: </span>
+                        {note.actionTaken || note.suggestedAction || tr("لم يُتخذ إجراء بعد")}
+                        {note.enteredByName && note.enteredByName !== note.teacherName ? ` · ${tr("المسجل")}: ${note.enteredByName}` : ""}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </div>
               {notes.length === 0 ? (
                 <p className="text-sm text-fg-muted">{tr("لا توجد ملاحظات مسجّلة بعد.")}</p>
               ) : (
@@ -540,7 +586,7 @@ export function StudentSheet({
                   hint={tr("بينك وبين الوكيل أو المرشد أو المرشد الصحي أو معلم آخر — يمكن تتبعها وتحويلها")}
                 />
               ) : null}
-              <MessagesBlock items={messages.data?.messages ?? []} />
+              {officialPrint ? <MessagesBlock items={messages.data?.messages ?? []} /> : null}
             </div>
           )}
         </div>

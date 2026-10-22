@@ -13,6 +13,10 @@ export const PERMISSION_KEYS = [
   "editClasses",
   "viewClasses",
   "viewPrint",
+  "viewLedger",
+  "viewClassFollow",
+  "viewYearSheet",
+  "viewOfficialPrint",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -96,6 +100,30 @@ export const PERMISSION_META: {
     short: "الطباعة",
     hint: "إظهار أو إخفاء صفحة التقارير والنماذج الرسمية",
   },
+  {
+    key: "viewLedger",
+    label: "إظهار سجل المتابعة",
+    short: "سجل المتابعة",
+    hint: "يظهر سجل التقييمات في مكتب المعلم. الافتراضي مخفي، ويفعّله المعلم من حسابه أو المدير من الصلاحيات.",
+  },
+  {
+    key: "viewClassFollow",
+    label: "المتابعة الصفية",
+    short: "متابعة صفية",
+    hint: "صح وأتقن وحل الواجب داخل الحصة. مخفية حتى يفعّلها المدير لهذا المعلم.",
+  },
+  {
+    key: "viewYearSheet",
+    label: "أعمال السنة",
+    short: "أعمال السنة",
+    hint: "كشف أعمال السنة وتنسيق درجاته. مخفي حتى يفعّله المدير لهذا المعلم.",
+  },
+  {
+    key: "viewOfficialPrint",
+    label: "النماذج الرسمية ومراسلة ولي الأمر",
+    short: "النماذج",
+    hint: "التعهد وخطابات ولي الأمر والرسائل الرسمية. للمدير والوكيل، وتُمنح لمن يحتاجها.",
+  },
 ];
 
 const ALL_ON: StaffPermissions = {
@@ -111,6 +139,10 @@ const ALL_ON: StaffPermissions = {
   editClasses: true,
   viewClasses: true,
   viewPrint: true,
+  viewLedger: true,
+  viewClassFollow: true,
+  viewYearSheet: true,
+  viewOfficialPrint: true,
 };
 
 const ALL_OFF: StaffPermissions = {
@@ -126,6 +158,10 @@ const ALL_OFF: StaffPermissions = {
   editClasses: false,
   viewClasses: false,
   viewPrint: false,
+  viewLedger: false,
+  viewClassFollow: false,
+  viewYearSheet: false,
+  viewOfficialPrint: false,
 };
 
 export function defaultPermissions(
@@ -147,6 +183,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: true,
       viewPrint: true,
+      viewLedger: true,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "school_vp") {
@@ -163,6 +203,10 @@ export function defaultPermissions(
       editClasses: true,
       viewClasses: true,
       viewPrint: true,
+      viewLedger: true,
+      viewClassFollow: true,
+      viewYearSheet: true,
+      viewOfficialPrint: true,
     };
   }
   if (role === "teachers_vp") {
@@ -179,6 +223,10 @@ export function defaultPermissions(
       editClasses: true,
       viewClasses: true,
       viewPrint: true,
+      viewLedger: true,
+      viewClassFollow: true,
+      viewYearSheet: true,
+      viewOfficialPrint: true,
     };
   }
   if (role === "student_counselor") {
@@ -195,6 +243,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: true,
       viewPrint: false,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "health_counselor") {
@@ -211,6 +263,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: true,
       viewPrint: false,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "activity_leader") {
@@ -227,6 +283,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: true,
       viewPrint: false,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "security") {
@@ -243,6 +303,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: false,
       viewPrint: false,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "admin_assistant" || role === "admin_staff") {
@@ -259,6 +323,10 @@ export function defaultPermissions(
       editClasses: false,
       viewClasses: true,
       viewPrint: false,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   if (role === "teacher") {
@@ -274,7 +342,11 @@ export function defaultPermissions(
       editRecords: false,
       editClasses: false,
       viewClasses: true,
-      viewPrint: false,
+      viewPrint: true,
+      viewLedger: false,
+      viewClassFollow: false,
+      viewYearSheet: false,
+      viewOfficialPrint: false,
     };
   }
   return { ...ALL_OFF };
@@ -301,6 +373,7 @@ export function parsePermissions(
   for (const key of PERMISSION_KEYS) {
     if (typeof rec[key] === "boolean") next[key] = rec[key];
   }
+  if (role === "teacher") next.viewPrint = true;
   return next;
 }
 

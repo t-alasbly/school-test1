@@ -13,6 +13,7 @@ import { StudentSheet } from "@/components/student-sheet";
 import { ExitPermitBadge } from "@/components/exit-permit";
 import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
+import { ClassRecords } from "@/components/teacher-studio";
 import { Input } from "@/components/ui/input";
 import { listStudents } from "@/lib/school/api";
 import {
@@ -24,6 +25,7 @@ import {
   toggleGroupStudent,
   useGroupPick,
 } from "@/lib/school/group-pick";
+import { parseSubjects } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -72,6 +74,10 @@ function ClassesBody() {
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(null);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [pane, setPane] = useState<"year" | "behavior">("year");
+  const [printTick, setPrintTick] = useState(0);
+  const subjects = parseSubjects(staff.subject);
+  const [sheetSubject, setSheetSubject] = useState(subjects[0] ?? "");
   const { picking, targets } = useGroupPick();
 
   useEffect(() => {
@@ -103,6 +109,10 @@ function ClassesBody() {
 
   const pickedIds = useMemo(() => new Set(targets.map((item) => item.studentId)), [targets]);
   const kept = elsewhereLabel(targets, new Set(shown.map((student) => student.id)));
+
+  const yearSheet = staffCan(staff, "viewYearSheet");
+  const stageClasses = classes.filter((item) => item.stageId === stageId).map((item) => item.id);
+  const showYear = yearSheet && classId == null && pane === "year";
 
   if (!staffCan(staff, "viewClasses")) {
     return (
@@ -142,6 +152,32 @@ function ClassesBody() {
           });
         }}
       />
+      {yearSheet && classId == null && stageId ? (
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => setPane("year")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "year" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("أعمال السنة")}</button>
+          <button type="button" onClick={() => setPane("behavior")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "behavior" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("المخالفات السلوكية")}</button>
+          <button
+            type="button"
+            onClick={() => {
+              setPane("year");
+              setPrintTick((tick) => tick + 1);
+            }}
+            className="min-h-8 rounded-full border border-border bg-card px-3 py-1 text-sm font-semibold"
+          >
+            {tr("طباعة")}
+          </button>
+          {subjects.length > 1 ? (
+            <select className="h-8 rounded-full border border-border bg-card px-3 text-sm" value={sheetSubject} onChange={(event) => setSheetSubject(event.target.value)}>
+              {subjects.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          ) : null}
+        </div>
+      ) : null}
+      {showYear && stageClasses.length ? (
+        <ClassRecords classId={stageClasses[0]} mergeClassIds={stageClasses} presetSubject={sheetSubject || undefined} view="year" printTick={printTick} />
+      ) : null}
+      {showYear ? null : (
+      <>
       <header className="mx-[calc(2mm-1rem)] grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 sm:mx-0">
         <h1 className="flex items-center gap-1 text-2xl font-semibold tracking-tight sm:text-3xl">
           {tr("الفصول")}
@@ -261,6 +297,9 @@ function ClassesBody() {
       <p className={cn("text-xs text-fg-muted", shown.length === 0 && "hidden")}>
         {tr("اضغط الاسم لسجل الطالب. في المخالفة الجماعية يبقى التحديد عند تغيير المرحلة أو الفصل حتى تسجّل الجميع.")}
       </p>
+      </>
+      )}
     </div>
   );
 }
+

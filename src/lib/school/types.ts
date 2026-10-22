@@ -175,6 +175,8 @@ export type StudentRow = {
   name: string;
   nameEn?: string;
   parentPhone: string;
+  parentPhone2?: string;
+  workPhone?: string;
   classId: number;
   healthNote: string;
   dailyKind: DailyKind | null;
@@ -311,6 +313,8 @@ export type BehaviorImprovement = {
 
 export type Workspace = {
   staff: Staff;
+  actor: Staff;
+  desk: Staff | null;
   school: School;
   stages: StageSummary[];
   classes: ClassOption[];

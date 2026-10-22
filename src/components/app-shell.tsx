@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BookOpen,
   ChevronDown,
@@ -21,8 +21,10 @@ import { formatToday } from "@/lib/school/calendar";
 import { canFollowup, staffCan } from "@/lib/school/permissions";
 import { useCalendar } from "@/lib/school/use-calendar";
 import { useWorkspace } from "@/lib/school/workspace";
+import type { Staff } from "@/lib/school/types";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
+import { DeskSwitch } from "./desk-switch";
 import { SchoolMark } from "./school-mark";
 import {
   DropdownMenu,
@@ -66,8 +68,24 @@ function navActive(pathname: string, to: string, fromDesk: boolean) {
   return pathname === to;
 }
 
+function teacherCanOpen(pathname: string, person: Staff) {
+  if (pathname.startsWith("/desk") || pathname === "/") return true;
+  if (pathname.startsWith("/classes") || pathname.startsWith("/stage") || pathname.startsWith("/class")) return staffCan(person, "viewClasses");
+  if (pathname.startsWith("/print") || pathname === "/reports" || pathname === "/forms") return staffCan(person, "viewPrint");
+  if (pathname.startsWith("/messages")) return staffCan(person, "sendMessages");
+  if (pathname.startsWith("/attendance")) return staffCan(person, "dailyAttendance");
+  if (pathname.startsWith("/counseling")) return staffCan(person, "counseling");
+  if (pathname.startsWith("/admin")) return canFollowup(person);
+  if (pathname === "/settings" || pathname === "/settings/" || pathname.startsWith("/settings/profile") || pathname.startsWith("/settings/subject") || pathname.startsWith("/settings/appearance")) return true;
+  if (pathname.startsWith("/settings") || pathname.startsWith("/staff") || pathname.startsWith("/import") || pathname.startsWith("/archive")) {
+    return person.role === "admin" || staffCan(person, "editStaff") || staffCan(person, "editClasses");
+  }
+  return true;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { school, staff } = useWorkspace();
+  const { school, staff, actor } = useWorkspace();
+  const navigate = useNavigate();
   const { t, locale, setLocale } = useLocale();
   const calendar = useCalendar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -94,6 +112,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (preferred !== locale) window.location.reload();
   }, [staff.userId, staff.appearance?.locale, locale]);
   const schoolLogo = schoolLogoSrc(school.logoUrl);
+  const preview = actor.userId !== staff.userId;
+  useEffect(() => {
+    if (!preview) return;
+    if (!teacherCanOpen(pathname, staff)) void navigate({ to: "/desk" });
+  }, [preview, pathname, staff, navigate]);
   const items = NAV.filter((item) => {
     if (staff.role === "pending") return false;
     if (item.to === "/classes") return staffCan(staff, "viewClasses");
@@ -145,6 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="ms-auto flex items-center gap-1">
             <p className="hidden text-xs text-fg-muted lg:block">{formatToday(calendar)}</p>
             <NotificationBell />
+            <DeskSwitch />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button

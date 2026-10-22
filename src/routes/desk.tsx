@@ -1,5 +1,5 @@
 import { Link, Outlet, createFileRoute, useRouterState } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppGate } from "@/components/app-gate";
 import { ActionQueue } from "@/components/action-queue";
@@ -13,12 +13,12 @@ import { StaffTimetable } from "@/components/staff-timetable";
 import { ExitPermitStrip } from "@/components/exit-permit";
 import { TeacherStudio, GradeFormatStudio, FollowLedgerPage } from "@/components/teacher-studio";
 import { Select } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { getHomeDesk, getLiveLessons, getMyTimetable, listStaff, setDeskTarget } from "@/lib/school/api";
-import { ROLE_LABEL, currentPeriod, parseSubjects, scheduleFor } from "@/lib/school/constants";
+import { getHomeDesk, getLiveLessons, getMyTimetable, setDeskTarget } from "@/lib/school/api";
+import { currentPeriod, parseSubjects, scheduleFor } from "@/lib/school/constants";
 import { useLocale, tr } from "@/lib/school/i18n";
 import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
+import { DESK_AS_EVENT } from "@/components/desk-switch";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/desk")({ component: DeskLayout });
@@ -60,18 +60,12 @@ function DeskLayout() {
 function DeskFrame() {
   const { t } = useLocale();
   const { staff } = useWorkspace();
-  const queryClient = useQueryClient();
   const canAct = staffCan(staff, "takeActions");
   const canOpen = staff.role === "admin" || staffCan(staff, "viewAllViolations");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const section = sectionOf(pathname);
   const [asId, setAsId] = useState("");
   const [live, setLive] = useState(() => localStorage.getItem("desk-live-classes") === "1");
-  const people = useQuery({
-    queryKey: ["staff-list"],
-    queryFn: () => listStaff(),
-    enabled: canOpen,
-  });
   const owner = useQuery({
     queryKey: ["my-timetable", asId],
     queryFn: () => getMyTimetable(),
@@ -80,26 +74,32 @@ function DeskFrame() {
   useEffect(() => {
     if (!canOpen) return;
     const saved = sessionStorage.getItem("desk_as") || "";
-    if (!saved) return;
-    setAsId(saved);
-    void setDeskTarget({ data: { staffId: saved } });
+    if (saved) {
+      setAsId(saved);
+      void setDeskTarget({ data: { staffId: saved } });
+    }
+    function onDesk(event: Event) {
+      setAsId(String((event as CustomEvent).detail || ""));
+    }
+    window.addEventListener(DESK_AS_EVENT, onDesk);
+    return () => window.removeEventListener(DESK_AS_EVENT, onDesk);
   }, [canOpen]);
   const desk = useQuery({ queryKey: ["home-desk", asId], queryFn: () => getHomeDesk() });
-  const ownerInfo = owner.data as { role?: string; subject?: string; displayName?: string } | undefined;
+  const ownerInfo = owner.data as { role?: string; subject?: string; displayName?: string; showLedger?: boolean } | undefined;
   const hasSubjects = asId
     ? !owner.isPending && parseSubjects(ownerInfo?.subject || "").length > 0
     : parseSubjects(staff.subject).length > 0;
-  const visibleTabs = TABS.filter((tab) => hasSubjects || (tab.id !== "format" && tab.id !== "ledger"));
+  const classFollow = staffCan(staff, "viewClassFollow");
+  const yearSheet = staffCan(staff, "viewYearSheet");
+  const ledgerOn = (asId ? Boolean(ownerInfo?.showLedger) : staffCan(staff, "viewLedger")) && classFollow;
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.id === "format") return hasSubjects && (classFollow || yearSheet);
+    if (tab.id === "ledger") return ledgerOn;
+    return true;
+  });
   const showStudio = asId
     ? ownerInfo?.role === "teacher" || parseSubjects(ownerInfo?.subject || "").length > 0
     : staff.role === "teacher";
-  async function chooseDesk(id: string) {
-    await setDeskTarget({ data: { staffId: id } });
-    if (id) sessionStorage.setItem("desk_as", id);
-    else sessionStorage.removeItem("desk_as");
-    await queryClient.invalidateQueries();
-    setAsId(id);
-  }
   const stats = (desk.data ?? {}) as {
     myNotes?: number;
     myClosed?: number;
@@ -148,26 +148,6 @@ function DeskFrame() {
           </button>
         </h1>
       </header>
-      {canOpen ? (
-        <div className="no-print flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
-          <label className="min-w-52 flex-1 space-y-1 text-sm">
-            <span className="font-semibold">{t("مكتب المعلم")}</span>
-            <Select className="h-10 w-full" value={asId} onChange={(event) => void chooseDesk(event.target.value)}>
-              <option value="">{t("مكتبي")}</option>
-              {((people.data ?? []) as { userId: string; displayName: string; role: string; active?: boolean }[])
-                .filter((person) => person.active !== false && person.role !== "pending" && person.userId !== staff.userId)
-                .map((person) => (
-                  <option key={person.userId} value={person.userId}>
-                    {person.displayName} · {ROLE_LABEL[person.role as keyof typeof ROLE_LABEL] || person.role}
-                  </option>
-                ))}
-            </Select>
-          </label>
-          {asId ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => void chooseDesk("")}>{t("العودة لمكتبي")}</Button>
-          ) : null}
-        </div>
-      ) : null}
       <div key={asId || "self"} className="space-y-5">
       {asId && ownerInfo?.displayName ? (
         <p className="no-print text-sm font-semibold">{t("تدير مكتب")} {ownerInfo.displayName}</p>
@@ -257,7 +237,7 @@ function DeskFrame() {
             {section === "moves" ? <ClassMoveInbox variant="page" /> : null}
             {section === "mail" ? <StaffMailInbox title="" hint="" /> : null}
             {section === "format" && hasSubjects ? <GradeFormatStudio /> : null}
-            {section === "ledger" && hasSubjects ? <FollowLedgerPage /> : null}
+            {section === "ledger" && ledgerOn ? <FollowLedgerPage /> : null}
           </section>
         </>
       )}

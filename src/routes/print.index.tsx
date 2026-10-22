@@ -35,12 +35,10 @@ import {
   counselorTitle,
   formatDay,
   formatStamp,
-  hijriDate,
   messageKindLabel,
   occurrenceLabel,
   periodShort,
   principalTitle,
-  todayLabel,
 } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
@@ -66,7 +64,8 @@ function ReportsBody() {
   const [type, setType] = useState<"all" | NoteType>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [mode, setMode] = useState<"notes" | "messages" | "names">("notes");
+  const official = staffCan(staff, "viewOfficialPrint");
+  const [mode, setMode] = useState<"notes" | "messages" | "names" | "attend">(official ? "notes" : "names");
   const [rosterTitle, setRosterTitle] = useState(tr("بيانات الطلاب"));
   const [showPhone, setShowPhone] = useState(false);
   const [showClass, setShowClass] = useState(false);
@@ -74,6 +73,10 @@ function ReportsBody() {
   const [extraCols, setExtraCols] = useState<ExtraCol[]>([]);
   const [colWidths, setColWidths] = useState({ ...DEFAULT_COL_MM });
   const [colOrder, setColOrder] = useState<string[]>(["seq", "name"]);
+  const [rowMm, setRowMm] = useState(7);
+  const [sheetStyle, setSheetStyle] = useState<"names" | "grades">("names");
+  const [sheetMargins, setSheetMargins] = useState(school.printMargins ?? { top: 10, right: 10, bottom: 12, left: 8 });
+  const [rosterMarks, setRosterMarks] = useState<Record<string, string>>({});
   const [templateName, setTemplateName] = useState("");
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
   const [showTeacherSign, setShowTeacherSign] = useState(true);
@@ -126,14 +129,14 @@ function ReportsBody() {
           to: to || undefined,
         },
       }),
-    enabled: mode === "messages",
+    enabled: official && mode === "messages",
   });
   const messages = messagesQuery.data?.messages ?? [];
-  const scopedToTeacher = query.data?.scopedToTeacher;
-  const notes = query.data?.notes ?? [];
+  const rawNotes = query.data?.notes ?? [];
+  const notes = mode === "attend" ? rawNotes.filter((note) => note.type === "absence" || note.type === "late") : rawNotes;
   const reportSchool = query.data?.school ?? school;
   const periodSummaries = useMemo(() => {
-    if (mode !== "notes") return [];
+    if (mode !== "notes" && mode !== "attend") return [];
     const kinds = (type === "all" ? ["absence", "late"] : type === "absence" || type === "late" ? [type] : []) as NoteType[];
     return kinds.map((kind) => {
       const map = new Map<number, { studentId: number; studentName: string; classLabel: string; days: Map<string, string[]> }>();
@@ -203,6 +206,9 @@ function ReportsBody() {
     extraCols,
     widths: colWidths,
     order: colOrder,
+    rowMm,
+    sheetStyle,
+    margins: sheetMargins,
   };
   const nameCols = visibleColumns(currentPayload);
 
@@ -217,6 +223,7 @@ function ReportsBody() {
           id: String(c.id || `c${i + 1}`),
           title: String(c.title ?? ""),
           width: Number(c.width) > 0 ? Number(c.width) : 20,
+          max: Number(c.max) > 0 ? Number(c.max) : undefined,
         }))
       : [];
     setExtraCols(extras);
@@ -230,6 +237,16 @@ function ReportsBody() {
       });
     }
     setColOrder(Array.isArray(payload.order) ? payload.order.map(String) : ["seq", "name"]);
+    setRowMm(Number(payload.rowMm) >= 4 ? Number(payload.rowMm) : 7);
+    setSheetStyle(payload.sheetStyle === "grades" ? "grades" : "names");
+    if (payload.margins) {
+      setSheetMargins({
+        top: Number(payload.margins.top) || 0,
+        right: Number(payload.margins.right) || 0,
+        bottom: Number(payload.margins.bottom) || 0,
+        left: Number(payload.margins.left) || 0,
+      });
+    }
     if (id) setActiveTemplateId(id);
   }
 
@@ -302,7 +319,8 @@ function ReportsBody() {
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border">
+          <div className={official ? "grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border" : "grid grid-cols-3 overflow-hidden rounded-[var(--radius-sm)] border border-border"}>
+            {official ? (
             <button
               type="button"
               onClick={() => setMode("notes")}
@@ -314,6 +332,20 @@ function ReportsBody() {
             >
               {tr("الملاحظات")}
             </button>
+            ) : (
+            <button
+              type="button"
+              onClick={() => setMode("notes")}
+              className={
+                mode === "notes"
+                  ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg"
+                  : "h-11 px-3 text-sm bg-bg-elevated"
+              }
+            >
+              {tr("مخالفاتي")}
+            </button>
+            )}
+            {official ? (
             <button
               type="button"
               onClick={() => setMode("messages")}
@@ -325,6 +357,22 @@ function ReportsBody() {
             >
               {tr("الرسائل")}
             </button>
+            ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setType("all");
+                setMode("attend");
+              }}
+              className={
+                mode === "attend"
+                  ? "h-11 px-3 text-sm font-medium bg-primary text-primary-fg"
+                  : "h-11 px-3 text-sm bg-bg-elevated"
+              }
+            >
+              {tr("الغياب")}
+            </button>
+            )}
             <button
               type="button"
               onClick={() => setMode("names")}
@@ -342,7 +390,7 @@ function ReportsBody() {
             disabled={mode === "messages" ? messagesQuery.isPending : query.isPending}
           >
             <Printer className="size-4" />
-            {mode === "messages" ? "طباعة الرسائل" : mode === "names" ? "طباعة كشف الأسماء" : "طباعة الكشف"}
+            {mode === "messages" ? "طباعة الرسائل" : mode === "names" ? "طباعة كشف الأسماء" : mode === "attend" ? "طباعة الغياب" : "طباعة الكشف"}
           </Button>
         </div>
       </header>
@@ -446,6 +494,8 @@ function ReportsBody() {
             if (patch.extraCols) setExtraCols(patch.extraCols);
             if (patch.widths) setColWidths(patch.widths);
             if (patch.order) setColOrder(patch.order);
+            if (patch.rowMm) setRowMm(patch.rowMm);
+            if (patch.sheetStyle) setSheetStyle(patch.sheetStyle);
           }}
           templateName={templateName}
           onTemplateName={setTemplateName}
@@ -465,35 +515,64 @@ function ReportsBody() {
           isAdmin={isAdmin}
           saving={saveTpl.isPending}
           onExcel={() => void exportExcel()}
+          rowMm={rowMm}
+          onRowMm={setRowMm}
         />
+      ) : null}
+
+      {mode === "names" ? (
+        <div className="no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <p className="w-full text-sm font-semibold">{tr("هوامش هذا النموذج (مم)")}</p>
+          {([["top", "أعلى"], ["bottom", "أسفل"], ["right", "يمين"], ["left", "يسار"]] as const).map(([key, label]) => (
+            <label key={key} className="space-y-1 text-sm">
+              <span>{label}</span>
+              <Input className="w-20" type="number" min={0} max={40} value={sheetMargins[key]} onChange={(event) => setSheetMargins((prev) => ({ ...prev, [key]: Math.min(40, Math.max(0, Number(event.target.value) || 0)) }))} />
+            </label>
+          ))}
+          {sheetStyle === "grades" ? (
+            <Button type="button" size="sm" variant="secondary" onClick={() => {
+              const year = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date());
+              setRosterTitle(`كشف أعمال السنة لمادة ${query.data?.subject || "…"} للفصل ${classLine} الفصل الدراسي الأول للعام ${year}`);
+            }}>{tr("عنوان تلقائي")}</Button>
+          ) : null}
+          <p className="w-full text-xs text-fg-muted">{tr("تُحفظ الهوامش والعنوان مع القالب عند الضغط على حفظ.")}</p>
+        </div>
       ) : null}
 
       <article
         ref={sheetRef}
         className="print-form print-report official-sheet official-report overflow-hidden rounded-[var(--radius-lg)] border border-border bg-white text-black font-naskh sm:px-5 sm:py-4"
+        style={{
+          ["--print-margin-top" as string]: `${sheetMargins.top}mm`,
+          ["--print-margin-right" as string]: `${sheetMargins.right}mm`,
+          ["--print-margin-bottom" as string]: `${sheetMargins.bottom}mm`,
+          ["--print-margin-left" as string]: `${sheetMargins.left}mm`,
+        }}
       >
         <OfficialLetterhead school={reportSchool} />
-        <h2 className="mt-2 text-center text-[20px] font-semibold tracking-wide">
-          {mode === "messages"
-            ? "كشف رسائل أولياء الأمور"
-            : mode === "names"
-              ? rosterTitle.trim() || "بيانات الطلاب"
-              : "كشف متابعة الطلاب"}
+        {mode === "names" ? null : (
+        <h2 className="mt-2 mb-2 text-center text-[20px] font-semibold tracking-wide">
+          {mode === "messages" ? "كشف رسائل أولياء الأمور" : "سجل المتابعة"}
         </h2>
-        <p className="text-center text-[13px] text-[#00857c]">
-          {todayLabel()} — {hijriDate()}
-        </p>
+        )}
 
-        {mode === "names" ? (
-          <div className="official-meta mb-2 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center">
-            <div className="border-l border-black px-1.5 py-1.5">
-              <p className="text-[11px] font-semibold text-[#00857c]">{tr("الصف / الفصل")}</p>
-              <p className="text-[13px] font-medium leading-5">{classLine}</p>
-            </div>
-            <div className="px-1.5 py-1.5">
-              <p className="text-[11px] font-semibold text-[#00857c]">{tr("عدد الطلاب")}</p>
-              <p className="text-[13px] font-medium leading-5 tabular-nums">{students.length}</p>
-            </div>
+        {mode === "names" && sheetStyle === "grades" ? (
+          <input
+            className="year-title mb-2 w-full border-0 bg-transparent text-center text-[15px] font-semibold outline-none"
+            value={rosterTitle}
+            onChange={(event) => setRosterTitle(event.target.value)}
+          />
+        ) : mode === "names" ? (
+          <div className="official-meta mb-2 flex flex-nowrap items-center gap-3 overflow-hidden whitespace-nowrap border border-black px-2 py-1 text-[12px] leading-5">
+            <p className="min-w-0 flex-1 whitespace-normal text-right text-[15px] font-semibold leading-6">{rosterTitle.trim() || "بيانات الطلاب"}</p>
+            <p>
+              <span className="font-semibold text-[#00857c]">{tr("الصف / الفصل")}</span>
+              {" "}{classLine}
+            </p>
+            <p>
+              <span className="font-semibold text-[#00857c]">{tr("عدد الطلاب")}</span>
+              {" "}<span className="tabular-nums">{students.length}</span>
+            </p>
           </div>
         ) : selectedStudent ? (
           <table className="official-table mb-3">
@@ -526,7 +605,7 @@ function ReportsBody() {
         </div>
         )}
 
-        {mode === "names" ? null : mode === "notes" ? (
+        {mode === "names" ? null : mode === "notes" || mode === "attend" ? (
         <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
           {(
             [
@@ -552,13 +631,21 @@ function ReportsBody() {
 
         <div className="overflow-x-auto">
         {mode === "names" ? (
-        <table className="official-table official-report-table" style={{ tableLayout: "fixed", width: `${tableMm}mm` }}>
+        <>
+        <table className="official-table official-report-table roster-fit" style={{ tableLayout: "fixed", width: `${tableMm}mm`, ["--roster-row" as string]: `${rowMm}mm` }}>
           <thead>
             <tr>
               {nameCols.map((col) => (
                 <th key={col.id} style={{ width: `${col.width}mm` }}>{col.title}</th>
               ))}
             </tr>
+            {nameCols.some((col) => col.max) ? (
+              <tr>
+                {nameCols.map((col) => (
+                  <th key={`${col.id}-max`} style={{ width: `${col.width}mm` }}>{col.max ?? ""}</th>
+                ))}
+              </tr>
+            ) : null}
           </thead>
           <tbody>
             {students.length === 0 ? (
@@ -569,7 +656,7 @@ function ReportsBody() {
               </tr>
             ) : (
               students.map((s: any, index: number) => (
-                <tr key={s.id}>
+                <tr key={s.id} className={sheetStyle === "grades" && index % 2 === 1 ? "bg-[#f3f4f6]" : undefined}>
                   {nameCols.map((col) => (
                     <td
                       key={col.id}
@@ -584,7 +671,15 @@ function ReportsBody() {
                       }
                       dir={col.builtin === "phone" ? "ltr" : undefined}
                     >
-                      {nameCell(col, s, index)}
+                      {col.builtin ? nameCell(col, s, index) : (
+                        <input
+                          className="h-8 w-full bg-transparent text-center"
+                          inputMode="decimal"
+                          value={rosterMarks[`${s.id}:${col.id}`] ?? ""}
+                          placeholder="0"
+                          onChange={(event) => setRosterMarks((prev) => ({ ...prev, [`${s.id}:${col.id}`]: event.target.value }))}
+                        />
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -592,6 +687,13 @@ function ReportsBody() {
             )}
           </tbody>
         </table>
+        {sheetStyle === "grades" ? (
+          <div className="mt-6 flex items-start justify-between gap-6 text-sm">
+            <p className="font-semibold">معلم المادة: {query.data?.teacherName || "………………"}</p>
+            <p className="font-semibold">{principal}: ………………</p>
+          </div>
+        ) : null}
+        </>
         ) : mode === "messages" ? (
         <table className="official-table official-report-table">
           <thead>
@@ -745,12 +847,6 @@ function ReportsBody() {
         )}
         </div>
 
-        <p className="mt-2 text-[10px] leading-5">
-          أعدّ الكشف: {staff.displayName} · عدد السجلات:{" "}
-          {mode === "messages" ? messages.length : mode === "names" ? students.length : notes.length} · طُبع في {todayLabel()}
-          {scopedToTeacher && mode === "notes" ? " · ملاحظات هذا المعلم فقط" : ""}
-        </p>
-
         <div className="no-print mt-3 flex flex-wrap gap-4 text-sm">
           <label className="inline-flex items-center gap-2">
             <input type="checkbox" checked={showTeacherSign} onChange={(e) => setShowTeacherSign(e.target.checked)} />
@@ -766,33 +862,34 @@ function ReportsBody() {
           </label>
         </div>
         {showTeacherSign || showCounselorSign || showPrincipalSign ? (
-        <footer
-          className="mt-4 grid gap-3 text-center text-[12px] leading-6"
-          style={{
-            gridTemplateColumns: `repeat(${[showTeacherSign, showCounselorSign, showPrincipalSign].filter(Boolean).length}, minmax(0, 1fr))`,
-          }}
-        >
-          {showTeacherSign ? (
-            <div>
-              <p className="font-semibold">{tr("المعلم")}</p>
-              <p>الاسم: {query.data?.teacherName || staff.displayName}</p>
-              <p>{tr("التوقيع: ………………")}</p>
-            </div>
-          ) : null}
-          {showCounselorSign ? (
-            <div>
-              <p className="font-semibold">{counselor}</p>
-              <p>الاسم: {reportSchool.counselorName || "………………"}</p>
-              <p>{tr("التوقيع: ………………")}</p>
-            </div>
-          ) : null}
-          {showPrincipalSign ? (
-            <div>
-              <p className="font-semibold">{principal}</p>
-              <p>الاسم: {reportSchool.principalName || "………………"}</p>
-              <p>{tr("التوقيع: ………………")}</p>
-            </div>
-          ) : null}
+        <footer className="mt-6 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
+          <div>
+            {showTeacherSign ? (
+              <>
+                <p className="font-semibold">{tr("معلم المادة")}</p>
+                <p>{query.data?.teacherName || staff.displayName}</p>
+                <p>{tr("التوقيع: ………………")}</p>
+              </>
+            ) : null}
+          </div>
+          <div>
+            {showCounselorSign ? (
+              <>
+                <p className="font-semibold">{counselor}</p>
+                <p>{reportSchool.counselorName || "………………"}</p>
+                <p>{tr("التوقيع: ………………")}</p>
+              </>
+            ) : null}
+          </div>
+          <div>
+            {showPrincipalSign ? (
+              <>
+                <p className="font-semibold">{principal}</p>
+                <p>{reportSchool.principalName || "………………"}</p>
+                <p>{tr("التوقيع: ………………")}</p>
+              </>
+            ) : null}
+          </div>
         </footer>
         ) : null}
       </article>

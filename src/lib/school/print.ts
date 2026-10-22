@@ -23,6 +23,16 @@ function collectedStyles() {
 
 function prepareClone(el: HTMLElement) {
   const clone = el.cloneNode(true) as HTMLElement;
+  const live = el.querySelectorAll("input, textarea");
+  const copied = clone.querySelectorAll("input, textarea");
+  live.forEach((node, index) => {
+    const target = copied[index];
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+    if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
+      target.value = node.value;
+      target.setAttribute("value", node.value);
+    }
+  });
   clone.classList.add("print-form", "print-report");
   clone.classList.remove("hidden");
   clone.style.display = "block";
@@ -75,11 +85,18 @@ function printInPopup(el: HTMLElement) {
 <title>طباعة</title>
 ${collectedStyles()}
 <style>
-  @page { size: A4; margin: 8mm; }
+  @page { size: A4 portrait; margin: 0; }
   html, body { margin: 0; background: #fff; color: #111; direction: rtl; }
-  body { font-family: "Noto Naskh Arabic", Amiri, "Times New Roman", serif; font-size: 14px; line-height: 1.6; }
-  .print-form { width: 100%; max-width: 196mm; margin: 0 auto; }
-  .print-form h2, .student-print-line { text-align: center; }
+  body { font-family: "Noto Naskh Arabic", Amiri, "Times New Roman", serif; font-size: 12px; line-height: 1.45; }
+  .print-form {
+    box-sizing: border-box;
+    width: 210mm;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm) var(--print-margin-bottom, 12mm) var(--print-margin-left, 8mm);
+  }
+  .print-form h2, .student-print-line, .year-title { text-align: center; }
+  .year-title { display: block; width: 100%; border: 0; background: transparent; font-weight: 700; font-size: 14px; margin: 0 0 8px; }
   .student-print-line { margin: 4px 0 10px; font-size: 15px; }
   .block { display: block; }
   .text-center { text-align: center; }
@@ -93,36 +110,60 @@ ${collectedStyles()}
     gap: 8px;
     text-align: center;
   }
-  .ksa-diwani { height: 35px; width: auto; }
-  img { max-height: 62px; width: auto; object-fit: contain; }
-  table, .official-table, .grade-equal {
-    width: 100%;
+  .ksa-diwani { height: 32px; width: auto; }
+  img { max-height: 52px; width: auto; object-fit: contain; }
+  table, .official-table, .grade-equal, .grade-sheet {
+    width: 100% !important;
     border-collapse: collapse;
     text-align: center;
-    margin: 8px 0 12px;
+    margin: 6px 0 10px;
     table-layout: fixed;
   }
-  .grade-name, td.grade-name, th.grade-name { text-align: right !important; width: 34%; }
-  .grade-no { width: 2rem; }
-  body.printing-form #school-print-mount .official-table th,
-  body.printing-form #school-print-mount .official-table td,
-  body.printing-form #school-print-mount table th,
-  body.printing-form #school-print-mount table td {
-    border: 1px solid #111 !important;
-    padding: 6px 4px !important;
-    vertical-align: middle;
-    text-align: center;
-    background: #fff !important;
-    color: #111 !important;
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; }
+  .grade-sheet tbody tr, .grade-equal tbody tr,
+  .grade-sheet tbody td, .grade-equal tbody td {
+    height: var(--row-h, 8mm) !important;
+    min-height: var(--row-h, 8mm) !important;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1;
   }
-  body.printing-form #school-print-mount .official-table th,
-  body.printing-form #school-print-mount table th {
-    background: #e7f4f2 !important;
-    font-weight: 700;
+  .grade-sheet thead tr:first-child th, .grade-equal thead th {
+    background: #9aa0a6 !important;
+    color: #fff !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .attendance-print tr { height: auto; break-inside: avoid; }
+  .grade-sheet thead tr:nth-child(2) th {
+    background: #e5e7eb !important;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .grade-sheet tbody tr:nth-child(even) td, .grade-equal tbody tr:nth-child(even) td {
+    background: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .grade-name, td.grade-name { text-align: right !important; font-weight: 700 !important; font-size: var(--name-font, 13px) !important; }
+  th, td { border: 1px solid #111; padding: 1px 3px; vertical-align: middle; font-size: 11px; }
+  .grade-warn { display: none !important; }
+  input, .grade-sheet input, .roster-fit input {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-align: center;
+    width: 100%;
+    font: inherit;
+    padding: 0;
+  }
+  .year-sheet, .official-sheet { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+  .grade-scroll { overflow: visible !important; width: 100% !important; }
+  .year-sheet table, .grade-equal, .grade-sheet { width: 100% !important; max-width: 100% !important; }
+  .sheet-signs { display: flex; justify-content: space-between; margin-top: 14px; text-align: center; break-inside: avoid; }
+  .sheet-signs p { margin: 2px 0; }
 </style>
 </head>
 <body class="printing-form"><div id="${MOUNT_ID}">${markup}</div></body>

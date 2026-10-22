@@ -162,6 +162,19 @@
   height: auto;
 }
 
+.roster-fit th,
+.roster-fit td {
+  height: var(--roster-row, 7mm);
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.15;
+}
+
+.viol-block {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .official-sheet .underline {
   text-decoration-thickness: 1px;
 }
@@ -209,9 +222,71 @@
   }
 }
 
-.grade-equal { table-layout: fixed; width: 100%; }
+.grade-equal { table-layout: fixed; width: max-content; min-width: 100%; }
 .grade-equal .grade-no { width: 2rem; }
-.grade-equal .grade-name { width: 34%; text-align: right; }
+.grade-equal .grade-name { width: var(--name-mm, 46mm); min-width: 8.5rem; text-align: right; }
+.grade-equal th,
+.grade-equal td { width: var(--col-mm, 16mm); }
+.grade-equal .grade-name,
+.grade-equal .grade-no { width: auto; }
+.grade-equal .grade-name { width: var(--name-mm, 46mm); min-width: 8.5rem; }
+.grade-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.grade-phone { display: none; }
+@media (min-width: 761px) {
+  .grade-name { position: sticky; right: 0; z-index: 2; background: #fff; }
+  .grade-sheet thead .grade-name,
+  .grade-equal thead .grade-name { z-index: 3; background: #9aa0a6; }
+  .grade-sheet tbody tr:nth-child(even) .grade-name,
+  .grade-equal tbody tr:nth-child(even) .grade-name { background: #f3f4f6; }
+}
+@media (max-width: 760px) {
+  .year-sheet { display: none; }
+  .grade-phone { display: flex; flex-direction: column; gap: 0.5rem; }
+  .grade-bulk { display: grid; grid-template-columns: 1fr; }
+  .grade-bulk label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .grade-bulk .w-20,
+  .grade-bulk .w-28 { width: 6.5rem; height: 2.75rem; font-size: 1rem; }
+}
+@media print {
+  .year-sheet { display: block !important; }
+  .grade-phone { display: none !important; }
+}
+.grade-sheet input,
+.roster-fit input {
+  height: 2rem;
+  width: 100%;
+  min-width: 2.6rem;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  padding: 0 0.15rem;
+  font-size: 0.95rem;
+}
+.grade-warn {
+  display: inline-block;
+  margin-top: 2px;
+  background: #ffedd5;
+  color: #c2410c;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.sheet-signs { display: flex; justify-content: space-between; text-align: center; }
+.grade-sheet thead tr:first-child th,
+.grade-equal thead th {
+  background: #9aa0a6;
+  color: #fff;
+}
+.grade-sheet thead tr:nth-child(2) th {
+  background: #e5e7eb;
+  color: #111;
+}
+.grade-sheet tbody tr:nth-child(even) td,
+.grade-equal tbody tr:nth-child(even) td {
+  background: #f3f4f6;
+}
 .print-only { display: none !important; }
 
 @media print {
@@ -226,6 +301,22 @@
   }
   .no-print {
     display: none !important;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: transparent !important;
+  }
+  .grade-sheet input,
+  .roster-fit input {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .grade-equal .grade-name { position: static; }
+  .grade-scroll, .year-sheet table, .grade-equal, .grade-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
   nav,
   header.app-header,
@@ -260,6 +351,52 @@
     color: #111 !important;
     box-shadow: none !important;
     background: #fff !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet thead tr:first-child th,
+  body.printing-form #school-print-mount .print-form .grade-equal thead th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #9aa0a6 !important;
+    color: #fff !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet thead tr:nth-child(2) th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #e5e7eb !important;
+    color: #111 !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet tbody tr:nth-child(even) td,
+  body.printing-form #school-print-mount .print-form .grade-equal tbody tr:nth-child(even) td {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #f3f4f6 !important;
+    color: #111 !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet tbody tr,
+  body.printing-form #school-print-mount .print-form .grade-equal tbody tr,
+  body.printing-form #school-print-mount .print-form .grade-sheet tbody td,
+  body.printing-form #school-print-mount .print-form .grade-equal tbody td {
+    height: var(--row-h, 8mm) !important;
+    min-height: var(--row-h, 8mm) !important;
+    max-height: var(--row-h, 8mm) !important;
+    box-sizing: border-box !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1 !important;
+    overflow: hidden !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet tbody input,
+  body.printing-form #school-print-mount .print-form .grade-equal tbody input {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    background: transparent !important;
+    color: #111 !important;
+    line-height: 1 !important;
+  }
+  body.printing-form #school-print-mount .grade-name {
+    text-align: right !important;
+    font-weight: 700 !important;
   }
   body.printing-form #school-print-mount .print-form {
     -webkit-print-color-adjust: exact;
@@ -330,10 +467,6 @@
   body.printing-form #school-print-mount .grade-equal {
     table-layout: fixed !important;
     width: 100% !important;
-  }
-  body.printing-form #school-print-mount .grade-name {
-    width: 34% !important;
-    text-align: right !important;
   }
   body.printing-form #school-print-mount .attendance-print {
     box-sizing: border-box !important;

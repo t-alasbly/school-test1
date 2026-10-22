@@ -18,12 +18,13 @@ import { Select } from "@/components/ui/select";
 import { getReport, getStudentNotes } from "@/lib/school/api";
 import { NOTE_META, formatDay, weekdayName } from "@/lib/school/constants";
 import { printElement } from "@/lib/school/print";
+import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 
 export const Route = createFileRoute("/print/forms")({ component: FormsBody });
 
 function FormsBody() {
-  const { school } = useWorkspace();
+  const { school, staff } = useWorkspace();
   const sheetRef = useRef<HTMLElement>(null);
   const [stageId, setStageId] = useState("");
   const [classId, setClassId] = useState("");
@@ -33,6 +34,7 @@ function FormsBody() {
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState<FormOverrides>({});
   const [showCompensation, setShowCompensation] = useState(true);
+  const official = staffCan(staff, "viewOfficialPrint");
 
   const report = useQuery({
     queryKey: ["report", "forms"],
@@ -62,6 +64,19 @@ function FormsBody() {
   );
 
   const selectedNote = notes[noteIdx] ?? notes[0] ?? null;
+  if (!official) {
+    return <p className="text-fg-muted">{tr("التعهد وخطابات ولي الأمر لمن مُنحت له هذه الصلاحية.")}</p>;
+  }
+  const fields: [keyof FormOverrides, string, string][] = [
+    ["name", tr("اسم الطالب"), selectedStudent?.name ?? ""],
+    ["classLine", tr("الصف / الفصل"), selectedStudent?.classLabel ?? ""],
+    ["violation", tr("المخالفة / الموضوع"), selectedNote?.behaviorTypeName || selectedNote?.details || ""],
+    ["degree", tr("الدرجة"), selectedNote?.behaviorDegree ? String(selectedNote.behaviorDegree) : ""],
+    ["day", tr("التاريخ"), selectedNote ? formatDay(selectedNote.occurredAt || selectedNote.createdAt) : ""],
+    ["weekday", tr("اليوم"), selectedNote ? weekdayName(selectedNote.occurredAt || selectedNote.createdAt) : ""],
+    ["period", tr("الحصة"), ""],
+    ["subject", tr("المادة"), selectedNote?.teacherSubject || ""],
+  ];
 
   return (
     <div className="space-y-6">
@@ -105,10 +120,8 @@ function FormsBody() {
             }}
           >
             <option value="">{tr("الكل")}</option>
-            {stages.map((s: any) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+            {stages.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </Select>
         </div>
@@ -124,9 +137,7 @@ function FormsBody() {
           >
             <option value="">{tr("الكل")}</option>
             {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
+              <option key={c.id} value={c.id}>{c.label}</option>
             ))}
           </Select>
         </div>
@@ -142,9 +153,7 @@ function FormsBody() {
           >
             <option value="">{tr("اختر طالبًا…")}</option>
             {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </Select>
         </div>
@@ -152,9 +161,7 @@ function FormsBody() {
           <Label htmlFor="f-kind">{tr("النموذج")}</Label>
           <Select id="f-kind" value={kind} onChange={(e) => setKind(e.target.value as FormKind)}>
             {FORM_ORDER.map((k) => (
-              <option key={k} value={k}>
-                {FORM_META[k].title}
-              </option>
+              <option key={k} value={k}>{FORM_META[k].title}</option>
             ))}
           </Select>
         </div>
@@ -168,16 +175,11 @@ function FormsBody() {
           >
             {notes.length === 0 ? (
               <option value="0">{tr("بدون ملاحظة مسجّلة — النموذج للتعبئة اليدوية")}</option>
-            ) : (
-              notes.map((n, i) => (
-                <option key={`${n.createdAt}-${i}`} value={i}>
-                  {(n.type === "absence" || n.type === "late"
-                    ? tr(NOTE_META[n.type].label)
-                    : n.behaviorTypeName || n.details || tr("ملاحظة")) +
-                    (n.createdAt ? ` — ${n.createdAt.slice(0, 10)}` : "")}
-                </option>
-              ))
-            )}
+            ) : notes.map((n, i) => (
+              <option key={`${n.createdAt}-${i}`} value={i}>
+                {(n.type === "absence" || n.type === "late" ? tr(NOTE_META[n.type].label) : n.behaviorTypeName || n.details || tr("ملاحظة")) + (n.createdAt ? ` — ${n.createdAt.slice(0, 10)}` : "")}
+              </option>
+            ))}
           </Select>
         </div>
         <label className="flex min-h-11 items-center gap-2 self-end rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm sm:col-span-2">
@@ -191,21 +193,9 @@ function FormsBody() {
           إظهار فرص التعويض في التعهد والخطاب
         </label>
       </form>
-
       {selectedStudent && manual ? (
         <div className="no-print grid gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3 sm:grid-cols-2">
-          {(
-            [
-              ["name", tr("اسم الطالب"), selectedStudent.name],
-              ["classLine", tr("الصف / الفصل"), selectedStudent.classLabel],
-              ["violation", tr("المخالفة / الموضوع"), selectedNote?.behaviorTypeName || selectedNote?.details || ""],
-              ["degree", tr("الدرجة"), selectedNote?.behaviorDegree ? String(selectedNote.behaviorDegree) : ""],
-              ["day", tr("التاريخ"), selectedNote ? formatDay(selectedNote.occurredAt || selectedNote.createdAt) : ""],
-              ["weekday", tr("اليوم"), selectedNote ? weekdayName(selectedNote.occurredAt || selectedNote.createdAt) : ""],
-              ["period", tr("الحصة"), ""],
-              ["subject", tr("المادة"), selectedNote?.teacherSubject || ""],
-            ] as const
-          ).map(([key, label, fallback]) => (
+          {fields.map(([key, label, fallback]) => (
             <div key={key} className="space-y-1.5">
               <Label htmlFor={`f-ov-${key}`}>{label}</Label>
               <input
@@ -237,7 +227,6 @@ function FormsBody() {
           </div>
         </div>
       ) : null}
-
       {selectedStudent ? (
         <OfficialForm
           ref={sheetRef}

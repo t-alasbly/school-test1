@@ -26,22 +26,28 @@ function PrintLayout() {
 function PrintFrame() {
   const { staff } = useWorkspace();
   const { t } = useLocale();
+  const official = staffCan(staff, "viewOfficialPrint");
   if (!staffCan(staff, "viewPrint")) {
     return <p className="text-fg-muted">{t("صفحة الطباعة متاحة لمن مُنح إظهار التقارير والنماذج.")}</p>;
   }
+  const nav = official ? PRINT_NAV : PRINT_NAV.filter((item) => item.to === "/print");
   return (
     <div className="space-y-5">
       <header className="no-print">
         <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
           {t("الطباعة")}
-          <PageHelp text={t("كشوف الغياب والتأخر والانصراف، وتقارير الرسائل والطالب والعمل، ثم النماذج الفارغة. طباعة تعهد مخالفة مفتوحة تبقى من سجل المخالفة.")} />
+          <PageHelp text={official
+            ? t("كشوف الغياب والتأخر والانصراف، وتقارير الرسائل والطالب والعمل، ثم النماذج الفارغة. طباعة تعهد مخالفة مفتوحة تبقى من سجل المخالفة.")
+            : t("كشف الأسماء، ومخالفاتك وغياب حصصك فقط. التعهد ومراسلة ولي الأمر لمن مُنحت له الصلاحية.")} />
         </h1>
+        {official || staffCan(staff, "dailyAttendance") ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <DailyRegisterPrint />
-          <VpReports />
+          {staffCan(staff, "dailyAttendance") || official ? <DailyRegisterPrint /> : null}
+          {official ? <VpReports /> : null}
         </div>
+        ) : null}
       </header>
-      <SectionNav items={PRINT_NAV} />
+      <SectionNav items={nav} />
       <Outlet />
     </div>
   );

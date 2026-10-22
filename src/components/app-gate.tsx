@@ -51,8 +51,13 @@ export function AppGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const raw = workspace.data;
+  const value = raw.desk
+    ? { ...raw, staff: raw.desk, actor: raw.actor ?? raw.staff, desk: raw.desk }
+    : { ...raw, actor: raw.actor ?? raw.staff, desk: null };
+
   return (
-    <WorkspaceContext.Provider value={workspace.data}>
+    <WorkspaceContext.Provider value={value}>
       <ThemeApplier />
       <AppShell>{children}</AppShell>
     </WorkspaceContext.Provider>

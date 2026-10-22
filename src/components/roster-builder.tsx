@@ -19,7 +19,7 @@ export const COL_MM_MIN = 8;
 export const COL_MM_MAX = 80;
 
 export type BuiltinCol = keyof typeof DEFAULT_COL_MM;
-export type ExtraCol = { id: string; title: string; width: number };
+export type ExtraCol = { id: string; title: string; width: number; max?: number };
 export type RosterPayload = {
   title: string;
   showPhone: boolean;
@@ -28,6 +28,9 @@ export type RosterPayload = {
   extraCols: ExtraCol[];
   widths: Record<BuiltinCol, number>;
   order: string[];
+  rowMm?: number;
+  sheetStyle?: "names" | "grades";
+  margins?: { top: number; right: number; bottom: number; left: number };
 };
 
 export type RosterTemplate = {
@@ -59,6 +62,29 @@ export function defaultOrder(extraCols: ExtraCol[], show: { stage: boolean; clas
   return ids;
 }
 
+export const GRADE_SHEET_COLUMNS: ExtraCol[] = [
+  { id: "theory", title: "اختبار نظري", width: 22, max: 20 },
+  { id: "homework", title: "واجبات", width: 18, max: 10 },
+  { id: "share", title: "مشاركة", width: 18, max: 10 },
+  { id: "tasks", title: "مهام أدائية", width: 22, max: 20 },
+  { id: "final", title: "اختبار نهائي", width: 22, max: 40 },
+  { id: "total", title: "المجموع", width: 18, max: 100 },
+];
+
+export function gradeSheetPayload(): RosterPayload {
+  return {
+    title: "كشف الدرجات",
+    showPhone: false,
+    showClass: false,
+    showStage: false,
+    extraCols: GRADE_SHEET_COLUMNS.map((col) => ({ ...col })),
+    widths: { ...DEFAULT_COL_MM, seq: 12, name: 68 },
+    order: ["seq", "name", ...GRADE_SHEET_COLUMNS.map((col) => col.id)],
+    rowMm: 8,
+    sheetStyle: "grades",
+  };
+}
+
 export function mergeOrder(order: string[] | undefined, extraCols: ExtraCol[], show: { stage: boolean; class: boolean; phone: boolean }) {
   const extras = new Set(extraCols.map((c) => c.id));
   const allowed = new Set<string>(["seq", "name"]);
@@ -80,7 +106,7 @@ export function mergeOrder(order: string[] | undefined, extraCols: ExtraCol[], s
   return next;
 }
 
-export type VisibleCol = { id: string; title: string; width: number; builtin?: BuiltinCol };
+export type VisibleCol = { id: string; title: string; width: number; builtin?: BuiltinCol; max?: number };
 
 export function visibleColumns(payload: Pick<RosterPayload, "extraCols" | "widths" | "order" | "showClass" | "showStage" | "showPhone">): VisibleCol[] {
   const show = { stage: payload.showStage, class: payload.showClass, phone: payload.showPhone };
@@ -103,6 +129,7 @@ export function visibleColumns(payload: Pick<RosterPayload, "extraCols" | "width
         id,
         title: extra.title.trim() || tr("عمود"),
         width: clampMm(extra.width, EXTRA_DEFAULT_MM),
+        max: Number(extra.max) > 0 ? Number(extra.max) : undefined,
       };
     })
     .filter((c): c is VisibleCol => Boolean(c));
@@ -130,6 +157,9 @@ export function RosterBuilder({
   isAdmin,
   saving,
   onExcel,
+  rowMm,
+  onRowMm,
+  layoutOnly,
 }: {
   title: string;
   onTitle: (v: string) => void;
@@ -152,6 +182,9 @@ export function RosterBuilder({
   isAdmin: boolean;
   saving?: boolean;
   onExcel: () => void;
+  rowMm: number;
+  onRowMm: (value: number) => void;
+  layoutOnly?: boolean;
 }) {
   const show = { stage: showStage, class: showClass, phone: showPhone };
   const cols = visibleColumns({ extraCols, widths, order, showClass, showStage, showPhone });
@@ -212,7 +245,7 @@ export function RosterBuilder({
           value={title}
           onChange={(e) => onTitle(e.target.value)}
           placeholder={tr("بيانات الطلاب")}
-          maxLength={80}
+          maxLength={160}
         />
       </div>
 
@@ -226,6 +259,13 @@ export function RosterBuilder({
               <p className="text-xs text-fg-muted">{tr("يمكنك إضافة حتى 24 عموداً وتحديد عرض كل منها بالملم.")}</p>
             )}
           </div>
+          <button
+            type="button"
+            className="rounded-full border border-primary px-3 py-1 text-sm font-semibold text-primary"
+            onClick={() => onChange(gradeSheetPayload())}
+          >
+            {tr("نموذج كشف الدرجات")}
+          </button>
           <button
             type="button"
             className="text-sm font-medium text-primary disabled:opacity-40"
@@ -251,6 +291,18 @@ export function RosterBuilder({
                       extraCols: extraCols.map((c) => (c.id === col.id ? { ...c, title: e.target.value } : c)),
                     })
                   }
+                />
+                <Input
+                  className="w-16"
+                  inputMode="decimal"
+                  value={col.max ?? ""}
+                  placeholder={tr("الحد")}
+                  onChange={(e) => {
+                    const max = Number(e.target.value);
+                    onChange({
+                      extraCols: extraCols.map((c) => (c.id === col.id ? { ...c, max: max > 0 ? max : undefined } : c)),
+                    });
+                  }}
                 />
                 <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) removeCol(col.id); }}>
                   {tr("حذف")}
@@ -290,13 +342,25 @@ export function RosterBuilder({
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold">{tr("عرض الأعمدة (مم)")}</p>
-            <p className="text-xs text-fg-muted">{tr("اضبط عرض كل عمود قبل الطباعة. الحد الأدنى 8 مم والأقصى 80 مم.")}</p>
+            <p className="text-sm font-semibold">{tr("تنسيق الجدول")}</p>
+            <p className="text-xs text-fg-muted">{tr("عرض العمود وارتفاع الصف وترتيب الأعمدة. الحد الأعلى يُكتب تحت اسم العمود في الكشف.")}</p>
           </div>
           <button type="button" className="text-sm font-medium text-primary" onClick={resetWidths}>
             إعادة المقاسات الافتراضية
           </button>
         </div>
+        <label className="mt-3 flex max-w-xs items-center gap-2 text-sm">
+          <span className="shrink-0 font-medium">{tr("ارتفاع الصف")}</span>
+          <Input
+            type="number"
+            min={4}
+            max={16}
+            value={rowMm}
+            onChange={(e) => onRowMm(Math.min(16, Math.max(4, Number(e.target.value) || 7)))}
+          />
+          <span className="text-xs text-fg-muted">{tr("مم")}</span>
+        </label>
+        <p className="mt-1 text-xs text-fg-muted">{tr("صغّر ارتفاع الصف ليظهر الكشف في صفحة واحدة عند زيادة الطلاب.")}</p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {cols.map((col) => (
             <label key={col.id} className="space-y-1 text-xs text-fg-muted">
@@ -316,6 +380,7 @@ export function RosterBuilder({
         </div>
       </div>
 
+      {layoutOnly ? null : (
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
         <p className="text-sm font-semibold">{tr("حفظ القالب باسم")}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -377,9 +442,10 @@ export function RosterBuilder({
           </ul>
         ) : null}
       </div>
+      )}
 
       <div className="rounded-[var(--radius-lg)] border border-border bg-card p-4">
-        <p className="mb-2 text-sm font-semibold">{tr("ترتيب الأعمدة")}</p>
+        <p className="mb-2 text-sm font-semibold">{tr("ترتيب الأعمدة وتقديمها")}</p>
         <div className="flex flex-wrap justify-end gap-2">
           {cols.map((col, i) => (
             <div

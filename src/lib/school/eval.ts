@@ -42,7 +42,9 @@ export function shortEvalLabel(label: string) {
 
 export function clampScore(value: number, max: number) {
 	if (!Number.isFinite(value)) return 0;
-	return Math.min(max, Math.max(0, value));
+	const n = Math.max(0, value);
+	if (!max || max <= 0) return n;
+	return Math.min(max, n);
 }
 
 export function scoreBand(percent: number) {

@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
+import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { OfficialLetterhead } from "@/components/print-forms";
+import { GRADE_SHEET_COLUMNS, type ExtraCol } from "@/components/roster-builder";
 import { ExitPermitBadge } from "@/components/exit-permit";
 import { DayName } from "@/components/day-name";
 import {
@@ -33,12 +34,32 @@ import { EVAL_PAIRS, formatPoints, scoreBand, shortEvalLabel } from "@/lib/schoo
 import { parseSubjects, hijriDate, formatStamp } from "@/lib/school/constants";
 import { tr } from "@/lib/school/i18n";
 import { printElement } from "@/lib/school/print";
+import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
+function sheetGrade(value: number) {
+  if (!value) return "";
+  return formatPoints(value);
+}
+
+function isSumColumn(col: { id: string; title?: string }) {
+  const title = (col.title || "").replace(/\s/g, "");
+  return col.id === "total" || title === "المجموع" || title.startsWith("المجموع");
+}
+
+function withinMax(raw: string, max: number) {
+  const text = raw.trim();
+  if (!text) return "";
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0) return null;
+  if (max > 0 && value > max) return null;
+  return text;
+}
+
 type Tab = "eval" | "grades" | "reports" | "cards";
 type PinClass = { id: number; label: string; stageName: string; studentCount: number };
-type EvalCard = { id: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; sortOrder?: number; columnId?: string; isAward?: boolean };
+type EvalCard = { id: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; sortOrder?: number; columnId?: string };
 type EvalStudent = {
   id: number;
   name: string;
@@ -54,37 +75,22 @@ type EvalStudent = {
   total: number;
   positive: number;
   negative: number;
-  absent?: number;
-  late?: number;
-  badges?: number;
-  awards?: { cardId: number; count: number }[];
-  taps?: { label: string; count: number; points: number; isAward?: boolean }[];
-  byPeriod?: PeriodScore[];
-  yearWork?: number;
-  sheetExam?: number;
-  finalTotal?: number;
-  finalExtras?: Record<string, number>;
+  taps?: { label: string; count: number; points: number }[];
 };
 type EvalPayload = {
   class: { label: string; stageName: string };
   subject: string;
-  scale: { tasksMax: number; quizzesMax: number; totalMax: number; finalExamMax?: number };
+  scale: { tasksMax: number; quizzesMax: number; totalMax: number };
   cards: EvalCard[];
   students: EvalStudent[];
 };
-const CLASS_ROSTER_COLUMN_IDS = ["number", "name", "absence", "late", "awards", "tasks", "quizzes", "finalExam", "total", "percent", "grade"] as const;
-type ClassRosterColumnId = (typeof CLASS_ROSTER_COLUMN_IDS)[number];
-
-function isClassRosterColumnId(value: unknown): value is ClassRosterColumnId {
-  return typeof value === "string" && CLASS_ROSTER_COLUMN_IDS.some((columnId) => columnId === value);
-}
 
 export function TeacherStudio() {
   const { classes, staff } = useWorkspace();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<number[] | null>(null);
-  const [classId, setClassId] = useState<number | null>(null);
   const pins = useQuery({ queryKey: ["teacher-pins"], queryFn: () => getTeacherPins() });
   const savePins = useMutation({
     mutationFn: (classIds: number[]) => setTeacherPins({ data: { classIds } }),
@@ -111,7 +117,7 @@ export function TeacherStudio() {
         <div>
           <h2 className="text-xl font-semibold">{tr("فصولي")}</h2>
           <p className="text-sm text-fg-muted">
-            {tr("تظهر هنا الفصول التي تختارها لمتابعتك وتقييمك. صفحة الفصول خارج المكتب تعرض كل الفصول. المخالفة السلوكية يتخذ إجراءها وكيل شؤون الطلاب.")}
+            {tr("اضغط الفصل للانتقال مباشرة إلى متابعته، والمرحلة والفصل محددان. تنسيق الدرجات من داخل شاشة المتابعة.")}
           </p>
         </div>
         <Button
@@ -156,29 +162,22 @@ export function TeacherStudio() {
           {tr("لم تختر فصولاً بعد. أضف الفصول التي تدرّسها ليظهر كشف المتابعة هنا.")}
         </p>
       ) : (
-        <div className="space-y-2">
-          {mine.map((cls) => {
-            const open = classId === cls.id;
-            return (
-              <div key={cls.id} className={cn("overflow-hidden rounded-[var(--radius-lg)] border", open ? "border-primary" : "border-border")}>
-                <button
-                  type="button"
-                  onClick={() => setClassId(open ? null : cls.id)}
-                  className={cn("flex min-h-10 w-full items-center justify-between gap-2 px-3 py-2 text-right", open ? "bg-primary text-primary-fg" : "bg-card")}
-                >
-                  <span className="min-w-0">
-                    <span className="block font-semibold">{cls.label}</span>
-                    <span className={cn("block text-xs", open ? "text-primary-fg/80" : "text-fg-muted")}>
-                      {cls.stageName} · {cls.studentCount} {tr("طالب")}
-                      {staff.subject ? ` · ${staff.subject}` : ""}
-                    </span>
-                  </span>
-                  <ChevronDown className={cn("size-5 shrink-0 transition", open && "rotate-180")} />
-                </button>
-                {open ? <ClassBoard classId={cls.id} /> : null}
-              </div>
-            );
-          })}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {mine.map((cls) => (
+            <button
+              key={cls.id}
+              type="button"
+              onClick={() => void navigate({ to: "/class/$classId", params: { classId: String(cls.id) }, search: { from: "desk" } })}
+              className="rounded-[var(--radius-lg)] border border-border bg-card px-3 py-2 text-right hover:border-primary"
+            >
+              <span className="block font-semibold">{cls.label}</span>
+              <span className="block text-xs text-fg-muted">
+                {cls.stageName} · {cls.studentCount} {tr("طالب")}
+                {staff.subject ? ` · ${staff.subject}` : ""}
+              </span>
+              <span className="mt-1 inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{tr("متابعة")}</span>
+            </button>
+          ))}
         </div>
       )}
     </section>
@@ -218,8 +217,6 @@ export function ClassBoard({
   const [grantPoints, setGrantPoints] = useState("1");
   const [grantLabel, setGrantLabel] = useState("منح");
   const [grantBucket, setGrantBucket] = useState<"tasks" | "quizzes">("tasks");
-  const [awardManagerOpen, setAwardManagerOpen] = useState(false);
-  const [awardDraft, setAwardDraft] = useState("");
   const [draftLabel, setDraftLabel] = useState("");
   const [draftPoints, setDraftPoints] = useState("1");
   const [draftBucket, setDraftBucket] = useState<"tasks" | "quizzes">("tasks");
@@ -235,9 +232,7 @@ export function ClassBoard({
   const data = query.data as EvalPayload | undefined;
   const students = data?.students ?? [];
   const active = onlyStudentId != null ? [onlyStudentId] : (selected ?? students.map((student) => student.id));
-  const allCards = data?.cards ?? [];
-  const cards = allCards.filter((card) => card.enabled && !card.isAward);
-  const awardCards = allCards.filter((card) => card.isAward);
+  const cards = (data?.cards ?? []).filter((card) => card.enabled);
   const cardRows = pairEvalCards([...cards].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
 
   useEffect(() => {
@@ -264,11 +259,7 @@ export function ClassBoard({
         setSolidIds((prev) => (prev.includes(payload.cardId!) ? prev : [...prev, payload.cardId!]));
       }
       const score = Number(done.points) || 0;
-      if (payload.cardId && data?.cards.some((card) => card.id === payload.cardId && card.isAward)) {
-        toast.success(`مُنح ${done.label || tr("الوسام")} لـ ${done.count} طالب`);
-      } else {
-        toast.success(`${tr("سُجّل")} ${done.label || tr("التقييم")} ${score > 0 ? "+" : ""}${score}`);
-      }
+      toast.success(`${tr("سُجّل")} ${done.label || tr("التقييم")} ${score > 0 ? "+" : ""}${score}`);
       refresh();
       void queryClient.invalidateQueries({ queryKey: ["class"] });
       void queryClient.invalidateQueries({ queryKey: ["follow-ledger"] });
@@ -312,11 +303,10 @@ export function ClassBoard({
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الترتيب")),
   });
   const saveCard = useMutation({
-    mutationFn: (payload: { id?: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled?: boolean; columnId?: string; isAward?: boolean }) =>
+    mutationFn: (payload: { id?: number; label: string; points: number; bucket: "tasks" | "quizzes"; enabled?: boolean; columnId?: string }) =>
       saveEvalCard({ data: payload }),
-    onSuccess: (_result, payload) => {
-      if (!payload.isAward && !payload.id) setDraftLabel("");
-      if (payload.isAward && !payload.id) setAwardDraft("");
+    onSuccess: () => {
+      setDraftLabel("");
       refresh();
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
@@ -466,99 +456,6 @@ export function ClassBoard({
             <p className="text-xs text-fg-muted">{tr("اختر الطلاب ثم اضغط البطاقة. الموجب يمين والسالب يسار. هذه درجات تقييم إضافية، وليست درجة السلوك.")}</p>
             </>
             ) : null}
-            <section className="space-y-2 rounded-[var(--radius-md)] border border-amber-300 bg-amber-50/70 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold text-amber-950">🏅 {tr("أوسمة الطلاب")}</h3>
-                  <p className="text-xs text-amber-900/80">{tr("امنح الوسام للطلاب المحددين، أو عدّل أسماء الأوسمة من الإدارة.")}</p>
-                </div>
-                <Button type="button" size="sm" variant="secondary" onClick={() => setAwardManagerOpen((open) => !open)}>
-                  {awardManagerOpen ? tr("إخفاء الإدارة") : tr("إدارة الأوسمة")}
-                </Button>
-              </div>
-              {awardCards.some((card) => card.enabled) ? (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {awardCards.filter((card) => card.enabled).map((card) => {
-                    const count = active.reduce((sum, studentId) => {
-                      const student = students.find((item) => item.id === studentId);
-                      return sum + (student?.awards?.find((award) => award.cardId === card.id)?.count ?? 0);
-                    }, 0);
-                    return (
-                      <div key={card.id} className="flex min-w-0 items-stretch gap-1">
-                        <button
-                          type="button"
-                          disabled={apply.isPending || active.length === 0 || (subjects.length > 1 && !lessonSubject)}
-                          onClick={() => apply.mutate({ cardId: card.id })}
-                          className="flex min-h-10 min-w-0 flex-1 items-center justify-between gap-2 rounded-[var(--radius-md)] border border-amber-400 bg-white px-3 py-2 text-sm font-semibold text-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <span className="truncate">🏅 {card.label}</span>
-                          <span className="shrink-0 text-xs">{count ? `${tr("ممنوح")} ${count}` : tr("منح")}</span>
-                        </button>
-                        {count > 0 ? (
-                          <button
-                            type="button"
-                            disabled={undoLast.isPending}
-                            onClick={() => undoLast.mutate({ cardId: card.id })}
-                            className="shrink-0 rounded-[var(--radius-md)] border border-danger bg-white px-2 text-xs font-semibold text-danger disabled:opacity-50"
-                          >
-                            {tr("إلغاء آخر منح")}
-                          </button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-fg-muted">{tr("لا توجد أوسمة مفعّلة بعد.")}</p>
-              )}
-              {awardManagerOpen ? (
-                <div className="space-y-2 border-t border-amber-200 pt-3">
-                  <p className="text-sm font-medium">{tr("يمكنك تعديل أسماء الأوسمة أو إخفاء ما لا تحتاجه.")}</p>
-                  <div className="space-y-2">
-                    {awardCards.map((card) => (
-                      <div key={card.id} className="flex flex-wrap items-center gap-2">
-                        <Input
-                          className="min-w-48 flex-1 bg-white"
-                          key={`${card.id}-${card.label}`}
-                          defaultValue={card.label}
-                          aria-label={`${tr("اسم الوسام")} ${card.label}`}
-                          onBlur={(event) => {
-                            const label = event.target.value.trim();
-                            if (!label || label === card.label) return;
-                            saveCard.mutate({ id: card.id, label, points: 0, bucket: "tasks", enabled: card.enabled, columnId: "", isAward: true });
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={saveCard.isPending}
-                          onClick={() => saveCard.mutate({ id: card.id, label: card.label, points: 0, bucket: "tasks", enabled: !card.enabled, columnId: "", isAward: true })}
-                        >
-                          {card.enabled ? tr("إخفاء") : tr("إظهار")}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      className="min-w-48 flex-1 bg-white"
-                      value={awardDraft}
-                      onChange={(event) => setAwardDraft(event.target.value)}
-                      placeholder={tr("اسم الوسام الجديد")}
-                      aria-label={tr("اسم الوسام الجديد")}
-                    />
-                    <Button
-                      type="button"
-                      disabled={!awardDraft.trim() || saveCard.isPending}
-                      onClick={() => saveCard.mutate({ label: awardDraft.trim(), points: 0, bucket: "tasks", columnId: "", isAward: true })}
-                    >
-                      {tr("إضافة وسام")}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </section>
             <div className="space-y-1">
               {cardRows.map((row, index) => (
                 <div key={index} className="grid grid-cols-2 gap-1">
@@ -729,7 +626,7 @@ export function ClassBoard({
               </div>
             </div>
             <ul className="space-y-2">
-              {[...data.cards].filter((card) => !card.isAward).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((card, index, list) => {
+              {[...data.cards].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((card, index, list) => {
                 const periods = (data as { periods?: PeriodPlan[] }).periods ?? [];
                 const open = periods.find((period) => !period.closed) ?? periods[0];
                 const columns = open?.columns ?? [];
@@ -1556,16 +1453,19 @@ function GradeSummary({
 }
 export function ClassRecords({
   classId,
+  mergeClassIds,
   presetSubject,
   view,
   printTick,
 }: {
   classId: number;
+  mergeClassIds?: number[];
   presetSubject?: string;
   view: "year" | "analysis" | "attendance" | "summary" | "roster";
   printTick: number;
 }) {
   const { school, staff } = useWorkspace();
+  const classFollow = staffCan(staff, "viewClassFollow");
   const subjects = parseSubjects(staff.subject);
   const subject = presetSubject && subjects.includes(presetSubject) ? presetSubject : subjects.length === 1 ? subjects[0] : "";
   const printRef = useRef<HTMLDivElement>(null);
@@ -1575,72 +1475,103 @@ export function ClassRecords({
   const [drafts, setDrafts] = useState<Record<string, { participation: string; exam: string; extras: Record<string, string> }>>({});
   const [bulkTasks, setBulkTasks] = useState("");
   const [bulkExam, setBulkExam] = useState("");
-  const [visibleRosterColumns, setVisibleRosterColumns] = useState<ClassRosterColumnId[]>([...CLASS_ROSTER_COLUMN_IDS]);
-  const [loadedRosterColumnsKey, setLoadedRosterColumnsKey] = useState("");
-  const query = useQuery({
-    queryKey: ["class-eval", classId, subject],
-    queryFn: () => getClassEval({ data: { classId, subject: subject || undefined } }),
+  const [gradeShape, setGradeShape] = useState<"record" | "blank">("record");
+  const [gradeLayoutOpen, setGradeLayoutOpen] = useState(false);
+  const [recordLayoutOpen, setRecordLayoutOpen] = useState(false);
+  const [recordRow, setRecordRow] = useState(8);
+  const [nameMm, setNameMm] = useState(46);
+  const [colMm, setColMm] = useState(16);
+  const [nameFont, setNameFont] = useState(13);
+  const [bulkByCol, setBulkByCol] = useState<Record<string, string>>({});
+  const [cellWarn, setCellWarn] = useState<Record<string, string>>({});
+  const [blankMarks, setBlankMarks] = useState<Record<string, string>>({});
+  const [finalLive, setFinalLive] = useState<Record<string, string>>({});
+  const [showTeacherSign, setShowTeacherSign] = useState(true);
+  const [showPrincipalSign, setShowPrincipalSign] = useState(true);
+  const [sheetTitle, setSheetTitle] = useState("");
+  const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
+  const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
+  const [gradeRow, setGradeRow] = useState(8);
+  const sheetIds = mergeClassIds?.length ? mergeClassIds : [classId];
+  const sheetQueries = useQueries({
+    queries: sheetIds.map((id) => ({
+      queryKey: ["class-eval", id, subject],
+      queryFn: () => getClassEval({ data: { classId: id, subject: subject || undefined } }),
+    })),
   });
-  const data = query.data as (EvalPayload & {
+  const pending = sheetQueries.some((item) => item.isPending);
+  type SheetPart = EvalPayload & {
     openPeriod?: number | null;
     combine?: "sum" | "avg";
     periods?: PeriodPlan[];
-    students: (EvalStudent & { byPeriod?: PeriodScore[]; yearWork?: number; sheetExam?: number; finalTotal?: number; finalExtras?: Record<string, number> })[];
-  }) | undefined;
-  const activeSubject = subject || data?.subject || undefined;
-  const rosterColumnsKey = `class-roster-columns:${staff.userId}:${classId}:${activeSubject ?? ""}`;
-  const rosterColumnOptions: { id: ClassRosterColumnId; label: string }[] = [
-    { id: "number", label: tr("م") },
-    { id: "name", label: tr("اسم الطالب") },
-    { id: "absence", label: tr("الغياب") },
-    { id: "late", label: tr("التأخر") },
-    { id: "awards", label: tr("الأوسمة") },
-    { id: "tasks", label: `${tr("المهام الأدائية والمشاركة والتفاعل")} (${formatPoints(data?.scale.tasksMax ?? 40)})` },
-    { id: "quizzes", label: `${tr("تقويمات شفهية وتحريرية")} (${formatPoints(data?.scale.quizzesMax ?? 20)})` },
-    { id: "finalExam", label: `${tr("الاختبار النهائي")} (${formatPoints(data?.scale.finalExamMax ?? 40)})` },
-    { id: "total", label: `${tr("المجموع")} (${formatPoints(data?.scale.totalMax ?? 100)})` },
-    { id: "percent", label: tr("النسبة") },
-    { id: "grade", label: tr("التقدير") },
-  ];
-  const effectiveRosterColumns = loadedRosterColumnsKey === rosterColumnsKey ? visibleRosterColumns : [...CLASS_ROSTER_COLUMN_IDS];
-  const isRosterColumnVisible = (id: ClassRosterColumnId) => effectiveRosterColumns.includes(id);
+    students: (EvalStudent & { classId?: number; byPeriod?: PeriodScore[]; yearWork?: number; sheetExam?: number; finalTotal?: number; finalExtras?: Record<string, number> })[];
+  };
+  const parts = sheetIds.flatMap((id, index) => {
+    const part = sheetQueries[index]?.data as SheetPart | undefined;
+    return part ? [{ id, part }] : [];
+  });
+  const first = parts[0]?.part;
+  const data = first ? {
+    ...first,
+    class: sheetIds.length > 1 ? { label: first.class.stageName || first.class.label, stageName: first.class.stageName } : first.class,
+    students: parts.flatMap(({ id, part }) => part.students.map((student) => ({ ...student, classId: id }))),
+  } : undefined;
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
-  useEffect(() => {
-    let next = [...CLASS_ROSTER_COLUMN_IDS];
-    try {
-      const stored = window.localStorage.getItem(rosterColumnsKey);
-      if (stored !== null) {
-        const parsed: unknown = JSON.parse(stored);
-        if (!Array.isArray(parsed)) throw new Error("Invalid roster column preference");
-        next = [...new Set(parsed.filter(isClassRosterColumnId))];
-      }
-    } catch {
-      toast.error(tr("تعذر تحميل تفضيلات الأعمدة"));
-    }
-    setVisibleRosterColumns(next);
-    setLoadedRosterColumnsKey(rosterColumnsKey);
-  }, [rosterColumnsKey]);
-  useEffect(() => {
-    if (loadedRosterColumnsKey !== rosterColumnsKey) return;
-    try {
-      window.localStorage.setItem(rosterColumnsKey, JSON.stringify(visibleRosterColumns));
-    } catch {
-      toast.error(tr("تعذر حفظ تفضيلات الأعمدة"));
-    }
-  }, [loadedRosterColumnsKey, rosterColumnsKey, visibleRosterColumns]);
+  function acceptGrade(raw: string, max: number, id: string) {
+    const next = withinMax(raw, max);
+    setCellWarn((prev) => {
+      const copy = { ...prev };
+      if (next === null && raw.trim()) copy[id] = `أعلى من ${formatPoints(max)}`;
+      else delete copy[id];
+      return copy;
+    });
+    return next;
+  }
   useEffect(() => {
     if (data?.openPeriod) setPeriodNo(data.openPeriod);
   }, [data?.openPeriod]);
+  useEffect(() => {
+    if (!data?.class) return;
+    const year = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date());
+    const saved = localStorage.getItem(`grade-title:${classId}:${subject}`);
+    setSheetTitle(saved || `كشف أعمال السنة لمادة ${data.subject || "…"} للفصل ${data.class.label} الفصل الدراسي الأول للعام ${year}`);
+    const raw = localStorage.getItem(`grade-margins:${classId}:${subject}`);
+    if (raw) {
+      try { setSheetMargins(JSON.parse(raw)); } catch { /* keep school margins */ }
+    } else if (school.printMargins) setSheetMargins(school.printMargins);
+    const marks: Record<string, string> = {};
+    for (const id of sheetIds) {
+      try {
+        const savedMarks = localStorage.getItem(`grade-marks:${id}:${subject}`);
+        if (savedMarks) Object.assign(marks, JSON.parse(savedMarks));
+      } catch { /* keep empty */ }
+    }
+    setBlankMarks(marks);
+    if (data.students?.length) {
+      for (const id of sheetIds) {
+        const slice: Record<string, string> = {};
+        for (const student of data.students) {
+          if ((student.classId || classId) !== id) continue;
+          for (const [key, value] of Object.entries(marks)) {
+            if (key.startsWith(`${student.id}:`)) slice[key] = value;
+          }
+        }
+        if (Object.keys(slice).length) localStorage.setItem(`grade-marks:${id}:${subject}`, JSON.stringify(slice));
+      }
+    }
+    setShowTeacherSign(localStorage.getItem(`grade-sign-teacher:${classId}`) !== "0");
+    setShowPrincipalSign(localStorage.getItem(`grade-sign-principal:${classId}`) !== "0");
+  }, [classId, subject, data?.class?.label, data?.subject, sheetIds.join(",")]);
   const seenPrint = useRef(0);
   useEffect(() => {
-    if (!printTick || printTick === seenPrint.current || query.isPending || !printRef.current) return;
+    if (!printTick || printTick === seenPrint.current || pending || !printRef.current) return;
     seenPrint.current = printTick;
     printElement(printRef.current);
-  }, [printTick, query.isPending, data]);
+  }, [printTick, pending, data]);
   const closePeriod = useMutation({
-    mutationFn: (closed: boolean) => setPeriodClosed({ data: { no: selected?.no ?? 1, closed, subject: activeSubject } }),
+    mutationFn: (closed: boolean) => setPeriodClosed({ data: { no: selected?.no ?? 1, closed, subject: subject || undefined } }),
     onSuccess: () => {
       const closing = selected ? !selected.closed : true;
       if (closing && selected) {
@@ -1653,16 +1584,16 @@ export function ClassRecords({
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تحديث الفترة")),
   });
   const save = useMutation({
-    mutationFn: (payload: { studentId: number; participation: number; exam: number; extras?: Record<string, number> }) =>
-      savePeriodMark({ data: { classId, periodNo: selected?.no ?? 1, subject: activeSubject, ...payload } }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }),
+    mutationFn: (payload: { studentId: number; classId?: number; participation: number; exam: number; extras?: Record<string, number> }) =>
+      savePeriodMark({ data: { classId: payload.classId || classId, periodNo: selected?.no ?? 1, subject: data?.subject || subject || undefined, ...payload } }),
+    onSuccess: (_result, payload) => void queryClient.invalidateQueries({ queryKey: ["class-eval", payload.classId || classId] }),
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الدرجة")),
   });
   const savePlan = useMutation({
     mutationFn: (next: { periods: PeriodPlan[]; combine: "sum" | "avg" }) =>
       saveSubjectPlan({
         data: {
-          subject: activeSubject,
+          subject: subject || data?.subject || undefined,
           combine: next.combine,
           periods: next.periods.map((period) => ({
             title: period.title,
@@ -1688,20 +1619,55 @@ export function ClassRecords({
       if (raw.trim() === "" || Number.isNaN(value)) throw new Error("اكتب الدرجة أولاً");
       for (const student of data.students) {
         const score = student.byPeriod?.find((period) => period.no === selected?.no);
-        const extras = { ...(score?.extras ?? {}) };
+        const extras = which === "finalExam" ? { ...(student.finalExtras ?? {}) } : { ...(score?.extras ?? {}) };
+        if (which === "finalExam") {
+          const caps = (data as { finalColumns?: { id: string; title: string; max: number }[] }).finalColumns ?? [];
+          const limit = Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40;
+          if (caps.length) {
+            if (caps.length * value > limit) throw new Error(`مجموع أجزاء الاختبار أعلى من ${limit}`);
+            for (const column of caps) {
+              if (Number(column.max) > 0 && value > Number(column.max)) throw new Error(`الدرجة أعلى من حد ${column.title} (${column.max})`);
+              extras[column.id] = value;
+            }
+          } else if (value > limit) throw new Error(`الحد الأعلى للاختبار النهائي هو ${limit}`);
+        }
+        if (which === "tasks") {
+          const taskColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks");
+          if (taskColumns.length) {
+            const sum = taskColumns.length * value;
+            if ((selected?.tasksMax ?? 0) > 0 && sum > (selected?.tasksMax ?? 0)) throw new Error(`مجموع الأعمدة أعلى من أعمال السنة (${selected?.tasksMax})`);
+            for (const column of taskColumns) {
+              const cap = Number(column.max) || 0;
+              if (cap > 0 && value > cap) throw new Error(`الدرجة أعلى من حد ${column.title} (${cap})`);
+              extras[column.id] = value;
+            }
+          } else if ((selected?.tasksMax ?? 0) > 0 && value > (selected?.tasksMax ?? 0)) {
+            throw new Error(`الحد الأعلى لأعمال السنة هو ${selected?.tasksMax}`);
+          }
+        }
         if (which === "periodExam") {
           const examColumns = (selected?.columns ?? []).filter((column) => column.group === "exam");
-          examColumns.forEach((column, index) => { extras[column.id] = index === 0 ? value : 0; });
+          if (examColumns.length) {
+            const sum = examColumns.length * value;
+            if ((selected?.examMax ?? 0) > 0 && sum > (selected?.examMax ?? 0)) throw new Error(`مجموع أعمدة الاختبار أعلى من حد الفترة (${selected?.examMax})`);
+            for (const column of examColumns) {
+              const cap = Number(column.max) || 0;
+              if (cap > 0 && value > cap) throw new Error(`الدرجة أعلى من حد ${column.title} (${cap})`);
+              extras[column.id] = value;
+            }
+          } else if ((selected?.examMax ?? 0) > 0 && value > (selected?.examMax ?? 0)) {
+            throw new Error(`الحد الأعلى لاختبار الفترة هو ${selected?.examMax}`);
+          }
         }
         await savePeriodMark({
           data: {
-            classId,
+            classId: student.classId || classId,
             periodNo: which === "finalExam" ? 0 : (selected?.no ?? 1),
-            subject: activeSubject,
+            subject: data.subject || subject || undefined,
             studentId: student.id,
             participation: which === "tasks" ? value : score?.participation ?? 0,
             exam: which === "tasks" ? score?.exam ?? 0 : value,
-            extras: which === "finalExam" ? {} : extras,
+            extras,
           },
         });
       }
@@ -1715,7 +1681,7 @@ export function ClassRecords({
         });
       }
       toast.success(tr("وُزعت الدرجة على كل الطلاب"));
-      void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
+      void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر توزيع الدرجة")),
   });
@@ -1755,9 +1721,9 @@ export function ClassRecords({
         if (tasks == null && exam == null && grade == null) continue;
         await savePeriodMark({
           data: {
-            classId,
+            classId: student.classId || classId,
             periodNo: selected.no,
-            subject: activeSubject,
+            subject: subject || undefined,
             studentId: student.id,
             participation: tasks ?? grade ?? score?.participation ?? 0,
             exam: exam ?? score?.exam ?? 0,
@@ -1768,13 +1734,13 @@ export function ClassRecords({
         const exam = numberAt(finalExamAt);
         if (exam == null) continue;
         await savePeriodMark({
-          data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam },
+          data: { classId: student.classId || classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam },
         });
       } else {
         const exam = numberAt(finalExamAt) ?? numberAt(gradeAt);
         if (exam == null) continue;
         await savePeriodMark({
-          data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam },
+          data: { classId: student.classId || classId, periodNo: 0, subject: subject || undefined, studentId: student.id, participation: 0, exam },
         });
       }
       applied += 1;
@@ -1783,7 +1749,7 @@ export function ClassRecords({
     toast.success(missed ? `حُمّلت ${applied} درجة، ولم يُطابق ${missed}` : `تم استيراد ${applied} درجة`);
     void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
   }
-  if (query.isPending) return <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>;
+  if (pending && !data) return <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>;
   if (!data) return <p className="text-danger">{tr("تعذر تحميل الكشف")}</p>;
   const gradeRows = () => {
     if (sheetMode === "exam") {
@@ -1824,7 +1790,91 @@ export function ClassRecords({
     holder.innerHTML = `<h2 style="text-align:center">${label}</h2><table style="width:100%;border-collapse:collapse"><thead><tr>${heads.map((head) => `<th style="border:1px solid #000;padding:4px">${head}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${heads.map((head) => `<td style="border:1px solid #000;padding:4px;text-align:center">${row[head as keyof typeof row] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
     printElement(holder);
   }
+  async function applyRecordColumn(col: { id: string; title: string; max: number; kind: "participation" | "exam" | "extra" }) {
+    if (!data || !selected || selected.closed) return;
+    const raw = bulkByCol[col.id] ?? "";
+    const next = acceptGrade(raw, col.max, `bulk:${col.id}`);
+    if (next === null || next === "") {
+      if (next === "") toast.error(tr("اكتب الدرجة أولاً"));
+      return;
+    }
+    const value = Number(next) || 0;
+    const written: typeof drafts = {};
+    let failed = 0;
+    for (const student of data.students) {
+      const score = student.byPeriod?.find((period) => period.no === selected.no);
+      const key = `${student.id}:${selected.no}`;
+      const current = drafts[key] ?? {
+        participation: String(score?.participation ?? 0),
+        exam: String(score?.exam ?? 0),
+        extras: Object.fromEntries((selected.columns ?? []).map((column) => [column.id, String(score?.extras?.[column.id] ?? 0)])),
+      };
+      const updated = {
+        participation: col.kind === "participation" ? next : current.participation,
+        exam: col.kind === "exam" ? next : current.exam,
+        extras: { ...current.extras, ...(col.kind === "extra" ? { [col.id]: next } : {}) },
+      };
+      written[key] = updated;
+      try {
+        await savePeriodMark({
+          data: {
+            classId: student.classId || classId,
+            periodNo: selected.no,
+            subject: data.subject || subject || undefined,
+            studentId: student.id,
+            participation: Number(updated.participation) || 0,
+            exam: Number(updated.exam) || 0,
+            extras: Object.fromEntries(Object.entries(updated.extras).map(([id, item]) => [id, Number(item) || 0])),
+          },
+        });
+      } catch {
+        failed += 1;
+      }
+    }
+    setDrafts((prev) => ({ ...prev, ...written }));
+    if (failed) toast.error(tr(`تعذر حفظ ${failed} طالب`));
+    else toast.success(tr("وُزعت الدرجة على كل الطلاب وحُفظت في فصولهم"));
+    void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
+  }
+  function storeBlank(marks: Record<string, string>) {
+    const ids = sheetIds.length ? sheetIds : [classId];
+    for (const id of ids) {
+      const slice: Record<string, string> = {};
+      for (const student of data?.students ?? []) {
+        if ((student.classId || classId) !== id) continue;
+        for (const col of gradeCols) {
+          const key = `${student.id}:${col.id}`;
+          if (marks[key] != null) slice[key] = marks[key];
+        }
+      }
+      localStorage.setItem(`grade-marks:${id}:${subject}`, JSON.stringify(slice));
+    }
+  }
+  function applyBlankColumn(col: ExtraCol) {
+    if (!data) return;
+    const raw = bulkByCol[col.id] ?? "";
+    const next = acceptGrade(raw, Number(col.max) || 0, `bulk:${col.id}`);
+    if (next === null || next === "") {
+      if (next === "") toast.error(tr("اكتب الدرجة أولاً"));
+      return;
+    }
+    setBlankMarks((prev) => {
+      const marks = { ...prev };
+      for (const student of data.students) marks[`${student.id}:${col.id}`] = next;
+      storeBlank(marks);
+      return marks;
+    });
+    toast.success(tr("وُزعت الدرجة على كل الطلاب"));
+  }
   const title = view === "year" ? "كشف أعمال السنة" : view === "analysis" ? "تحليل النتائج" : "تقرير الحضور";
+  const taskColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks");
+  const examColumns = (selected?.columns ?? []).filter((column) => column.group === "exam");
+  const evalColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "eval");
+  const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + (classFollow ? 1 : 0) + 1;
+  const widthTotal = 10 + nameMm + gradeSlots * colMm;
+  const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
+  const blankSum = 12 + nameMm + gradeCols.reduce((sum, col) => sum + (Number(col.width) || 18), 0);
+  const blankPct = (mm: number) => `${Math.round((mm / Math.max(blankSum, 1)) * 1000) / 10}%`;
   return (
     <div className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">
       {view === "year" && periods.length ? (
@@ -1863,22 +1913,36 @@ export function ClassRecords({
           ) : null}
         </div>
       ) : null}
-      {view === "year" && sheetMode === "period" && selected && !selected.closed ? (
-        <div className="no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
-          <label className="space-y-1 text-sm">
-            <span>{tr("أعمال السنة للكل")}</span>
-            <Input className="w-28" inputMode="decimal" value={bulkTasks} onChange={(event) => setBulkTasks(event.target.value)} placeholder={tr("الدرجة")} />
-          </label>
-          <Button type="button" size="sm" disabled={applyAll.isPending} onClick={() => applyAll.mutate("tasks")}>{tr("للكل")}</Button>
-          <label className="space-y-1 text-sm">
-            <span>{tr("اختبار الفترة للكل")}</span>
-            <Input className="w-28" inputMode="decimal" value={bulkExam} onChange={(event) => setBulkExam(event.target.value)} placeholder={tr("الدرجة")} />
-          </label>
-          <Button type="button" size="sm" disabled={applyAll.isPending} onClick={() => applyAll.mutate("periodExam")}>{tr("للكل")}</Button>
+      {view === "year" && gradeShape === "blank" ? (
+        <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+          {gradeCols.filter((col) => !isSumColumn(col)).map((col) => (
+            <label key={col.id} className="space-y-1 text-sm">
+              <span>{col.title || tr("عمود")} {tr("للكل")}</span>
+              <span className="flex items-center gap-1">
+                <Input className="w-20" inputMode="decimal" value={bulkByCol[col.id] ?? ""} placeholder={col.max ? String(col.max) : tr("الدرجة")} onChange={(event) => setBulkByCol((prev) => ({ ...prev, [col.id]: event.target.value }))} />
+                <Button type="button" size="sm" onClick={() => applyBlankColumn(col)}>{tr("للكل")}</Button>
+              </span>
+              {cellWarn[`bulk:${col.id}`] ? <span className="grade-warn">{cellWarn[`bulk:${col.id}`]}</span> : null}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      {view === "year" && gradeShape !== "blank" && sheetMode === "period" && selected && !selected.closed ? (
+        <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+          {(taskColumns.length ? taskColumns.map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.tasksMax, kind: "extra" as const })) : [{ id: "tasks", title: tr("أعمال السنة"), max: selected.tasksMax, kind: "participation" as const }]).concat(examColumns.length ? examColumns.map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.examMax, kind: "extra" as const })) : [{ id: "exam", title: tr("اختبار الفترة"), max: selected.examMax, kind: "exam" as const }]).map((col) => (
+            <label key={col.id} className="space-y-1 text-sm">
+              <span>{col.title} {tr("للكل")}</span>
+              <span className="flex items-center gap-1">
+                <Input className="w-20" inputMode="decimal" value={bulkByCol[col.id] ?? ""} placeholder={col.max ? String(col.max) : tr("الدرجة")} onChange={(event) => setBulkByCol((prev) => ({ ...prev, [col.id]: event.target.value }))} />
+                <Button type="button" size="sm" disabled={applyAll.isPending} onClick={() => void applyRecordColumn(col).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر توزيع الدرجة")))}>{tr("للكل")}</Button>
+              </span>
+              {cellWarn[`bulk:${col.id}`] ? <span className="grade-warn">{cellWarn[`bulk:${col.id}`]}</span> : null}
+            </label>
+          ))}
         </div>
       ) : null}
       {view === "year" && sheetMode === "exam" ? (
-        <div className="no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+        <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
           <label className="space-y-1 text-sm">
             <span>{tr("اختبار نهاية السنة للكل")}</span>
             <Input className="w-28" inputMode="decimal" value={bulkExam} onChange={(event) => setBulkExam(event.target.value)} placeholder={tr("الدرجة")} />
@@ -1888,8 +1952,21 @@ export function ClassRecords({
       ) : null}
       {view === "year" ? (
         <div className="no-print flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setGradeShape("record")} className={cn("min-h-8 rounded-full border px-3 text-sm font-semibold", gradeShape === "record" ? "border-primary bg-primary/10 text-primary" : "border-border")}>{tr("الكشف الحالي")}</button>
+          <button type="button" onClick={() => setGradeShape("blank")} className={cn("min-h-8 rounded-full border px-3 text-sm font-semibold", gradeShape === "blank" ? "border-primary bg-primary/10 text-primary" : "border-border")}>{tr("كشف الدرجات")}</button>
+          {gradeShape === "record" ? (
+            <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setRecordLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
+          ) : null}
           <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("xlsx")}>{tr("تصدير إكسل")}</Button>
           <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("pdf")}>{tr("تصدير PDF")}</Button>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input type="checkbox" checked={showTeacherSign} onChange={(event) => { setShowTeacherSign(event.target.checked); localStorage.setItem(`grade-sign-teacher:${classId}`, event.target.checked ? "1" : "0"); }} />
+            {tr("اسم المعلم")}
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input type="checkbox" checked={showPrincipalSign} onChange={(event) => { setShowPrincipalSign(event.target.checked); localStorage.setItem(`grade-sign-principal:${classId}`, event.target.checked ? "1" : "0"); }} />
+            {tr("اسم المدير")}
+          </label>
           <label className="text-sm">
               <span className="me-2">{tr("استيراد إكسل")}</span>
               <input
@@ -1906,11 +1983,191 @@ export function ClassRecords({
             </label>
         </div>
       ) : null}
+      {view === "year" && gradeShape === "record" && recordLayoutOpen ? (
+        <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <label className="space-y-1 text-sm">
+            <span>{tr("ارتفاع الصف")}</span>
+            <Input className="w-20" type="number" min={5} max={16} value={recordRow} onChange={(event) => setRecordRow(Math.min(16, Math.max(5, Number(event.target.value) || 8)))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>{tr("عرض الاسم")}</span>
+            <Input className="w-20" type="number" min={24} max={80} value={nameMm} onChange={(event) => setNameMm(Math.min(80, Math.max(24, Number(event.target.value) || 46)))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>{tr("حجم خط الاسم")}</span>
+            <Input className="w-20" type="number" min={10} max={22} value={nameFont} onChange={(event) => setNameFont(Math.min(22, Math.max(10, Number(event.target.value) || 13)))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>{tr("عرض عمود الدرجة")}</span>
+            <Input className="w-20" type="number" min={10} max={40} value={colMm} onChange={(event) => setColMm(Math.min(40, Math.max(10, Number(event.target.value) || 16)))} />
+          </label>
+          {([["top", "أعلى"], ["bottom", "أسفل"], ["right", "يمين"], ["left", "يسار"]] as const).map(([key, label]) => (
+            <label key={key} className="space-y-1 text-sm">
+              <span>{tr("هامش")} {label}</span>
+              <Input className="w-20" type="number" min={0} max={40} value={sheetMargins[key]} onChange={(event) => {
+                const next = { ...sheetMargins, [key]: Math.min(40, Math.max(0, Number(event.target.value) || 0)) };
+                setSheetMargins(next);
+                localStorage.setItem(`grade-margins:${classId}:${subject}`, JSON.stringify(next));
+              }} />
+            </label>
+          ))}
+          <Button type="button" size="sm" onClick={() => setRecordLayoutOpen(false)}>{tr("حفظ")}</Button>
+        </div>
+      ) : null}
+      {view === "year" && gradeShape === "blank" ? (
+        <div className="no-print">
+          <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setGradeLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
+          {gradeLayoutOpen ? (
+        <div className="mt-2 space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <p className="text-xs text-fg-muted">{tr("الخانات فارغة للتعبئة اليدوية. عدّل اسم العمود وحدّه الأعلى وعرضه، وقدّمه أو أخّره.")}</p>
+          <label className="flex max-w-xs items-center gap-2 text-sm">
+            <span>{tr("ارتفاع الصف")}</span>
+            <Input type="number" min={4} max={16} value={gradeRow} onChange={(event) => setGradeRow(Math.min(16, Math.max(4, Number(event.target.value) || 8)))} />
+            <span className="text-xs text-fg-muted">{tr("مم")}</span>
+          </label>
+          <label className="flex max-w-xs items-center gap-2 text-sm">
+            <span>{tr("حجم خط الاسم")}</span>
+            <Input className="w-20" type="number" min={10} max={22} value={nameFont} onChange={(event) => setNameFont(Math.min(22, Math.max(10, Number(event.target.value) || 13)))} />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {([["top", "أعلى"], ["bottom", "أسفل"], ["right", "يمين"], ["left", "يسار"]] as const).map(([key, label]) => (
+              <label key={key} className="space-y-1 text-sm">
+                <span>{tr("هامش")} {label}</span>
+                <Input className="w-20" type="number" min={0} max={40} value={sheetMargins[key]} onChange={(event) => {
+                  const next = { ...sheetMargins, [key]: Math.min(40, Math.max(0, Number(event.target.value) || 0)) };
+                  setSheetMargins(next);
+                  localStorage.setItem(`grade-margins:${classId}:${subject}`, JSON.stringify(next));
+                }} />
+              </label>
+            ))}
+          </div>
+          <ul className="space-y-2">
+            {gradeCols.map((col, index) => (
+              <li key={col.id} className="flex flex-wrap items-center gap-2">
+                <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
+                <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
+                <Input className="w-16" type="number" min={8} max={80} value={col.width} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, width: Math.min(80, Math.max(8, Number(event.target.value) || 18)) } : item))} />
+                <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
+                  const next = [...gradeCols];
+                  const [item] = next.splice(index, 1);
+                  next.splice(index - 1, 0, item);
+                  setGradeCols(next);
+                }}>{tr("تقديم")}</button>
+                <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setGradeCols(gradeCols.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="text-sm font-medium text-primary" onClick={() => setGradeCols([...gradeCols, { id: `c${Date.now()}`, title: "", width: 18 }])}>{tr("إضافة عمود")}</button>
+          <Button type="button" size="sm" onClick={() => setGradeLayoutOpen(false)}>{tr("حفظ")}</Button>
+        </div>
+          ) : null}
+        </div>
+      ) : null}
       {view === "year" && sheetMode === "period" && selected?.closed ? (
         <p className="rounded-[var(--radius-md)] bg-muted px-3 py-2 text-sm">{tr("الفترة مغلقة والكشف ثابت. أعد فتحها إذا أردت التعديل.")}</p>
       ) : null}
-      <div ref={printRef} className="rounded-[var(--radius-md)] border border-border bg-white p-4 text-black">
+      {view === "year" ? (
+        <div className="grade-phone">
+          {data.students.map((student, index) => {
+            const score = student.byPeriod?.find((period) => period.no === selected?.no) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0, extras: {} as Record<string, number> };
+            const key = `${student.id}:${selected?.no ?? 1}`;
+            const draft = drafts[key] ?? {
+              participation: String(score.participation ?? 0),
+              exam: String(score.exam ?? 0),
+              extras: Object.fromEntries((selected?.columns ?? []).map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
+            };
+            const persist = (next = draft) => save.mutate({
+              studentId: student.id,
+              classId: student.classId,
+              participation: Number(next.participation) || 0,
+              exam: Number(next.exam) || 0,
+              extras: Object.fromEntries(Object.entries(next.extras).map(([id, value]) => [id, Number(value) || 0])),
+            });
+            const box = (label: string, value: string, warnId: string, disabled: boolean, change: (value: string) => void, blur: (value: string) => void) => (
+              <label key={warnId} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
+                <span className="min-w-0 text-sm">{label}</span>
+                <span className="flex flex-col items-end">
+                  <Input className="h-11 w-24 border text-center text-base" inputMode="decimal" value={value === "0" ? "" : value} placeholder="0" disabled={disabled} onChange={(event) => change(event.target.value)} onBlur={(event) => blur(event.target.value)} />
+                  {cellWarn[warnId] ? <span className="grade-warn">{cellWarn[warnId]}</span> : null}
+                </span>
+              </label>
+            );
+            return (
+              <article key={student.id} className="rounded-xl border border-border bg-white p-3">
+                <p className="text-base font-bold leading-6">{index + 1}. {student.name}</p>
+                <div className="mt-2 space-y-2">
+                  {gradeShape === "blank" ? gradeCols.map((col) => isSumColumn(col) ? (
+                    <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(gradeCols.filter((item) => !isSumColumn(item)).reduce((total, item) => total + (Number(blankMarks[`${student.id}:${item.id}`]) || 0), 0))}</span></p>
+                  ) : box(col.title || tr("عمود"), blankMarks[`${student.id}:${col.id}`] ?? "", `${student.id}:${col.id}`, false, (value) => {
+                    const next = acceptGrade(value, Number(col.max) || 0, `${student.id}:${col.id}`);
+                    if (next === null) return;
+                    setBlankMarks((prev) => {
+                      const marks = { ...prev, [`${student.id}:${col.id}`]: next };
+                      storeBlank(marks);
+                      return marks;
+                    });
+                  }, () => undefined)) : null}
+                  {gradeShape !== "blank" && sheetMode === "period" && selected ? (
+                    <>
+                      {taskColumns.length ? taskColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
+                        const next = acceptGrade(value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
+                        if (next === null) return;
+                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                      }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("أعمال السنة")} (${formatPoints(selected.tasksMax)})`, draft.participation, `${key}:tasks`, selected.closed, (value) => {
+                        const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
+                        if (next === null) return;
+                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, participation: next } }));
+                      }, (value) => {
+                        const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
+                        if (next === null) return;
+                        persist({ ...draft, participation: next });
+                      })}
+                      {examColumns.length ? examColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
+                        const next = acceptGrade(value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
+                        if (next === null) return;
+                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                      }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("اختبار الفترة")} (${formatPoints(selected.examMax)})`, draft.exam, `${key}:exam`, selected.closed, (value) => {
+                        const next = acceptGrade(value, selected.examMax, `${key}:exam`);
+                        if (next === null) return;
+                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, exam: next } }));
+                      }, (value) => {
+                        const next = acceptGrade(value, selected.examMax, `${key}:exam`);
+                        if (next === null) return;
+                        persist({ ...draft, exam: next });
+                      })}
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("المجموع")}</span><span>{sheetGrade((taskColumns.length ? taskColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0) : Number(draft.participation) || 0) + (examColumns.length ? examColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0) : Number(draft.exam) || 0))}</span></p>
+                    </>
+                  ) : null}
+                  {gradeShape !== "blank" && sheetMode === "final" ? (
+                    <p className="flex justify-between text-sm"><span>{tr("النتيجة")}</span><span className="font-semibold">{sheetGrade(student.finalTotal ?? 0)}</span></p>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+      <div
+        ref={printRef}
+        className="print-form year-sheet rounded-[var(--radius-md)] border border-border bg-white p-4 text-black"
+        style={{
+          ["--print-margin-top" as string]: `${sheetMargins.top}mm`,
+          ["--print-margin-right" as string]: `${sheetMargins.right}mm`,
+          ["--print-margin-bottom" as string]: `${sheetMargins.bottom}mm`,
+          ["--print-margin-left" as string]: `${sheetMargins.left}mm`,
+        }}
+      >
         <OfficialLetterhead school={school} />
+        {view === "year" ? (
+          <input
+            className="year-title mb-2 w-full border-0 bg-transparent text-center text-[15px] font-semibold outline-none"
+            value={sheetTitle}
+            onChange={(event) => {
+              setSheetTitle(event.target.value);
+              localStorage.setItem(`grade-title:${classId}:${subject}`, event.target.value);
+            }}
+          />
+        ) : null}
         {view === "analysis" || view === "attendance" || view === "summary" || view === "year" || view === "roster" ? null : (
         <h3 className="mb-2 text-center text-lg font-semibold">
           {tr(title)} — {data.class.label}
@@ -1919,18 +2176,18 @@ export function ClassRecords({
           {view === "year" ? ` — ${data.combine === "avg" ? tr("متوسط الفترات") : tr("جمع الفترات")}` : ""}
         </h3>
         )}
-        {view === "year" && selected && sheetMode === "period" ? (
-          <div className="no-print">
-          <table className="grade-equal w-full border-collapse text-sm">
+        {view === "year" && gradeShape !== "blank" && selected && sheetMode === "period" ? (
+          <div className="grade-scroll">
+          <table className="grade-equal grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
             <colgroup>
-              <col className="grade-no" />
-              <col className="grade-name" />
-              {Array.from({ length: ((selected.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks").length || 1) + ((selected.columns ?? []).some((column) => (column.group ?? "eval") === "tasks") ? 1 : 0) + ((selected.columns ?? []).filter((column) => column.group === "exam").length || 1) + ((selected.columns ?? []).some((column) => column.group === "exam") ? 1 : 0) + (selected.columns ?? []).filter((column) => (column.group ?? "eval") === "eval").length + 2 }).map((_, index) => <col key={index} />)}
+              <col style={{ width: colPct(10) }} />
+              <col style={{ width: colPct(nameMm) }} />
+              {Array.from({ length: gradeSlots }).map((_, index) => <col key={index} style={{ width: colPct(colMm) }} />)}
             </colgroup>
             <thead>
               <tr>
                 <th className="border border-black px-2 py-1">{tr("م")}</th>
-                <th className="border border-black px-2 py-1">{tr("اسم الطالب")}</th>
+                <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
                 {(selected.columns ?? []).some((column) => (column.group ?? "eval") === "tasks") ? (
                   <>
                     {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
@@ -1954,53 +2211,78 @@ export function ClassRecords({
                 {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "eval").map((column) => (
                   <th key={column.id} className="border border-black px-2 py-1">{column.title}</th>
                 ))}
-                <th className="border border-black px-2 py-1">{tr("بطاقات المتابعة")}</th>
+                {classFollow ? <th className="border border-black px-2 py-1">{tr("بطاقات المتابعة")}</th> : null}
                 <th className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(selected.tasksMax + selected.examMax)})</th>
               </tr>
             </thead>
             <tbody>
               {data.students.map((student, index) => {
-                const score = student.byPeriod?.find((period) => period.no === selected.no) ?? { participation: 0, exam: 0, evalPoints: 0, extras: {} as Record<string, number>, total: 0 };
+                const score = student.byPeriod?.find((period) => period.no === selected.no) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0 };
                 const key = `${student.id}:${selected.no}`;
                 const draft = drafts[key] ?? {
                   participation: String(score.participation),
                   exam: String(score.exam),
                   extras: Object.fromEntries((selected.columns ?? []).map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
                 };
+                const taskSum = taskColumns.length
+                  ? taskColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
+                  : Number(draft.participation) || 0;
+                const examSum = examColumns.length
+                  ? examColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
+                  : Number(draft.exam) || 0;
+                const extraSum = evalColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0);
+                const periodSum = taskSum + examSum + extraSum + (classFollow ? Number(score.evalPoints) || 0 : 0);
                 const persist = (next = draft) => save.mutate({
                   studentId: student.id,
+                  classId: student.classId,
                   participation: Number(next.participation) || 0,
                   exam: Number(next.exam) || 0,
                   extras: Object.fromEntries(Object.entries(next.extras).map(([id, value]) => [id, Number(value) || 0])),
                 });
                 return (
-                  <tr key={student.id}>
-                    <td className="grade-no border border-black px-1 py-1 text-center">{index + 1}</td>
-                    <td className="grade-name border border-black px-2 py-1 text-right">{student.name}</td>
+                  <tr key={student.id} style={{ height: `${recordRow}mm` }}>
+                    <td className="grade-no border border-black px-1 py-1 text-center" style={{ height: `${recordRow}mm` }}>{index + 1}</td>
+                    <td className="grade-name border border-black px-2 py-1 text-right font-bold" style={{ height: `${recordRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
                     {(selected.columns ?? []).some((column) => (column.group ?? "eval") === "tasks") ? (
                       <>
                         {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
                           <td key={column.id} className="border border-black px-2 py-1">
                             <Input
-                              value={draft.extras[column.id] ?? "0"}
+                              value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
+                              placeholder="0"
                               inputMode="decimal"
                               disabled={selected.closed}
-                              onChange={(event) => setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: event.target.value } } }))}
+                              onChange={(event) => {
+                                const next = acceptGrade(event.target.value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
+                                if (next === null) return;
+                                setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                              }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
+                            {cellWarn[`${key}:${column.id}`] ? <span className="grade-warn no-print">{cellWarn[`${key}:${column.id}`]}</span> : null}
                           </td>
                         ))}
-                        <td className="border border-black px-2 py-1 text-center">{formatPoints(score.participation)}</td>
+                        <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(taskSum)}</td>
                       </>
                     ) : (
                       <td className="border border-black px-2 py-1">
                         <Input
-                          value={draft.participation}
+                          value={draft.participation === "0" ? "" : draft.participation}
+                          placeholder="0"
                           inputMode="decimal"
                           disabled={selected.closed}
-                          onChange={(event) => setDrafts((prev) => ({ ...prev, [key]: { ...draft, participation: event.target.value } }))}
-                          onBlur={(event) => persist({ ...draft, participation: event.target.value })}
+                          onChange={(event) => {
+                            const next = acceptGrade(event.target.value, selected.tasksMax, `${key}:tasks`);
+                            if (next === null) return;
+                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, participation: next } }));
+                          }}
+                          onBlur={(event) => {
+                            const next = acceptGrade(event.target.value, selected.tasksMax, `${key}:tasks`);
+                            if (next === null) return;
+                            persist({ ...draft, participation: next });
+                          }}
                         />
+                        {cellWarn[`${key}:tasks`] ? <span className="grade-warn no-print">{cellWarn[`${key}:tasks`]}</span> : null}
                       </td>
                     )}
                     {(selected.columns ?? []).some((column) => column.group === "exam") ? (
@@ -2008,40 +2290,62 @@ export function ClassRecords({
                         {(selected.columns ?? []).filter((column) => column.group === "exam").map((column) => (
                           <td key={column.id} className="border border-black px-2 py-1">
                             <Input
-                              value={draft.extras[column.id] ?? "0"}
+                              value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
+                              placeholder="0"
                               inputMode="decimal"
                               disabled={selected.closed}
-                              onChange={(event) => setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: event.target.value } } }))}
+                              onChange={(event) => {
+                                const next = acceptGrade(event.target.value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
+                                if (next === null) return;
+                                setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                              }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
+                            {cellWarn[`${key}:${column.id}`] ? <span className="grade-warn no-print">{cellWarn[`${key}:${column.id}`]}</span> : null}
                           </td>
                         ))}
-                        <td className="border border-black px-2 py-1 text-center">{formatPoints(score.exam)}</td>
+                        <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(examSum)}</td>
                       </>
                     ) : (
                       <td className="border border-black px-2 py-1">
                         <Input
-                          value={draft.exam}
+                          value={draft.exam === "0" ? "" : draft.exam}
+                          placeholder="0"
                           inputMode="decimal"
                           disabled={selected.closed}
-                          onChange={(event) => setDrafts((prev) => ({ ...prev, [key]: { ...draft, exam: event.target.value } }))}
-                          onBlur={(event) => persist({ ...draft, exam: event.target.value })}
+                          onChange={(event) => {
+                            const next = acceptGrade(event.target.value, selected.examMax, `${key}:exam`);
+                            if (next === null) return;
+                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, exam: next } }));
+                          }}
+                          onBlur={(event) => {
+                            const next = acceptGrade(event.target.value, selected.examMax, `${key}:exam`);
+                            if (next === null) return;
+                            persist({ ...draft, exam: next });
+                          }}
                         />
+                        {cellWarn[`${key}:exam`] ? <span className="grade-warn no-print">{cellWarn[`${key}:exam`]}</span> : null}
                       </td>
                     )}
                     {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "eval").map((column) => (
                       <td key={column.id} className="border border-black px-2 py-1">
                         <Input
-                          value={draft.extras[column.id] ?? "0"}
+                          value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
+                      placeholder="0"
                           inputMode="decimal"
                           disabled={selected.closed}
-                          onChange={(event) => setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: event.target.value } } }))}
+                          onChange={(event) => {
+                            const next = acceptGrade(event.target.value, Number(column.max) || 0, `${key}:${column.id}`);
+                            if (next === null) return;
+                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                          }}
                           onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                         />
+                        {cellWarn[`${key}:${column.id}`] ? <span className="grade-warn no-print">{cellWarn[`${key}:${column.id}`]}</span> : null}
                       </td>
                     ))}
-                    <td className="border border-black px-2 py-1">{formatPoints(score.evalPoints)}</td>
-                    <td className="border border-black px-2 py-1">{formatPoints(score.total)}</td>
+                    {classFollow ? <td className="border border-black px-2 py-1">{sheetGrade(score.evalPoints)}</td> : null}
+                    <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(periodSum)}</td>
                   </tr>
                 );
               })}
@@ -2049,13 +2353,13 @@ export function ClassRecords({
           </table>
           </div>
         ) : null}
-        {view === "year" && sheetMode === "exam" ? (
-          <div className="no-print">
+        {view === "year" && gradeShape !== "blank" && sheetMode === "exam" ? (
+          <div className="grade-scroll">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
                   <th className="border border-black px-2 py-1">{tr("م")}</th>
-                  <th className="border border-black px-2 py-1">{tr("اسم الطالب")}</th>
+                  <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
                   <th className="border border-black px-2 py-1">{tr("متوسط أعمال السنة")} ({formatPoints((data.scale as { yearMax?: number }).yearMax ?? 60)})</th>
                   <th className="border border-black px-2 py-1">{tr("اختبار نهاية السنة")} ({formatPoints((data.scale as { finalExamMax?: number }).finalExamMax ?? 40)})</th>
                   <th className="border border-black px-2 py-1">{tr("المجموع")} ({formatPoints(data.scale.totalMax)})</th>
@@ -2066,7 +2370,7 @@ export function ClassRecords({
                   <tr key={student.id}>
                     <td className="border border-black px-2 py-1">{index + 1}</td>
                     <td className="border border-black px-2 py-1">{student.name}</td>
-                    <td className="border border-black px-2 py-1 text-center">{formatPoints(student.yearWork ?? 0)}</td>
+                    <td className="border border-black px-2 py-1 text-center">{sheetGrade(student.yearWork ?? 0)}</td>
                     <td className="border border-black px-2 py-1">
                       {finalColumns.length ? (
                         <div className="space-y-1">
@@ -2076,11 +2380,19 @@ export function ClassRecords({
                               <Input
                                 className="h-8"
                                 key={`${student.id}-${column.id}-${student.finalExtras?.[column.id] ?? 0}`}
-                                defaultValue={String(student.finalExtras?.[column.id] ?? 0)}
+                                defaultValue={student.finalExtras?.[column.id] ? String(student.finalExtras[column.id]) : ""}
+                                placeholder="0"
                                 inputMode="decimal"
+                                onChange={(event) => setFinalLive((prev) => ({ ...prev, [`${student.id}:${column.id}`]: event.target.value }))}
                                 onBlur={(event) => {
-                                  const extras = { ...(student.finalExtras ?? {}), [column.id]: Number(event.target.value) || 0 };
-                                  void savePeriodMark({ data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam: 0, extras } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
+                                  const next = withinMax(event.target.value, Number(column.max) || Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40);
+                                  if (next === null) {
+                                    setCellWarn((prev) => ({ ...prev, [`final:${student.id}:${column.id}`]: `أعلى من ${formatPoints(Number(column.max) || 40)}` }));
+                                    return;
+                                  }
+                                  setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}:${column.id}`]; return copy; });
+                                  const extras = { ...(student.finalExtras ?? {}), [column.id]: Number(next) || 0 };
+                                  void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: 0, extras } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
                                 }}
                               />
                             </label>
@@ -2089,23 +2401,93 @@ export function ClassRecords({
                       ) : (
                         <Input
                           key={`${student.id}-${student.sheetExam ?? 0}`}
-                          defaultValue={String(student.sheetExam ?? 0)}
+                          defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
+                          placeholder="0"
                           inputMode="decimal"
+                          onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))}
                           onBlur={(event) => {
-                            void savePeriodMark({ data: { classId, periodNo: 0, subject: activeSubject, studentId: student.id, participation: 0, exam: Number(event.target.value) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", classId] }));
+                            const limit = Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40;
+                            const next = withinMax(event.target.value, limit);
+                            if (next === null) {
+                              setCellWarn((prev) => ({ ...prev, [`final:${student.id}`]: `أعلى من ${formatPoints(limit)}` }));
+                              return;
+                            }
+                            setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}`]; return copy; });
+                            void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
                           }}
                         />
                       )}
                     </td>
-                    <td className="border border-black px-2 py-1 text-center">{formatPoints(student.finalTotal ?? ((student.yearWork ?? 0) + (student.sheetExam ?? 0)))}</td>
+                    <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade((student.yearWork ?? 0) + (finalColumns.length
+                      ? finalColumns.reduce((sum, column) => sum + (Number(finalLive[`${student.id}:${column.id}`] ?? student.finalExtras?.[column.id] ?? 0) || 0), 0)
+                      : Number(finalLive[String(student.id)] ?? student.sheetExam ?? 0) || 0))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : null}
-        {view === "year" ? (
+        {view === "year" && gradeShape === "blank" ? (
           <div className="space-y-2 text-[13px] text-black">
+            <div className="grade-scroll">
+            <table className="grade-sheet w-full border-collapse text-xs" style={{ tableLayout: "fixed", ["--row-h" as string]: `${gradeRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
+              <thead>
+                <tr className="bg-[#9aa0a6] text-white">
+                  <th className="border border-black px-1 py-1" rowSpan={2} style={{ width: blankPct(12) }}>{tr("م")}</th>
+                  <th className="grade-name border border-black px-1 py-1 text-right" rowSpan={2} style={{ width: blankPct(nameMm) }}>{tr("اسم الطالب")}</th>
+                  {gradeCols.map((col) => (
+                    <th key={col.id} className="border border-black px-1 py-1" style={{ width: blankPct(Number(col.width) || 18) }}>{col.title || tr("عمود")}</th>
+                  ))}
+                </tr>
+                <tr>
+                  {gradeCols.map((col) => {
+                    const scored = gradeCols.filter((item) => !isSumColumn(item));
+                    const max = isSumColumn(col) ? scored.reduce((sum, item) => sum + (Number(item.max) || 0), 0) : col.max;
+                    return <th key={`${col.id}-max`} className="border border-black bg-[#e5e7eb] px-1 py-1">{max || ""}</th>;
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {data.students.map((student, index) => (
+                  <tr key={student.id} className={index % 2 === 1 ? "bg-[#f3f4f6]" : undefined} style={{ height: `${gradeRow}mm` }}>
+                    <td className="border border-black px-1 text-center" style={{ height: `${gradeRow}mm` }}>{index + 1}</td>
+                    <td className="grade-name border border-black px-1 text-right font-bold" style={{ height: `${gradeRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
+                    {gradeCols.map((col) => {
+                      if (isSumColumn(col)) {
+                        const sum = gradeCols.filter((item) => !isSumColumn(item)).reduce((total, item) => total + (Number(blankMarks[`${student.id}:${item.id}`]) || 0), 0);
+                        return <td key={col.id} className="border border-black px-1 text-center font-semibold">{sheetGrade(sum)}</td>;
+                      }
+                      return (
+                      <td key={col.id} className="border border-black p-0.5">
+                        <Input
+                          className="grade-cell h-8 w-full border-0 bg-transparent px-1 text-center shadow-none"
+                          inputMode="decimal"
+                          value={blankMarks[`${student.id}:${col.id}`] ?? ""}
+                          placeholder="0"
+                          onChange={(event) => {
+                            const id = `${student.id}:${col.id}`;
+                            const next = acceptGrade(event.target.value, Number(col.max) || 0, id);
+                            if (next === null) return;
+                            setBlankMarks((prev) => {
+                              const marks = { ...prev, [id]: next };
+                              storeBlank(marks);
+                              return marks;
+                            });
+                          }}
+                        />
+                        {cellWarn[`${student.id}:${col.id}`] ? <span className="grade-warn no-print">{cellWarn[`${student.id}:${col.id}`]}</span> : null}
+                      </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        ) : null}
+        {view === "year" && gradeShape !== "blank" ? (
+          <div className="hidden">
             <div className="mx-auto mb-3 max-w-xl border border-[#1f8a4c] px-3 py-2 text-center text-sm font-semibold">
               كشف أعمال السنة [{data.class.stageName ? `${data.class.stageName} - ` : ""}{data.class.label}{data.subject ? ` — ${data.subject}` : ""}]
             </div>
@@ -2131,7 +2513,7 @@ export function ClassRecords({
               </colgroup>
               <thead>
                 <tr>
-                  {["اسم الطالب", `متوسط أعمال السنة (${formatPoints((data.scale as { yearMax?: number }).yearMax ?? 60)})`, `اختبار نهاية السنة (${formatPoints((data.scale as { finalExamMax?: number }).finalExamMax ?? 40)})`, `المجموع (${formatPoints(data.scale.totalMax)})`].map((label) => (
+                  {["م", "اسم الطالب", `متوسط أعمال السنة (${formatPoints((data.scale as { yearMax?: number }).yearMax ?? 60)})`, `اختبار نهاية السنة (${formatPoints((data.scale as { finalExamMax?: number }).finalExamMax ?? 40)})`, `المجموع (${formatPoints(data.scale.totalMax)})`].map((label) => (
                     <th key={label} className="border border-[#1f8a4c] bg-[#1f8a4c] px-2 py-1.5 text-center text-xs font-semibold text-white">{label}</th>
                   ))}
                 </tr>
@@ -2142,10 +2524,11 @@ export function ClassRecords({
                   const exam = student.sheetExam ?? 0;
                   return (
                     <tr key={student.id} className={index % 2 ? "bg-[#f4f7f5]" : "bg-white"}>
-                      <td className="grade-name border border-[#d7e3dc] px-2 py-1 text-right text-xs">{student.name}</td>
-                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs">{formatPoints(yearWork)}</td>
-                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs">{formatPoints(exam)}</td>
-                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs font-semibold">{formatPoints(student.finalTotal ?? yearWork + exam)}</td>
+                      <td className="grade-name border border-[#d7e3dc] px-2 py-1 text-right text-xs">{index + 1}</td>
+                      <td className="border border-[#d7e3dc] px-2 py-1 text-right text-xs">{student.name}</td>
+                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs">{sheetGrade(yearWork)}</td>
+                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs">{sheetGrade(exam)}</td>
+                      <td className="border border-[#d7e3dc] px-2 py-1 text-center text-xs font-semibold">{sheetGrade(student.finalTotal ?? yearWork + exam)}</td>
                     </tr>
                   );
                 })}
@@ -2161,6 +2544,22 @@ export function ClassRecords({
                 <p className="mt-2">{school.principalName || "………………"}</p>
               </div>
             </div>
+          </div>
+        ) : null}
+        {view === "year" && (showTeacherSign || showPrincipalSign) ? (
+          <div className="sheet-signs mt-8 text-sm">
+            {showTeacherSign ? (
+              <div>
+                <p className="font-semibold">{tr("المعلم")}</p>
+                <p className="mt-3">{((data as { teacherName?: string }).teacherName || staff.displayName) || "………………"}</p>
+              </div>
+            ) : <span />}
+            {showPrincipalSign ? (
+              <div>
+                <p className="font-semibold">{tr("المدير")}</p>
+                <p className="mt-3">{school.principalName || "………………"}</p>
+              </div>
+            ) : <span />}
           </div>
         ) : null}
         {view === "analysis" ? (
@@ -2213,48 +2612,22 @@ export function ClassRecords({
                 </div>
               ))}
             </div>
-            <details className="no-print mb-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3">
-              <summary className="min-h-11 cursor-pointer font-medium">{tr("إظهار أو إخفاء الأعمدة")}</summary>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {rosterColumnOptions.map(({ id, label }) => (
-                  <label key={id} className="flex min-h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={isRosterColumnVisible(id)}
-                      onChange={() => {
-                        const next = effectiveRosterColumns.includes(id)
-                          ? effectiveRosterColumns.filter((columnId) => columnId !== id)
-                          : [...effectiveRosterColumns, id];
-                        setVisibleRosterColumns(next);
-                        setLoadedRosterColumnsKey(rosterColumnsKey);
-                      }}
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="secondary" onClick={() => {
-                  setVisibleRosterColumns([...CLASS_ROSTER_COLUMN_IDS]);
-                  setLoadedRosterColumnsKey(rosterColumnsKey);
-                }}>
-                  {tr("إظهار الكل")}
-                </Button>
-                <Button type="button" size="sm" variant="secondary" onClick={() => {
-                  setVisibleRosterColumns([]);
-                  setLoadedRosterColumnsKey(rosterColumnsKey);
-                }}>
-                  {tr("إخفاء الكل")}
-                </Button>
-              </div>
-            </details>
-            <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse">
+            <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  {rosterColumnOptions.filter(({ id }) => isRosterColumnVisible(id)).map(({ id, label }) => (
-                    <th key={id} className="border border-[#1e5aa8] bg-[#1e5aa8] px-1 py-1 text-center text-[10px] font-semibold text-white">{label}</th>
+                  {[
+                    "م",
+                    "اسم الطالب",
+                    "الغياب",
+                    "التأخر",
+                    "الأوسمة",
+                    `المهام الأدائية والمشاركة والتفاعل (${formatPoints(data.scale.tasksMax)})`,
+                    `تقويمات شفهية وتحريرية (${formatPoints(data.scale.quizzesMax)})`,
+                    `المجموع (${formatPoints(data.scale.totalMax)})`,
+                    "النسبة",
+                    "التقدير",
+                  ].map((label) => (
+                    <th key={label} className="border border-[#1e5aa8] bg-[#1e5aa8] px-1 py-1 text-center text-[10px] font-semibold text-white">{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -2267,27 +2640,25 @@ export function ClassRecords({
                   const exams = fold(periods.reduce((sum, period) => sum + period.exam, 0));
                   const percent = data.scale.totalMax ? Math.round((student.total / data.scale.totalMax) * 100) : 0;
                   const grade = percent >= 90 ? "ممتاز" : percent >= 80 ? "جيد جداً" : percent >= 70 ? "جيد" : percent >= 60 ? "مقبول" : "راسب";
-                  const badges = student.badges ?? 0;
+                  const badges = (student.taps ?? []).filter((tap) => tap.label.includes("وسام")).reduce((sum, tap) => sum + tap.count, 0);
                   const cell = "border border-[#d7e3dc] px-1 py-1 text-center text-[11px]";
                   return (
                     <tr key={student.id} className={index % 2 ? "bg-[#f4f7fb]" : "bg-white"}>
-                      {isRosterColumnVisible("number") ? <td className={cell}>{index + 1}</td> : null}
-                      {isRosterColumnVisible("name") ? <td className={`${cell} text-right`}>{student.name}</td> : null}
-                      {isRosterColumnVisible("absence") ? <td className={cell}>{student.absent ? student.absent : "—"}</td> : null}
-                      {isRosterColumnVisible("late") ? <td className={cell}>{student.late ? student.late : "—"}</td> : null}
-                      {isRosterColumnVisible("awards") ? <td className={cell}>{badges}</td> : null}
-                      {isRosterColumnVisible("tasks") ? <td className={cell}>{formatPoints(tasks)}</td> : null}
-                      {isRosterColumnVisible("quizzes") ? <td className={cell}>{formatPoints(exams)}</td> : null}
-                      {isRosterColumnVisible("finalExam") ? <td className={cell}>{formatPoints(student.sheetExam ?? 0)}</td> : null}
-                      {isRosterColumnVisible("total") ? <td className={cell}>{formatPoints(student.total)}</td> : null}
-                      {isRosterColumnVisible("percent") ? <td className={cell}>%{percent}</td> : null}
-                      {isRosterColumnVisible("grade") ? <td className={cell}>{grade}</td> : null}
+                      <td className={cell}>{index + 1}</td>
+                      <td className={`${cell} text-right`}>{student.name}</td>
+                      <td className={cell}>{student.absent ? student.absent : "—"}</td>
+                      <td className={cell}>{student.late ? student.late : "—"}</td>
+                      <td className={cell}>{badges}</td>
+                      <td className={cell}>{formatPoints(tasks)}</td>
+                      <td className={cell}>{formatPoints(exams)}</td>
+                      <td className={cell}>{formatPoints(student.total)}</td>
+                      <td className={cell}>%{percent}</td>
+                      <td className={cell}>{grade}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            </div>
             <div className="mt-8 grid grid-cols-2 gap-6 text-center text-sm">
               <div>
                 <p className="font-semibold">معلم/ة المادة</p>
@@ -2460,7 +2831,7 @@ export function GradeFormatStudio() {
   return (
     <section className="space-y-4">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold">{tr("تنسيق الدرجات والمتابعة")}</h2>
+        <h2 className="text-xl font-semibold">{tr("تنسيق الدرجات")}</h2>
         <p className="text-sm text-fg-muted">{tr("هذا تنسيق فترة واحدة. اختر أين يُطبَّق، ثم احفظ أو طبّق.")}</p>
       </header>
 
@@ -2601,6 +2972,7 @@ export function GradeFormatStudio() {
         })() : null}
       </section>
 
+      {staffCan(staff, "viewClassFollow") ? (
       <section className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">
         <div>
           <h3 className="text-sm font-semibold">{tr("خيارات المتابعة")}</h3>
@@ -2634,6 +3006,7 @@ export function GradeFormatStudio() {
           </div>
         ))}
       </section>
+      ) : null}
     </section>
   );
 }
