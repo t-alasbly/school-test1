@@ -1539,7 +1539,7 @@ export function ClassRecords({
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
-  const liveColumns = recordCols ?? liveColumns;
+  const liveColumns = recordCols ?? selected?.columns ?? [];
   function acceptGrade(raw: string, max: number, id: string) {
     const next = withinMax(raw, max);
     setCellWarn((prev) => {
