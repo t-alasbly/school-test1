@@ -1479,7 +1479,7 @@ export function ClassRecords({
   const { school, staff } = useWorkspace();
   const classFollow = staffCan(staff, "viewClassFollow");
   const subjects = parseSubjects(staff.subject);
-  const subject = presetSubject && subjects.includes(presetSubject) ? presetSubject : subjects.length === 1 ? subjects[0] : "";
+  const subject = presetSubject && subjects.includes(presetSubject) ? presetSubject : subjects[0] ?? "";
   const printRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [periodNo, setPeriodNo] = useState(1);
@@ -1584,14 +1584,18 @@ export function ClassRecords({
     if (savedSeq) setSeqMm(Math.min(30, Math.max(6, savedSeq)));
     if (savedName) setNameMm(Math.min(80, Math.max(24, savedName)));
     const marks: Record<string, string> = {};
+    const names = Array.from(new Set(["", "-", ...subjects, subject, data.subject || ""].filter((item) => item != null)));
     for (const id of sheetIds) {
-      const keys = [`grade-marks:${id}:${subject || data.subject || "-"}`, `grade-marks:${id}:${subject}`, `grade-marks:${id}:-`];
-      for (const key of keys) {
+      for (const name of names) {
         try {
-          const savedMarks = localStorage.getItem(key);
+          const savedMarks = localStorage.getItem(`grade-marks:${id}:${name}`);
           if (savedMarks) Object.assign(marks, JSON.parse(savedMarks));
         } catch { /* keep empty */ }
       }
+      try {
+        const savedMarks = localStorage.getItem(`grade-marks:${id}:${subject || data.subject || "-"}`);
+        if (savedMarks) Object.assign(marks, JSON.parse(savedMarks));
+      } catch { /* keep the merged marks */ }
     }
     setBlankMarks(marks);
     try {

@@ -6381,7 +6381,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 	const attendanceOf = new Map(attendanceRows.map((row) => [row.student_id, row]));
 	const listed = parseSubjects(staff.subject);
 	const chosen = (data.subject ?? "").trim();
-	const lessonSubject = listed.length === 1 ? listed[0] : chosen;
+	const lessonSubject = chosen || (listed.length ? listed[0] : "");
 	const plan = await subjectPlanOf(sql, staff, lessonSubject);
 	const periods = plan.periods;
 	const combine = plan.combine;
@@ -6406,7 +6406,6 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     from student_period_marks
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id}
       and student_id in (select id from students where class_id = ${cls.id} and school_id = ${staff.school_id})
-      and (${lessonSubject} = '' or subject = ${lessonSubject} or subject = '')
   `;
 	if (periodRows.length === 0 && marks.length && lessonSubject) for (const row of marks) {
 		await sql`

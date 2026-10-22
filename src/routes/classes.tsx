@@ -143,7 +143,7 @@ function ClassesBody() {
           setClassId(nextClass);
           setQ("");
           if (nextClass) {
-            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) } });
+            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) }, search: { subject: sheetSubject || undefined } });
             return;
           }
           void navigate({
