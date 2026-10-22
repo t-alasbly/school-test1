@@ -1488,9 +1488,13 @@ export function ClassRecords({
   const [bulkTasks, setBulkTasks] = useState("");
   const [bulkExam, setBulkExam] = useState("");
   const [gradeShape, setGradeShape] = useState<"record" | "blank">("record");
-  const [gradeLayoutOpen, setGradeLayoutOpen] = useState(false);
-  const [recordLayoutOpen, setRecordLayoutOpen] = useState(false);
+  const [formatOpen, setFormatOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportKind, setExportKind] = useState<"xlsx" | "pdf">("xlsx");
+  const [exportId, setExportId] = useState(false);
+  const [newFormatName, setNewFormatName] = useState("");
   const [recordRow, setRecordRow] = useState(8);
+  const [seqMm, setSeqMm] = useState(10);
   const [nameMm, setNameMm] = useState(46);
   const [colMm, setColMm] = useState(16);
   const [nameFont, setNameFont] = useState(13);
@@ -1510,7 +1514,7 @@ export function ClassRecords({
     queryFn: () => getGradeStudio(),
     enabled: view === "year",
   });
-  const yearPack = formatsQuery.data as { activeFormatId?: number | null; formats?: { id: number; name: string; payload?: FormatPayload }[] } | undefined;
+  const yearPack = formatsQuery.data as { activeFormatId?: number | null; formats?: { id: number; name: string; ownerName?: string; payload?: FormatPayload }[] } | undefined;
   const [gradeRow, setGradeRow] = useState(8);
   const sheetIds = mergeClassIds?.length ? mergeClassIds : [classId];
   const sheetQueries = useQueries({
@@ -1575,6 +1579,10 @@ export function ClassRecords({
     if (raw) {
       try { setSheetMargins(JSON.parse(raw)); } catch { /* keep school margins */ }
     } else if (school.printMargins) setSheetMargins(school.printMargins);
+    const savedSeq = Number(localStorage.getItem(`grade-seq:${classId}`));
+    const savedName = Number(localStorage.getItem(`grade-name:${classId}`));
+    if (savedSeq) setSeqMm(Math.min(30, Math.max(6, savedSeq)));
+    if (savedName) setNameMm(Math.min(80, Math.max(24, savedName)));
     const marks: Record<string, string> = {};
     for (const id of sheetIds) {
       const keys = [`grade-marks:${id}:${subject || data.subject || "-"}`, `grade-marks:${id}:${subject}`, `grade-marks:${id}:-`];
@@ -1801,43 +1809,94 @@ export function ClassRecords({
   }
   if (pending && !data) return <p className="text-sm text-fg-muted">{tr("جارٍ التحميل…")}</p>;
   if (!data) return <p className="text-danger">{tr("تعذر تحميل الكشف")}</p>;
-  const gradeRows = () => {
+  function sheetMatrix(withId: boolean) {
+    const students = data?.students ?? [];
+    const idCell = (student: { nationalId?: string }) => withId ? [student.nationalId || ""] : [];
+    if (gradeShape === "blank") {
+      const heads = ["م", "اسم الطالب", ...(withId ? ["السجل المدني"] : []), ...gradeCols.map((col) => col.title || "عمود")];
+      const rows = students.map((student, index) => {
+        const values = Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]));
+        return [
+          String(index + 1),
+          student.name,
+          ...idCell(student),
+          ...gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? String(sheetGrade(columnMath(col, gradeCols, values))) : (blankMarks[`${student.id}:${col.id}`] || "0")),
+        ];
+      });
+      return { heads, rows };
+    }
     if (sheetMode === "exam") {
-      return data.students.map((student) => ({ "اسم الطالب": student.name, "السجل المدني": student.nationalId || "", "الدرجة": student.sheetExam ?? 0 }));
+      return {
+        heads: ["م", "اسم الطالب", ...(withId ? ["السجل المدني"] : []), "الدرجة"],
+        rows: students.map((student, index) => [String(index + 1), student.name, ...idCell(student), String(student.sheetExam ?? 0)]),
+      };
     }
     if (sheetMode === "final") {
-      return data.students.map((student) => ({
-        "اسم الطالب": student.name,
-        "السجل المدني": student.nationalId || "",
-        "متوسط أعمال السنة": student.yearWork ?? 0,
-        "اختبار نهاية السنة": student.sheetExam ?? 0,
-        "الدرجة": student.finalTotal ?? ((student.yearWork ?? 0) + (student.sheetExam ?? 0)),
-      }));
-    }
-    return data.students.map((student) => {
-      const score = student.byPeriod?.find((period) => period.no === selected?.no);
       return {
-        "اسم الطالب": student.name,
-        "السجل المدني": student.nationalId || "",
-        "أعمال السنة": score?.participation ?? 0,
-        "اختبار الفترة": score?.exam ?? 0,
-        "الدرجة": score?.total ?? 0,
+        heads: ["م", "اسم الطالب", ...(withId ? ["السجل المدني"] : []), "متوسط أعمال السنة", "اختبار نهاية السنة", "الدرجة"],
+        rows: students.map((student, index) => [String(index + 1), student.name, ...idCell(student), String(student.yearWork ?? 0), String(student.sheetExam ?? 0), String(student.finalTotal ?? ((student.yearWork ?? 0) + (student.sheetExam ?? 0)))]),
       };
+    }
+    const heads = ["م", "اسم الطالب", ...(withId ? ["السجل المدني"] : [])];
+    if (taskColumns.length) {
+      heads.push(...taskColumns.map((column) => column.title), "مجموع المشاركة");
+    } else heads.push("أعمال السنة");
+    if (examColumns.length) {
+      heads.push(...examColumns.map((column) => column.title), "اختبار الفترة");
+    } else heads.push("اختبار الفترة");
+    heads.push(...evalColumns.map((column) => column.title), "مجموع الفترة");
+    const rows = students.map((student, index) => {
+      const score = student.byPeriod?.find((period) => period.no === selected?.no);
+      const extras = score?.extras ?? {};
+      const taskSum = taskColumns.length ? taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0) : Number(score?.participation) || 0;
+      const examSum = examColumns.length ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0) : Number(score?.exam) || 0;
+      const cells = [String(index + 1), student.name, ...idCell(student)];
+      if (taskColumns.length) cells.push(...taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(taskSum)));
+      else cells.push(String(score?.participation ?? 0));
+      if (examColumns.length) cells.push(...examColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(examSum)));
+      else cells.push(String(score?.exam ?? 0));
+      cells.push(...evalColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(score?.total ?? taskSum + examSum));
+      return cells;
     });
-  };
-  async function exportGrades(kind: "xlsx" | "pdf") {
-    const rows = gradeRows();
-    const label = sheetMode === "exam" ? "اختبار نهاية السنة" : sheetMode === "final" ? "النتيجة النهائية" : (selected?.title || "الفترة");
+    return { heads, rows };
+  }
+  function currentFormatPayload(): FormatPayload {
+    return {
+      sheet: gradeShape,
+      combine: data.combine === "avg" ? "avg" : "sum",
+      finalExamMax: Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40,
+      finalColumns: ((data as { finalColumns?: { id: string; title: string; max: number }[] }).finalColumns ?? []).map((column) => ({ ...column })),
+      cards: [],
+      gradeCols: gradeCols.map((col) => ({ ...col })),
+      periods: periods.map((period) => ({
+        title: period.title,
+        tasksMax: period.tasksMax,
+        examMax: period.examMax,
+        columns: (period.no === selected?.no ? liveColumns : (period.columns ?? [])).map((column) => ({
+          id: column.id,
+          title: column.title,
+          group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
+          max: Number(column.max) || 0,
+          calc: column.calc === "sum" || column.calc === "avg" ? column.calc : undefined,
+          sources: column.sources,
+        })),
+      })),
+    };
+  }
+  async function exportGrades(kind: "xlsx" | "pdf", withId = exportId) {
+    const { heads, rows } = sheetMatrix(withId);
+    const title = sheetTitle || (selected?.title || "كشف الدرجات");
     if (kind === "xlsx") {
       const XLSX = await import("xlsx");
       const book = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), "الدرجات");
-      XLSX.writeFile(book, `${label}.xlsx`);
+      const sheet = XLSX.utils.aoa_to_sheet([[title], heads, ...rows]);
+      sheet["!cols"] = heads.map((head, index) => ({ wch: index === 1 ? 28 : head === "السجل المدني" ? 16 : 14 }));
+      XLSX.utils.book_append_sheet(book, sheet, "الدرجات");
+      XLSX.writeFile(book, `${title}.xlsx`);
       return;
     }
     const holder = document.createElement("div");
-    const heads = Object.keys(rows[0] ?? { "اسم الطالب": "", "السجل المدني": "", "الدرجة": "" });
-    holder.innerHTML = `<h2 style="text-align:center">${label}</h2><table style="width:100%;border-collapse:collapse"><thead><tr>${heads.map((head) => `<th style="border:1px solid #000;padding:4px">${head}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${heads.map((head) => `<td style="border:1px solid #000;padding:4px;text-align:center">${row[head as keyof typeof row] ?? ""}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    holder.innerHTML = `<h2 style="text-align:center;font-size:16px;margin:0 0 8px">${title}</h2><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px"><thead><tr>${heads.map((head) => `<th style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">${head}</th>`).join("")}</tr></thead><tbody>${rows.map((row, index) => `<tr style="height:${gradeShape === "blank" ? gradeRow : recordRow}mm;background:${index % 2 ? "#f3f4f6" : "#fff"}">${row.map((cell, cellIndex) => `<td style="border:1px solid #000;padding:3px;text-align:${cellIndex === 1 ? "right" : "center"};font-weight:${cellIndex === 1 ? "700" : "400"}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
     printElement(holder);
   }
   async function applyRecordColumn(col: { id: string; title: string; max: number; kind: "participation" | "exam" | "extra" }) {
@@ -1927,9 +1986,9 @@ export function ClassRecords({
   const examColumns = liveColumns.filter((column) => column.group === "exam");
   const evalColumns = liveColumns.filter((column) => (column.group ?? "eval") === "eval");
   const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + (classFollow ? 1 : 0) + 1;
-  const widthTotal = 10 + nameMm + gradeSlots * colMm;
+  const widthTotal = seqMm + nameMm + gradeSlots * colMm;
   const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
-  const blankSum = 12 + nameMm + gradeCols.reduce((sum, col) => sum + (Number(col.width) || 18), 0);
+  const blankSum = seqMm + nameMm + gradeCols.reduce((sum, col) => sum + (Number(col.width) || 18), 0);
   const blankPct = (mm: number) => `${Math.round((mm / Math.max(blankSum, 1)) * 1000) / 10}%`;
   return (
     <div className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">
@@ -1967,6 +2026,25 @@ export function ClassRecords({
               });
             }}>{tr("إضافة فترة")}</Button>
           ) : null}
+          <button type="button" className="min-h-8 rounded-full border border-amber-600 bg-amber-500 px-3 text-sm font-semibold text-white" onClick={() => setFormatOpen((open) => !open)}>{tr("تنسيق")}</button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => printRef.current && printElement(printRef.current)}>{tr("طباعة")}</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setExportOpen((open) => !open)}>{tr("تصدير")}</Button>
+        </div>
+      ) : null}
+      {view === "year" && exportOpen ? (
+        <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <label className="space-y-1 text-sm">
+            <span>{tr("نوع التصدير")}</span>
+            <Select className="h-9 w-auto" value={exportKind} onChange={(event) => setExportKind(event.target.value === "pdf" ? "pdf" : "xlsx")}>
+              <option value="xlsx">{tr("إكسل")}</option>
+              <option value="pdf">{tr("PDF")}</option>
+            </Select>
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input type="checkbox" checked={exportId} onChange={(event) => setExportId(event.target.checked)} />
+            {tr("إضافة السجل المدني")}
+          </label>
+          <Button type="button" size="sm" onClick={() => { void exportGrades(exportKind, exportId); setExportOpen(false); }}>{tr("تصدير")}</Button>
         </div>
       ) : null}
       {view === "year" && gradeShape === "blank" ? (
@@ -2006,11 +2084,11 @@ export function ClassRecords({
           <Button type="button" size="sm" disabled={applyAll.isPending} onClick={() => applyAll.mutate("finalExam")}>{tr("للكل")}</Button>
         </div>
       ) : null}
-      {view === "year" ? (
-        <div className="no-print flex flex-wrap items-center gap-2">
-          <Select className="h-9 w-auto min-w-44" value={yearFormatId} onChange={(event) => setYearFormatId(event.target.value)}>
+      {view === "year" && formatOpen ? (
+        <div className="no-print flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <Select className="h-9 w-auto min-w-52" value={yearFormatId} onChange={(event) => setYearFormatId(event.target.value)}>
             <option value="">{tr("اختر قالب أعمال السنة")}</option>
-            {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</option>)}
           </Select>
           <Button type="button" size="sm" disabled={!yearFormatId} onClick={() => {
             const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
@@ -2030,18 +2108,33 @@ export function ClassRecords({
               setRecordCols(null);
               if (payload.sheet === "blank" && payload.gradeCols?.length) setGradeCols(payload.gradeCols.map((col) => ({ ...col })));
               toast.success(tr("طُبّق القالب"));
+              setFormatOpen(false);
               void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
               void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
             }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر التطبيق")));
           }}>{tr("تطبيق")}</Button>
+          <Input className="h-9 w-40" value={newFormatName} maxLength={60} placeholder={tr("اسم القالب الجديد")} onChange={(event) => setNewFormatName(event.target.value)} />
+          <Button type="button" size="sm" variant="secondary" onClick={() => {
+            const name = newFormatName.trim();
+            if (name.length < 2) {
+              toast.error(tr("اكتب اسم القالب"));
+              return;
+            }
+            void saveGradeFormat({ data: { name, payload: currentFormatPayload() } }).then(() => {
+              toast.success(tr("حُفظ القالب باسم جديد"));
+              setNewFormatName("");
+              setFormatOpen(false);
+              void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
+            }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
+          }}>{tr("حفظ باسم جديد")}</Button>
           {(() => {
             const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
             if (!item?.payload) return null;
             const cols = item.payload.sheet === "blank" ? (item.payload.gradeCols ?? []) : (item.payload.periods?.[0]?.columns ?? []);
             const applied = String(yearPack?.activeFormatId ?? "") === yearFormatId;
             return (
-              <div className="basis-full rounded-[var(--radius-md)] border border-border bg-card p-2">
-                <p className="text-sm font-semibold">{applied ? tr("القالب الحالي") : tr("معاينة قبل التطبيق")}: {item.name}</p>
+              <div className="basis-full rounded-[var(--radius-md)] border border-border bg-white p-2">
+                <p className="text-sm font-semibold">{applied ? tr("القالب الحالي") : tr("معاينة قبل التطبيق")}: {item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</p>
                 <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {cols.map((col) => <span key={col.id || col.title} className="rounded border border-border px-2 py-0.5 text-xs">{col.title || tr("عمود")}{col.calc === "sum" ? ` (${tr("جمع")})` : col.calc === "avg" ? ` (${tr("متوسط")})` : ""}</span>)}
@@ -2049,11 +2142,6 @@ export function ClassRecords({
               </div>
             );
           })()}
-          {gradeShape === "record" ? (
-            <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setRecordLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
-          ) : null}
-          <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("xlsx")}>{tr("تصدير إكسل")}</Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("pdf")}>{tr("تصدير PDF")}</Button>
           <label className="text-sm">
               <span className="me-2">{tr("استيراد إكسل")}</span>
               <input
@@ -2070,15 +2158,27 @@ export function ClassRecords({
             </label>
         </div>
       ) : null}
-      {view === "year" && gradeShape === "record" && recordLayoutOpen ? (
+      {view === "year" && formatOpen && gradeShape === "record" ? (
         <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <label className="space-y-1 text-sm">
             <span>{tr("ارتفاع الصف")}</span>
             <Input className="w-20" type="number" min={5} max={16} value={recordRow} onChange={(event) => setRecordRow(Math.min(16, Math.max(5, Number(event.target.value) || 8)))} />
           </label>
           <label className="space-y-1 text-sm">
-            <span>{tr("عرض الاسم")}</span>
-            <Input className="w-20" type="number" min={24} max={80} value={nameMm} onChange={(event) => setNameMm(Math.min(80, Math.max(24, Number(event.target.value) || 46)))} />
+            <span>{tr("عرض م")}</span>
+            <Input className="w-20" type="number" min={6} max={30} value={seqMm} onChange={(event) => {
+              const next = Math.min(30, Math.max(6, Number(event.target.value) || 10));
+              setSeqMm(next);
+              localStorage.setItem(`grade-seq:${classId}`, String(next));
+            }} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>{tr("عرض اسم الطالب")}</span>
+            <Input className="w-20" type="number" min={24} max={80} value={nameMm} onChange={(event) => {
+              const next = Math.min(80, Math.max(24, Number(event.target.value) || 46));
+              setNameMm(next);
+              localStorage.setItem(`grade-name:${classId}`, String(next));
+            }} />
           </label>
           <label className="space-y-1 text-sm">
             <span>{tr("حجم خط الاسم")}</span>
@@ -2155,6 +2255,7 @@ export function ClassRecords({
               savePlan.mutate({
                 combine: data?.combine === "avg" ? "avg" : "sum",
                 periods: periods.map((period) => ({
+                  no: period.no,
                   title: period.title,
                   tasksMax: period.tasksMax,
                   examMax: period.examMax,
@@ -2163,20 +2264,33 @@ export function ClassRecords({
                 })),
               });
             }
-            setRecordLayoutOpen(false);
+            setFormatOpen(false);
           }}>{tr("حفظ")}</Button>
         </div>
       ) : null}
-      {view === "year" && gradeShape === "blank" ? (
-        <div className="no-print">
-          <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setGradeLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
-          {gradeLayoutOpen ? (
-        <div className="mt-2 space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
+      {view === "year" && formatOpen && gradeShape === "blank" ? (
+        <div className="no-print mt-2 space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <p className="text-xs text-fg-muted">{tr("الخانات فارغة للتعبئة اليدوية. عدّل اسم العمود وحدّه الأعلى وعرضه، وقدّمه أو أخّره.")}</p>
           <label className="flex max-w-xs items-center gap-2 text-sm">
             <span>{tr("ارتفاع الصف")}</span>
             <Input type="number" min={4} max={16} value={gradeRow} onChange={(event) => setGradeRow(Math.min(16, Math.max(4, Number(event.target.value) || 8)))} />
             <span className="text-xs text-fg-muted">{tr("مم")}</span>
+          </label>
+          <label className="flex max-w-xs items-center gap-2 text-sm">
+            <span>{tr("عرض م")}</span>
+            <Input className="w-20" type="number" min={6} max={30} value={seqMm} onChange={(event) => {
+              const next = Math.min(30, Math.max(6, Number(event.target.value) || 10));
+              setSeqMm(next);
+              localStorage.setItem(`grade-seq:${classId}`, String(next));
+            }} />
+          </label>
+          <label className="flex max-w-xs items-center gap-2 text-sm">
+            <span>{tr("عرض اسم الطالب")}</span>
+            <Input className="w-20" type="number" min={24} max={80} value={nameMm} onChange={(event) => {
+              const next = Math.min(80, Math.max(24, Number(event.target.value) || 46));
+              setNameMm(next);
+              localStorage.setItem(`grade-name:${classId}`, String(next));
+            }} />
           </label>
           <label className="flex max-w-xs items-center gap-2 text-sm">
             <span>{tr("حجم خط الاسم")}</span>
@@ -2242,9 +2356,7 @@ export function ClassRecords({
             ))}
           </ul>
           <button type="button" className="text-sm font-medium text-primary" onClick={() => setGradeCols([...gradeCols, { id: `c${Date.now()}`, title: "", width: 18 }])}>{tr("إضافة عمود")}</button>
-          <Button type="button" size="sm" onClick={() => setGradeLayoutOpen(false)}>{tr("حفظ")}</Button>
-        </div>
-          ) : null}
+          <Button type="button" size="sm" onClick={() => setFormatOpen(false)}>{tr("حفظ")}</Button>
         </div>
       ) : null}
       {view === "year" && sheetMode === "period" && selected?.closed ? (
@@ -2376,7 +2488,7 @@ export function ClassRecords({
           <div className="grade-scroll">
           <table className="grade-equal grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
             <colgroup>
-              <col style={{ width: colPct(10) }} />
+              <col style={{ width: colPct(seqMm) }} />
               <col style={{ width: colPct(nameMm) }} />
               {Array.from({ length: gradeSlots }).map((_, index) => <col key={index} style={{ width: colPct(colMm) }} />)}
             </colgroup>
@@ -2645,7 +2757,7 @@ export function ClassRecords({
             <table className="grade-sheet w-full border-collapse text-xs" style={{ tableLayout: "fixed", ["--row-h" as string]: `${gradeRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
               <thead>
                 <tr className="bg-[#9aa0a6] text-white">
-                  <th className="border border-black px-1 py-1" rowSpan={2} style={{ width: blankPct(12) }}>{tr("م")}</th>
+                  <th className="border border-black px-1 py-1" rowSpan={2} style={{ width: blankPct(seqMm) }}>{tr("م")}</th>
                   <th className="grade-name border border-black px-1 py-1 text-right" rowSpan={2} style={{ width: blankPct(nameMm) }}>{tr("اسم الطالب")}</th>
                   {gradeCols.map((col) => (
                     <th key={col.id} className="border border-black px-1 py-1" style={{ width: blankPct(Number(col.width) || 18) }}>{col.title || tr("عمود")}</th>
@@ -2889,7 +3001,7 @@ export function ClassRecords({
   );
 }
 
-type FormatColumn = { title: string; group: "tasks" | "exam" | "eval"; max: number };
+type FormatColumn = { id?: string; title: string; group: "tasks" | "exam" | "eval"; max: number; calc?: "" | "sum" | "avg"; sources?: string[] };
 type FinalColumn = { id: string; title: string; max: number };
 type FormatPeriod = { title: string; tasksMax: number; examMax: number; columns: FormatColumn[] };
 type FormatCard = { label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; columnRef: string };

@@ -16,7 +16,7 @@ import { DayName } from "@/components/day-name";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { claimClassSubjectNotes, getClassPage } from "@/lib/school/api";
+import { claimClassSubjectNotes, getClassPage, getMyTimetable } from "@/lib/school/api";
 import {
   finishGroupPick,
   useGroupPick,
@@ -73,6 +73,11 @@ function ClassBody() {
   const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { targets } = useGroupPick();
   const queryClient = useQueryClient();
+  const tableQuery = useQuery({ queryKey: ["my-timetable"], queryFn: () => getMyTimetable() });
+  const taughtIds = new Set((tableQuery.data?.cells ?? []).map((cell) => cell.classId).filter((value): value is number => value != null));
+  const onTable = taughtIds.size === 0 || taughtIds.has(id);
+  const allowFollow = classFollow && onTable;
+  const allowYear = yearSheet && onTable;
   const query = useQuery({
     queryKey: ["class", id, periodFromTable ?? ""],
     queryFn: () => getClassPage({ data: { classId: id, period: periodFromTable } }),
@@ -93,10 +98,13 @@ function ClassBody() {
   }, [studentParam]);
 
   useEffect(() => {
-    if (followMode === "one" && !classFollow) setFollowMode(yearSheet ? "year" : "behavior");
-    if (followMode === "group" && !classFollow) setFollowMode("behavior");
-    if (followMode === "year" && !yearSheet) setFollowMode(classFollow ? "one" : "behavior");
-  }, [classFollow, yearSheet, followMode]);
+    if (!onTable && followMode !== "behavior") setFollowMode("behavior");
+  }, [onTable, id]);
+  useEffect(() => {
+    if (followMode === "one" && !allowFollow) setFollowMode(allowYear ? "year" : "behavior");
+    if (followMode === "group" && !allowFollow) setFollowMode("behavior");
+    if (followMode === "year" && !allowYear) setFollowMode(allowFollow ? "one" : "behavior");
+  }, [allowFollow, allowYear, followMode]);
 
   const students = useMemo(() => {
     const list = query.data?.students ?? [];
@@ -152,8 +160,8 @@ function ClassBody() {
   };
   const modes = [
     ["behavior", "سلوكي"],
-    ...(classFollow ? ([["one", "متابعة صفية"], ["group", "جماعي"]] as const) : []),
-    ...(yearSheet ? ([["year", "أعمال السنة"]] as const) : []),
+    ...(allowFollow ? ([["one", "متابعة صفية"], ["group", "جماعي"]] as const) : []),
+    ...(allowYear ? ([["year", "أعمال السنة"]] as const) : []),
   ] as const;
 
   return (
@@ -199,7 +207,7 @@ function ClassBody() {
             {tr(label)}
           </button>
         ))}
-        {yearSheet ? (
+        {allowYear ? (
           <button
             type="button"
             onClick={() => {
@@ -211,13 +219,13 @@ function ClassBody() {
             {tr("طباعة")}
           </button>
         ) : null}
-        {classFollow || yearSheet ? (
+        {allowFollow || allowYear ? (
           <Link to="/desk/format" className="min-h-8 rounded-full border border-amber-600 bg-amber-500 px-3 py-1 text-sm font-semibold text-white">
             {tr("تنسيق الدرجات")}
           </Link>
         ) : null}
       </div>
-      {subjectHandoff.length > 0 && classFollow ? (
+      {subjectHandoff.length > 0 && allowFollow ? (
         <div className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
           <p className="text-sm font-semibold">{tr("ملاحظات مادة لدى معلم آخر")}</p>
           <div className="flex flex-wrap gap-2">
@@ -229,13 +237,13 @@ function ClassBody() {
           </div>
         </div>
       ) : null}
-      {followMode === "year" && yearSheet ? <ClassRecords classId={id} presetSubject={lessonFromTable} view="year" printTick={printTick} /> : null}
-      {followMode === "group" && classFollow ? (
+      {followMode === "year" && allowYear ? <ClassRecords classId={id} presetSubject={lessonFromTable} view="year" printTick={printTick} /> : null}
+      {followMode === "group" && allowFollow ? (
         <div className="rounded-[var(--radius-lg)] border border-border bg-card">
-          <ClassBoard classId={id} presetSubject={lessonFromTable} presetPeriod={periodFromTable} onClose={() => setFollowMode(classFollow ? "one" : "behavior")} />
+          <ClassBoard classId={id} presetSubject={lessonFromTable} presetPeriod={periodFromTable} onClose={() => setFollowMode(allowFollow ? "one" : "behavior")} />
         </div>
       ) : null}
-      {followMode === "behavior" || (followMode === "one" && classFollow) ? (
+      {followMode === "behavior" || (followMode === "one" && allowFollow) ? (
         <>
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-subtle" />
@@ -244,7 +252,7 @@ function ClassBody() {
           <ul className="divide-y divide-border rounded-[var(--radius-lg)] border border-border bg-card">
             {students.map((student: StudentRow) => {
               const label = studentLabel(locale, student.name, student.nameEn);
-              const open = classFollow && followMode === "one" && followStudent === student.id;
+              const open = allowFollow && followMode === "one" && followStudent === student.id;
               const taps = student.todayTaps ?? [];
               const marks = student.marks ?? [];
               const chips = [...taps.reduce((map, tap) => {
@@ -258,30 +266,30 @@ function ClassBody() {
               const late = student.dailyKind === "late";
               const phones = [student.parentPhone, student.parentPhone2, student.workPhone].filter(Boolean);
               return (
-                <li key={student.id} className={cn("px-3 py-2", absent ? "bg-red-100" : late ? "bg-orange-50" : lesson > 0 && classFollow ? "bg-emerald-50" : lesson < 0 && classFollow ? "bg-orange-100" : "")}>
+                <li key={student.id} className={cn("px-3 py-2", absent ? "bg-red-100" : late ? "bg-orange-50" : lesson > 0 && allowFollow ? "bg-emerald-50" : lesson < 0 && allowFollow ? "bg-orange-100" : "")}>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        if (followMode === "one" && classFollow) setFollowStudent(open ? null : student.id);
+                        if (followMode === "one" && allowFollow) setFollowStudent(open ? null : student.id);
                         else setActiveStudent(student.id);
                       }}
                       className="min-w-0 flex-1 text-right"
                     >
                       <span className="flex flex-wrap items-center gap-1.5">
-                        <DayName studentId={student.id} className={cn("truncate text-base font-semibold leading-6", classFollow && lesson > 0 && !absent && "text-emerald-700", classFollow && lesson < 0 && !absent && "text-orange-700")}>{label}</DayName>
+                        <DayName studentId={student.id} className={cn("truncate text-base font-semibold leading-6", allowFollow && lesson > 0 && !absent && "text-emerald-700", allowFollow && lesson < 0 && !absent && "text-orange-700")}>{label}</DayName>
                         {absent ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">{tr("غائب")}</span> : null}
                         {late ? <span className="text-xs font-bold text-orange-700">{tr("متأخر")} {arrivedClock(student.arrivedAt)}</span> : null}
                         <ExitPermitBadge studentId={student.id} />
                       </span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
                         {student.healthNote ? <span className="rounded bg-fuchsia-200 px-1.5 py-0.5 text-[11px] font-bold text-fuchsia-900">{student.healthNote}</span> : null}
-                        {classFollow ? chips.map((tap) => (
+                        {allowFollow ? chips.map((tap) => (
                           <span key={tap.label} className={cn("rounded px-1.5 py-0.5 text-[11px] font-bold", tap.points < 0 ? "bg-orange-500 text-white" : "bg-emerald-600 text-white")}>
                             {tap.label} {tap.points > 0 ? "+" : ""}{tap.points}
                           </span>
                         )) : null}
-                        {classFollow ? marks.map((mark) => (
+                        {allowFollow ? marks.map((mark) => (
                           <span key={mark.subject || "total"} className={cn("text-sm font-bold tabular-nums", mark.total < 0 ? "text-orange-700" : "text-emerald-700")}>
                             {marks.length > 1 && mark.subject ? `${mark.subject} ` : `${tr("المجموع")} `}
                             {mark.total > 0 ? "+" : ""}{mark.total}
@@ -293,7 +301,7 @@ function ClassBody() {
                     {open ? (
                       <button type="button" onClick={() => setFollowStudent(null)} className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-lg leading-none" aria-label={tr("إغلاق")}>×</button>
                     ) : null}
-                    {followMode === "one" && classFollow ? (
+                    {followMode === "one" && allowFollow ? (
                       <Button type="button" size="sm" variant="secondary" onClick={() => setActiveStudent(student.id)}>{tr("السجل")}</Button>
                     ) : null}
                     <StudentQuickActions
