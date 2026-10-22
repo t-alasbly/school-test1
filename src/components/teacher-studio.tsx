@@ -1493,6 +1493,9 @@ export function ClassRecords({
   const [exportKind, setExportKind] = useState<"xlsx" | "pdf">("xlsx");
   const [exportId, setExportId] = useState(false);
   const [newFormatName, setNewFormatName] = useState("");
+  const [pullId, setPullId] = useState("");
+  const [needYear, setNeedYear] = useState(60);
+  const [needExam, setNeedExam] = useState(40);
   const [recordRow, setRecordRow] = useState(8);
   const [seqMm, setSeqMm] = useState(10);
   const [nameMm, setNameMm] = useState(46);
@@ -1586,6 +1589,14 @@ export function ClassRecords({
     const savedName = Number(localStorage.getItem(`grade-name:${classId}`));
     if (savedSeq) setSeqMm(Math.min(30, Math.max(6, savedSeq)));
     if (savedName) setNameMm(Math.min(80, Math.max(24, savedName)));
+    try {
+      const layout = JSON.parse(localStorage.getItem(`grade-final-layout:${subject}`) || "");
+      if (layout && typeof layout === "object") {
+        if (layout.pullId) setPullId(String(layout.pullId));
+        if (Number(layout.needYear) > 0) setNeedYear(Math.min(100, Number(layout.needYear)));
+        if (Number(layout.needExam) > 0) setNeedExam(Math.min(100, Number(layout.needExam)));
+      }
+    } catch { /* keep the default ceilings */ }
     const marks: Record<string, string> = {};
     const names = Array.from(new Set(["", "-", ...subjects, subject, data.subject || ""].filter((item) => item != null)));
     for (const id of sheetIds) {
@@ -1976,6 +1987,32 @@ export function ClassRecords({
     const sum = rows.reduce((total, period) => total + (Number(period.total) || 0), 0);
     return data.combine === "sum" ? sum : (student.yearWork ?? (rows.length ? sum / rows.length : 0));
   }
+  function pulledCols() {
+    const item = (yearPack?.formats ?? []).find((row) => String(row.id) === pullId);
+    if (item?.payload?.sheet === "blank" && item.payload.gradeCols?.length) return item.payload.gradeCols;
+    if (!pullId && gradeShape === "blank") return gradeCols;
+    return null;
+  }
+  function periodFigure(student: { id: number; byPeriod?: { no?: number; total?: number }[] }, no: number) {
+    const cols = pulledCols()?.filter((col) => !isCalcColumn(col) && !isSumColumn(col)) ?? null;
+    const period = periods.find((item) => item.no === no);
+    if (cols?.length) {
+      const score = cols.reduce((sum, col) => sum + (Number(readBlank(student.id, col.id, no)) || 0), 0);
+      const max = cols.reduce((sum, col) => sum + (Number(col.max) || 0), 0);
+      return { score, max: max || ((period?.tasksMax ?? 0) + (period?.examMax ?? 0)) };
+    }
+    const row = student.byPeriod?.find((item) => item.no === no);
+    return { score: Number(row?.total) || 0, max: (period?.tasksMax ?? 0) + (period?.examMax ?? 0) };
+  }
+  function periodRatio(student: { id: number; byPeriod?: { no?: number; total?: number }[] }) {
+    const rows = (periods.length ? periods : [{ no: 1 }]).map((period) => periodFigure(student, period.no));
+    const usable = rows.filter((row) => row.max > 0);
+    if (!usable.length) return 0;
+    return usable.reduce((sum, row) => sum + Math.min(1, row.score / row.max), 0) / usable.length;
+  }
+  function equatedMark(student: { id: number; byPeriod?: { no?: number; total?: number }[] }, target: number) {
+    return Math.min(target, Math.max(0, periodRatio(student) * target));
+  }
   function storeBlank(marks: Record<string, string>) {
     const ids = sheetIds.length ? sheetIds : [classId];
     for (const id of ids) {
@@ -2109,13 +2146,32 @@ export function ClassRecords({
           ))}
         </div>
       ) : null}
-      {view === "year" && sheetMode === "exam" ? (
-        <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+      {view === "year" && (sheetMode === "exam" || sheetMode === "final") ? (
+        <div className="no-print flex flex-wrap items-end gap-3 rounded-[var(--radius-md)] border border-border bg-card p-3">
           <label className="space-y-1 text-sm">
-            <span>{tr("اختبار نهاية السنة للكل")}</span>
-            <Input className="w-28" inputMode="decimal" value={bulkExam} onChange={(event) => setBulkExam(event.target.value)} placeholder={tr("الدرجة")} />
+            <span>{tr("اسحب الدرجات من")}</span>
+            <Select className="h-9 w-auto min-w-52" value={pullId} onChange={(event) => setPullId(event.target.value)}>
+              <option value="">{tr("القالب الحالي")}</option>
+              {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</option>)}
+            </Select>
           </label>
-          <Button type="button" size="sm" disabled={applyAll.isPending} onClick={() => applyAll.mutate("finalExam")}>{tr("للكل")}</Button>
+          <label className="space-y-1 text-sm">
+            <span>{tr("سقف أعمال السنة")}</span>
+            <Input className="w-20" inputMode="decimal" value={needYear} onChange={(event) => setNeedYear(Math.min(100, Math.max(1, Number(event.target.value) || 60)))} />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span>{tr("سقف الاختبار")}</span>
+            <Input className="w-20" inputMode="decimal" value={needExam} onChange={(event) => setNeedExam(Math.min(100, Math.max(1, Number(event.target.value) || 40)))} />
+          </label>
+          <Button type="button" size="sm" onClick={() => {
+            localStorage.setItem(`grade-final-layout:${subject}`, JSON.stringify({ pullId, needYear, needExam }));
+            const name = sheetMode === "final" ? "النتيجة النهائية" : "اختبار نهاية السنة";
+            void saveGradeFormat({ data: { name, payload: currentFormatPayload() } }).then(() => {
+              toast.success(tr("حُفظ القالب"));
+              void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
+            }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
+          }}>{tr("حفظ القالب")}</Button>
+          <p className="basis-full text-xs text-fg-muted">{tr("درجة الاختبار = متوسط نسب الفترات، ثم تُعادل إلى السقف المكتوب في هذا الكشف.")}</p>
         </div>
       ) : null}
       {view === "year" && formatOpen ? (
@@ -2480,27 +2536,13 @@ export function ClassRecords({
                       <p className="flex justify-between text-sm font-semibold"><span>{tr("المجموع")}</span><span>{sheetGrade((taskColumns.length ? taskColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0) : Number(draft.participation) || 0) + (examColumns.length ? examColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0) : Number(draft.exam) || 0))}</span></p>
                     </>
                   ) : null}
-                  {gradeShape !== "blank" && sheetMode === "final" ? (
-                    <p className="flex justify-between text-sm"><span>{tr("النتيجة")}</span><span className="font-semibold">{sheetGrade(student.finalTotal ?? 0)}</span></p>
+                  {sheetMode === "final" ? (
+                    <p className="flex justify-between text-sm font-semibold"><span>{tr("المعدل")}</span><span>{sheetGrade((needYear + needExam) > 0 ? ((equatedMark(student, needYear) + equatedMark(student, needExam)) / (needYear + needExam)) * 100 : 0)}%</span></p>
                   ) : null}
                   {sheetMode === "exam" ? (
                     <>
-                      <p className="flex justify-between text-sm font-semibold"><span>{tr("إجمالي أعمال السنة")}</span><span>{sheetGrade(yearWorkOf(student))}</span></p>
-                      <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
-                        <span className="text-sm">{tr("اختبار نهاية السنة")}</span>
-                        <Input
-                          className="h-11 w-24 border text-center text-base"
-                          inputMode="decimal"
-                          defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
-                          placeholder="0"
-                          onBlur={(event) => {
-                            const limit = Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40;
-                            const next = withinMax(event.target.value, limit);
-                            if (next === null) return;
-                            void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
-                          }}
-                        />
-                      </label>
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("أعمال السنة المعادلة")}</span><span>{sheetGrade(equatedMark(student, needYear))}</span></p>
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("الاختبار النهائي")}</span><span>{sheetGrade(equatedMark(student, needExam))}</span></p>
                     </>
                   ) : null}
                 </div>
@@ -2738,74 +2780,64 @@ export function ClassRecords({
         ) : null}
         {view === "year" && sheetMode === "exam" ? (
           <div className="grade-scroll">
-            <table className="w-full border-collapse text-sm">
+            <table className="grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
               <thead>
-                <tr>
+                <tr className="bg-[#9aa0a6] text-white">
                   <th className="border border-black px-2 py-1">{tr("م")}</th>
-                  <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
-                  <th className="border border-black px-2 py-1">{tr("إجمالي أعمال السنة")}</th>
-                  <th className="border border-black px-2 py-1">{tr("اختبار نهاية السنة")} ({formatPoints((data.scale as { finalExamMax?: number }).finalExamMax ?? 40)})</th>
-                  <th className="border border-black px-2 py-1">{tr("المجموع")} ({formatPoints(data.scale.totalMax)})</th>
+                  <th className="grade-name border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
+                  {periods.map((period) => <th key={period.no} className="border border-black px-2 py-1">{period.title}</th>)}
+                  <th className="border border-black px-2 py-1">{tr("أعمال السنة المعادلة")} ({formatPoints(needYear)})</th>
+                  <th className="border border-black px-2 py-1">{tr("الاختبار النهائي")} ({formatPoints(needExam)})</th>
                 </tr>
               </thead>
               <tbody>
                 {data.students.map((student, index) => (
-                  <tr key={student.id}>
-                    <td className="border border-black px-2 py-1">{index + 1}</td>
-                    <td className="border border-black px-2 py-1">{student.name}</td>
-                    <td className="border border-black px-2 py-1 text-center">{sheetGrade(yearWorkOf(student))}</td>
-                    <td className="border border-black px-2 py-1">
-                      {finalColumns.length ? (
-                        <div className="space-y-1">
-                          {finalColumns.map((column) => (
-                            <label key={column.id} className="flex items-center gap-1 text-xs">
-                              <span className="min-w-16">{column.title}</span>
-                              <Input
-                                className="h-8"
-                                key={`${student.id}-${column.id}-${student.finalExtras?.[column.id] ?? 0}`}
-                                defaultValue={student.finalExtras?.[column.id] ? String(student.finalExtras[column.id]) : ""}
-                                placeholder="0"
-                                inputMode="decimal"
-                                onChange={(event) => setFinalLive((prev) => ({ ...prev, [`${student.id}:${column.id}`]: event.target.value }))}
-                                onBlur={(event) => {
-                                  const next = withinMax(event.target.value, Number(column.max) || Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40);
-                                  if (next === null) {
-                                    setCellWarn((prev) => ({ ...prev, [`final:${student.id}:${column.id}`]: `أعلى من ${formatPoints(Number(column.max) || 40)}` }));
-                                    return;
-                                  }
-                                  setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}:${column.id}`]; return copy; });
-                                  const extras = { ...(student.finalExtras ?? {}), [column.id]: Number(next) || 0 };
-                                  void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: 0, extras } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
-                                }}
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <Input
-                          key={`${student.id}-${student.sheetExam ?? 0}`}
-                          defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
-                          placeholder="0"
-                          inputMode="decimal"
-                          onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))}
-                          onBlur={(event) => {
-                            const limit = Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40;
-                            const next = withinMax(event.target.value, limit);
-                            if (next === null) {
-                              setCellWarn((prev) => ({ ...prev, [`final:${student.id}`]: `أعلى من ${formatPoints(limit)}` }));
-                              return;
-                            }
-                            setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}`]; return copy; });
-                            void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
-                          }}
-                        />
-                      )}
-                    </td>
-                    <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(yearWorkOf(student) + (finalColumns.length
-                      ? finalColumns.reduce((sum, column) => sum + (Number(finalLive[`${student.id}:${column.id}`] ?? student.finalExtras?.[column.id] ?? 0) || 0), 0)
-                      : Number(finalLive[String(student.id)] ?? student.sheetExam ?? 0) || 0))}</td>
+                  <tr key={student.id} className={index % 2 ? "bg-[#f3f4f6]" : undefined} style={{ height: `${recordRow}mm` }}>
+                    <td className="border border-black px-1 text-center">{index + 1}</td>
+                    <td className="grade-name border border-black px-2 text-right font-bold" style={{ fontSize: `${nameFont}px` }}>{student.name}</td>
+                    {periods.map((period) => <td key={period.no} className="border border-black px-1 text-center">{sheetGrade(periodFigure(student, period.no).score)}</td>)}
+                    <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needYear))}</td>
+                    <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needExam))}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {view === "year" && sheetMode === "final" ? (
+          <div className="grade-scroll">
+            <table className="grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
+              <thead>
+                <tr className="bg-[#9aa0a6] text-white">
+                  <th className="border border-black px-2 py-1">{tr("م")}</th>
+                  <th className="grade-name border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
+                  {periods.map((period) => <th key={period.no} className="border border-black px-2 py-1">{period.title}</th>)}
+                  <th className="border border-black px-2 py-1">{tr("مجموع الفترات")}</th>
+                  <th className="border border-black px-2 py-1">{tr("الاختبار النهائي")}</th>
+                  <th className="border border-black px-2 py-1">{tr("المجموع")}</th>
+                  <th className="border border-black px-2 py-1">{tr("المعدل")} %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.students.map((student, index) => {
+                  const scores = periods.map((period) => periodFigure(student, period.no).score);
+                  const periodSum = scores.reduce((sum, value) => sum + value, 0);
+                  const exam = equatedMark(student, needExam);
+                  const total = equatedMark(student, needYear) + exam;
+                  const ceiling = needYear + needExam;
+                  const rate = ceiling > 0 ? (total / ceiling) * 100 : 0;
+                  return (
+                    <tr key={student.id} className={index % 2 ? "bg-[#f3f4f6]" : undefined} style={{ height: `${recordRow}mm` }}>
+                      <td className="border border-black px-1 text-center">{index + 1}</td>
+                      <td className="grade-name border border-black px-2 text-right font-bold" style={{ fontSize: `${nameFont}px` }}>{student.name}</td>
+                      {scores.map((score, scoreIndex) => <td key={periods[scoreIndex]?.no ?? scoreIndex} className="border border-black px-1 text-center">{sheetGrade(score)}</td>)}
+                      <td className="border border-black px-1 text-center">{sheetGrade(periodSum)}</td>
+                      <td className="border border-black px-1 text-center">{sheetGrade(exam)}</td>
+                      <td className="border border-black px-1 text-center font-semibold">{sheetGrade(total)}</td>
+                      <td className="border border-black px-1 text-center font-semibold">{sheetGrade(rate)}%</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
