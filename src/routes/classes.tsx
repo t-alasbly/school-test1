@@ -15,7 +15,7 @@ import { DayName } from "@/components/day-name";
 import { Badge } from "@/components/ui/badge";
 import { ClassRecords } from "@/components/teacher-studio";
 import { Input } from "@/components/ui/input";
-import { listStudents } from "@/lib/school/api";
+import { getMyTimetable, listStudents } from "@/lib/school/api";
 import {
   addGroupStudents,
   clearGroupStudents,
@@ -112,7 +112,11 @@ function ClassesBody() {
 
   const yearSheet = staffCan(staff, "viewYearSheet");
   const stageClasses = classes.filter((item) => item.stageId === stageId).map((item) => item.id);
-  const showYear = yearSheet && classId == null && pane === "year";
+  const tableQuery = useQuery({ queryKey: ["my-timetable"], queryFn: () => getMyTimetable() });
+  const taughtIds = new Set((tableQuery.data?.cells ?? []).map((cell) => cell.classId).filter((value): value is number => value != null));
+  const teachesStage = tableQuery.isSuccess && (taughtIds.size === 0 || stageClasses.some((id) => taughtIds.has(id)));
+  const yearClasses = taughtIds.size === 0 ? stageClasses : stageClasses.filter((id) => taughtIds.has(id));
+  const showYear = yearSheet && teachesStage && yearClasses.length > 0 && classId == null && pane === "year";
 
   if (!staffCan(staff, "viewClasses")) {
     return (
@@ -152,7 +156,7 @@ function ClassesBody() {
           });
         }}
       />
-      {yearSheet && classId == null && stageId ? (
+      {yearSheet && teachesStage && classId == null && stageId ? (
         <div className="flex flex-wrap gap-1.5">
           <button type="button" onClick={() => setPane("year")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "year" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("أعمال السنة")}</button>
           <button type="button" onClick={() => setPane("behavior")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "behavior" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("المخالفات السلوكية")}</button>
@@ -173,8 +177,8 @@ function ClassesBody() {
           ) : null}
         </div>
       ) : null}
-      {showYear && stageClasses.length ? (
-        <ClassRecords classId={stageClasses[0]} mergeClassIds={stageClasses} presetSubject={sheetSubject || undefined} view="year" printTick={printTick} />
+      {showYear && yearClasses.length ? (
+        <ClassRecords classId={yearClasses[0]} mergeClassIds={yearClasses} presetSubject={sheetSubject || undefined} view="year" printTick={printTick} />
       ) : null}
       {showYear ? null : (
       <>
