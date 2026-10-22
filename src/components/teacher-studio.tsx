@@ -1561,6 +1561,9 @@ export function ClassRecords({
     setPeriodNo(data.openPeriod);
   }, [data?.openPeriod]);
   useEffect(() => {
+    setRecordCols(null);
+  }, [periodNo]);
+  useEffect(() => {
     const active = yearPack?.activeFormatId;
     if (!active) return;
     const item = (yearPack?.formats ?? []).find((row) => row.id === active);
@@ -1819,12 +1822,12 @@ export function ClassRecords({
     if (gradeShape === "blank") {
       const heads = ["م", "اسم الطالب", ...(withId ? ["السجل المدني"] : []), ...gradeCols.map((col) => col.title || "عمود")];
       const rows = students.map((student, index) => {
-        const values = Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]));
+        const values = Object.fromEntries(gradeCols.map((item) => [item.id, readBlank(student.id, item.id)]));
         return [
           String(index + 1),
           student.name,
           ...idCell(student),
-          ...gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? String(sheetGrade(columnMath(col, gradeCols, values))) : (blankMarks[`${student.id}:${col.id}`] || "0")),
+          ...gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? String(sheetGrade(columnMath(col, gradeCols, values))) : (readBlank(student.id, col.id) || "0")),
         ];
       });
       return { heads, rows };
@@ -1952,6 +1955,27 @@ export function ClassRecords({
   function marksStorageKey(id: number) {
     return `grade-marks:${id}:${subject || data?.subject || "-"}`;
   }
+  function blankKey(studentId: number, colId: string, no = periodNo) {
+    return `${studentId}:p${no}:${colId}`;
+  }
+  function readBlank(studentId: number, colId: string, no = periodNo) {
+    const key = blankKey(studentId, colId, no);
+    if (Object.prototype.hasOwnProperty.call(blankMarks, key)) return blankMarks[key] ?? "";
+    if (no === 1) return blankMarks[`${studentId}:${colId}`] ?? "";
+    return "";
+  }
+  function yearWorkOf(student: { id: number; yearWork?: number; byPeriod?: { total?: number }[] }) {
+    if (gradeShape === "blank") {
+      const totals = (periods.length ? periods : [{ no: 1 }]).map((period) => gradeCols
+        .filter((col) => !isCalcColumn(col) && !isSumColumn(col))
+        .reduce((sum, col) => sum + (Number(readBlank(student.id, col.id, period.no)) || 0), 0));
+      const sum = totals.reduce((total, value) => total + value, 0);
+      return data.combine === "sum" ? sum : (totals.length ? sum / totals.length : 0);
+    }
+    const rows = student.byPeriod ?? [];
+    const sum = rows.reduce((total, period) => total + (Number(period.total) || 0), 0);
+    return data.combine === "sum" ? sum : (student.yearWork ?? (rows.length ? sum / rows.length : 0));
+  }
   function storeBlank(marks: Record<string, string>) {
     const ids = sheetIds.length ? sheetIds : [classId];
     for (const id of ids) {
@@ -1961,9 +1985,15 @@ export function ClassRecords({
       for (const student of data?.students ?? []) {
         if (Number(student.classId || classId) !== Number(id)) continue;
         for (const col of gradeCols) {
-          const key = `${student.id}:${col.id}`;
-          if (marks[key] == null || marks[key] === "") delete slice[key];
-          else slice[key] = marks[key];
+          const key = blankKey(student.id, col.id);
+          const legacy = `${student.id}:${col.id}`;
+          if (marks[key] == null || marks[key] === "") {
+            delete slice[key];
+            if (periodNo === 1) delete slice[legacy];
+          } else {
+            slice[key] = marks[key];
+            if (periodNo === 1) slice[legacy] = marks[key];
+          }
         }
       }
       localStorage.setItem(marksStorageKey(id), JSON.stringify(slice));
@@ -1979,7 +2009,7 @@ export function ClassRecords({
     }
     setBlankMarks((prev) => {
       const marks = { ...prev };
-      for (const student of data.students) marks[`${student.id}:${col.id}`] = next;
+      for (const student of data.students) marks[blankKey(student.id, col.id)] = next;
       storeBlank(marks);
       return marks;
     });
@@ -2051,7 +2081,7 @@ export function ClassRecords({
           <Button type="button" size="sm" onClick={() => { void exportGrades(exportKind, exportId); setExportOpen(false); }}>{tr("تصدير")}</Button>
         </div>
       ) : null}
-      {view === "year" && gradeShape === "blank" ? (
+      {view === "year" && gradeShape === "blank" && sheetMode === "period" ? (
         <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
           {gradeCols.filter((col) => !isSumColumn(col) && col.calc !== "avg").map((col) => (
             <label key={col.id} className="space-y-1 text-sm">
@@ -2396,13 +2426,13 @@ export function ClassRecords({
               <article key={student.id} className="rounded-xl border border-border bg-white p-3">
                 <p className="text-base font-bold leading-6">{index + 1}. {student.name}</p>
                 <div className="mt-2 space-y-2">
-                  {gradeShape === "blank" ? gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? (
-                    <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(columnMath(col, gradeCols, Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]))))}</span></p>
-                  ) : box(col.title || tr("عمود"), blankMarks[`${student.id}:${col.id}`] ?? "", `${student.id}:${col.id}`, false, (value) => {
-                    const next = acceptGrade(value, Number(col.max) || 0, `${student.id}:${col.id}`);
+                  {gradeShape === "blank" && sheetMode === "period" ? gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? (
+                    <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(columnMath(col, gradeCols, Object.fromEntries(gradeCols.map((item) => [item.id, readBlank(student.id, item.id)]))))}</span></p>
+                  ) : box(col.title || tr("عمود"), readBlank(student.id, col.id), blankKey(student.id, col.id), false, (value) => {
+                    const next = acceptGrade(value, Number(col.max) || 0, blankKey(student.id, col.id));
                     if (next === null) return;
                     setBlankMarks((prev) => {
-                      const marks = { ...prev, [`${student.id}:${col.id}`]: next };
+                      const marks = { ...prev, [blankKey(student.id, col.id)]: next };
                       storeBlank(marks);
                       return marks;
                     });
@@ -2453,6 +2483,26 @@ export function ClassRecords({
                   {gradeShape !== "blank" && sheetMode === "final" ? (
                     <p className="flex justify-between text-sm"><span>{tr("النتيجة")}</span><span className="font-semibold">{sheetGrade(student.finalTotal ?? 0)}</span></p>
                   ) : null}
+                  {sheetMode === "exam" ? (
+                    <>
+                      <p className="flex justify-between text-sm font-semibold"><span>{tr("إجمالي أعمال السنة")}</span><span>{sheetGrade(yearWorkOf(student))}</span></p>
+                      <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
+                        <span className="text-sm">{tr("اختبار نهاية السنة")}</span>
+                        <Input
+                          className="h-11 w-24 border text-center text-base"
+                          inputMode="decimal"
+                          defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
+                          placeholder="0"
+                          onBlur={(event) => {
+                            const limit = Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40;
+                            const next = withinMax(event.target.value, limit);
+                            if (next === null) return;
+                            void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
+                          }}
+                        />
+                      </label>
+                    </>
+                  ) : null}
                 </div>
               </article>
             );
@@ -2488,6 +2538,11 @@ export function ClassRecords({
           {view === "year" ? ` — ${data.combine === "avg" ? tr("متوسط الفترات") : tr("جمع الفترات")}` : ""}
         </h3>
         )}
+        {view === "year" ? (
+          <p className="mb-2 text-center text-base font-bold">
+            {sheetMode === "exam" ? tr("اختبار نهاية السنة") : sheetMode === "final" ? tr("النتيجة النهائية") : (selected?.title || tr("الفترة"))}
+          </p>
+        ) : null}
         {view === "year" && gradeShape !== "blank" && selected && sheetMode === "period" ? (
           <div className="grade-scroll">
           <table className="grade-equal grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
@@ -2681,14 +2736,14 @@ export function ClassRecords({
           </table>
           </div>
         ) : null}
-        {view === "year" && gradeShape !== "blank" && sheetMode === "exam" ? (
+        {view === "year" && sheetMode === "exam" ? (
           <div className="grade-scroll">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
                   <th className="border border-black px-2 py-1">{tr("م")}</th>
                   <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
-                  <th className="border border-black px-2 py-1">{tr("متوسط أعمال السنة")} ({formatPoints((data.scale as { yearMax?: number }).yearMax ?? 60)})</th>
+                  <th className="border border-black px-2 py-1">{tr("إجمالي أعمال السنة")}</th>
                   <th className="border border-black px-2 py-1">{tr("اختبار نهاية السنة")} ({formatPoints((data.scale as { finalExamMax?: number }).finalExamMax ?? 40)})</th>
                   <th className="border border-black px-2 py-1">{tr("المجموع")} ({formatPoints(data.scale.totalMax)})</th>
                 </tr>
@@ -2698,7 +2753,7 @@ export function ClassRecords({
                   <tr key={student.id}>
                     <td className="border border-black px-2 py-1">{index + 1}</td>
                     <td className="border border-black px-2 py-1">{student.name}</td>
-                    <td className="border border-black px-2 py-1 text-center">{sheetGrade(student.yearWork ?? 0)}</td>
+                    <td className="border border-black px-2 py-1 text-center">{sheetGrade(yearWorkOf(student))}</td>
                     <td className="border border-black px-2 py-1">
                       {finalColumns.length ? (
                         <div className="space-y-1">
@@ -2746,7 +2801,7 @@ export function ClassRecords({
                         />
                       )}
                     </td>
-                    <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade((student.yearWork ?? 0) + (finalColumns.length
+                    <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(yearWorkOf(student) + (finalColumns.length
                       ? finalColumns.reduce((sum, column) => sum + (Number(finalLive[`${student.id}:${column.id}`] ?? student.finalExtras?.[column.id] ?? 0) || 0), 0)
                       : Number(finalLive[String(student.id)] ?? student.sheetExam ?? 0) || 0))}</td>
                   </tr>
@@ -2755,7 +2810,7 @@ export function ClassRecords({
             </table>
           </div>
         ) : null}
-        {view === "year" && gradeShape === "blank" ? (
+        {view === "year" && gradeShape === "blank" && sheetMode === "period" ? (
           <div className="space-y-2 text-[13px] text-black">
             <div className="grade-scroll">
             <table className="grade-sheet w-full border-collapse text-xs" style={{ tableLayout: "fixed", ["--row-h" as string]: `${gradeRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
@@ -2782,7 +2837,7 @@ export function ClassRecords({
                     <td className="grade-name border border-black px-1 text-right font-bold" style={{ height: `${gradeRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
                     {gradeCols.map((col) => {
                       if (isCalcColumn(col) || isSumColumn(col)) {
-                        const values = Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]));
+                        const values = Object.fromEntries(gradeCols.map((item) => [item.id, readBlank(student.id, item.id)]));
                         return <td key={col.id} className="border border-black px-1 text-center font-semibold">{sheetGrade(columnMath(col, gradeCols, values))}</td>;
                       }
                       return (
@@ -2790,10 +2845,10 @@ export function ClassRecords({
                         <Input
                           className="grade-cell h-8 w-full border-0 bg-transparent px-1 text-center shadow-none"
                           inputMode="decimal"
-                          value={blankMarks[`${student.id}:${col.id}`] ?? ""}
+                          value={readBlank(student.id, col.id)}
                           placeholder="0"
                           onChange={(event) => {
-                            const id = `${student.id}:${col.id}`;
+                            const id = blankKey(student.id, col.id);
                             const next = acceptGrade(event.target.value, Number(col.max) || 0, id);
                             if (next === null) return;
                             setBlankMarks((prev) => {
@@ -2803,7 +2858,7 @@ export function ClassRecords({
                             });
                           }}
                         />
-                        {cellWarn[`${student.id}:${col.id}`] ? <span className="grade-warn no-print">{cellWarn[`${student.id}:${col.id}`]}</span> : null}
+                        {cellWarn[blankKey(student.id, col.id)] ? <span className="grade-warn no-print">{cellWarn[blankKey(student.id, col.id)]}</span> : null}
                       </td>
                       );
                     })}
