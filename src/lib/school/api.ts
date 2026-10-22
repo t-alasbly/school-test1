@@ -6080,6 +6080,12 @@ async function ensureTeacherEval(sql) {
     payload text not null default '{}',
     created_at timestamptz not null default now()
   )`;
+	await sql`create table if not exists grade_format_uses (
+    school_id integer not null references schools (id) on delete cascade,
+    staff_id text not null,
+    format_id integer not null,
+    primary key (school_id, staff_id)
+  )`;
 	await sql`create table if not exists student_period_marks (
     school_id integer not null references schools (id) on delete cascade,
     staff_id text not null,
@@ -6840,6 +6846,13 @@ var gradeFormatPayload = object({
 		title: string().max(40),
 		max: number().min(0).max(100).optional()
 	})).max(6).optional(),
+	sheet: _enum(["record", "blank"]).optional(),
+	gradeCols: array(object({
+		id: string().max(20).optional(),
+		title: string().max(40),
+		width: number().min(8).max(80).optional(),
+		max: number().min(0).max(100).optional()
+	})).max(12).optional(),
 	cards: array(object({
 		label: string().min(1).max(40),
 		points: number().min(-30).max(30),
@@ -6880,7 +6893,14 @@ function cleanFormat(data) {
 			bucket: card?.bucket === "quizzes" ? "quizzes" : "tasks",
 			enabled: card?.enabled !== false,
 			columnRef: String(card?.columnRef ?? "").trim().slice(0, 80)
-		})).filter((card) => card.label)
+		})).filter((card) => card.label),
+		sheet: data?.sheet === "blank" ? "blank" : "record",
+		gradeCols: (Array.isArray(data?.gradeCols) ? data.gradeCols : []).slice(0, 12).map((column, index) => ({
+			id: String(column?.id || `g${index + 1}`).slice(0, 20),
+			title: String(column?.title || "عمود").trim().slice(0, 40) || "عمود",
+			width: Math.min(80, Math.max(8, Number(column?.width) || 18)),
+			max: Math.min(100, Math.max(0, Number(column?.max) || 0))
+		}))
 	};
 }
 function designOf(payload) {
@@ -6962,10 +6982,62 @@ async function applyFormatToStaff(sql, staff, data) {
 	]);
 	return { ok: true };
 }
+async function seedYearTemplates(sql, staff) {
+	const have = await sql`
+    select name from grade_formats
+    where school_id = ${staff.school_id} and name in ('الكشف الحالي', 'كشف الدرجات')
+  `;
+	const got = new Set(have.map((row) => row.name));
+	if (!got.has("الكشف الحالي")) {
+		const payload = JSON.stringify(cleanFormat({
+			sheet: "record",
+			combine: "avg",
+			finalExamMax: 40,
+			periods: ["الفترة الأولى", "الفترة الثانية"].map((title) => ({
+				title,
+				tasksMax: 40,
+				examMax: 20,
+				columns: [
+					{ title: "مشاركة", group: "tasks", max: 10 },
+					{ title: "واجبات", group: "tasks", max: 10 },
+					{ title: "مهام أدائية", group: "tasks", max: 20 },
+					{ title: "اختبار الفترة", group: "exam", max: 20 }
+				]
+			})),
+			cards: []
+		}));
+		await sql`
+      insert into grade_formats (school_id, owner_id, owner_name, name, payload)
+      values (${staff.school_id}, ${"school"}, ${"المدرسة"}, ${"الكشف الحالي"}, ${payload})
+    `;
+	}
+	if (!got.has("كشف الدرجات")) {
+		const payload = JSON.stringify(cleanFormat({
+			sheet: "blank",
+			combine: "sum",
+			finalExamMax: 40,
+			periods: [{ title: "الفترة", tasksMax: 60, examMax: 0, columns: [] }],
+			gradeCols: [
+				{ id: "theory", title: "اختبار نظري", width: 22, max: 20 },
+				{ id: "homework", title: "واجبات", width: 18, max: 10 },
+				{ id: "share", title: "مشاركة", width: 18, max: 10 },
+				{ id: "tasks", title: "مهام أدائية", width: 22, max: 20 },
+				{ id: "final", title: "اختبار نهائي", width: 22, max: 40 },
+				{ id: "total", title: "المجموع", width: 18, max: 100 }
+			],
+			cards: []
+		}));
+		await sql`
+      insert into grade_formats (school_id, owner_id, owner_name, name, payload)
+      values (${staff.school_id}, ${"school"}, ${"المدرسة"}, ${"كشف الدرجات"}, ${payload})
+    `;
+	}
+}
 export const getGradeStudio = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
 	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	await seedTeacherEval(sql, staff);
+	await seedYearTemplates(sql, staff);
 	const names = parseSubjects(staff.subject);
 	const subjects = [];
 	for (const name of names.length ? names : [""]) {
@@ -6990,6 +7062,10 @@ export const getGradeStudio = createServerFn({ method: "GET" }).middleware([auth
     where school_id = ${staff.school_id}
     order by created_at desc
   `;
+	const uses = await sql`
+    select format_id, staff_id from grade_format_uses where school_id = ${staff.school_id}
+  `;
+	const activeFormatId = uses.find((row) => row.staff_id === staff.user_id)?.format_id ?? null;
 	return {
 		subjects,
 		cards: cards.map((card) => ({
@@ -7000,12 +7076,14 @@ export const getGradeStudio = createServerFn({ method: "GET" }).middleware([auth
 			enabled: card.enabled !== false,
 			columnRef: card.column_ref || ""
 		})),
+		activeFormatId,
 		formats: formats.map((row) => ({
 			id: row.id,
 			name: row.name,
 			ownerId: row.owner_id,
 			ownerName: row.owner_name || "معلم",
 			mine: row.owner_id === staff.user_id,
+			locked: uses.some((use) => use.format_id === row.id && use.staff_id !== staff.user_id),
 			payload: (() => {
 				const raw = row.payload;
 				if (raw && typeof raw === "object") return raw;
@@ -7020,24 +7098,38 @@ export const getGradeStudio = createServerFn({ method: "GET" }).middleware([auth
 });
 export const saveGradeFormat = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	name: string().min(2).max(60),
-	payload: gradeFormatPayload
+	payload: gradeFormatPayload,
+	id: number().optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	const name = data.name.trim();
 	const payload = JSON.stringify(cleanFormat(data.payload));
+	if (data.id) {
+		const row = (await sql`select id, owner_id, name from grade_formats where id = ${data.id} and school_id = ${staff.school_id}`)[0];
+		const others = Number((await sql`
+      select count(*)::int as n from grade_format_uses
+      where school_id = ${staff.school_id} and format_id = ${data.id} and staff_id <> ${staff.user_id}
+    `)[0]?.n) || 0;
+		if (row && others > 0 && name === row.name) throw new Error("هذا القالب مستخدم من معلم آخر. احفظه باسم جديد");
+		if (row && row.owner_id === staff.user_id && others === 0) {
+			await sql`update grade_formats set name = ${name}, payload = ${payload} where id = ${data.id} and school_id = ${staff.school_id}`;
+			return { id: data.id, copied: false };
+		}
+	}
 	return {
 		id: (await sql`
     insert into grade_formats (school_id, owner_id, owner_name, name, payload)
     values (${staff.school_id}, ${staff.user_id}, ${staff.display_name || staff.name || "معلم"}, ${name}, ${payload})
     returning id
   `)[0]?.id,
-		ok: true
+		copied: Boolean(data.id)
 	};
 });
 export const applyGradeFormat = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	subject: string().max(40).optional(),
 	periodNo: number().min(0).max(4).optional(),
+	formatId: number().optional(),
 	payload: gradeFormatPayload
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireDesk(context.userId);
@@ -7045,6 +7137,16 @@ export const applyGradeFormat = createServerFn({ method: "POST" }).middleware([a
 	await seedTeacherEval(sql, staff);
 	const listed = parseSubjects(staff.subject);
 	if (data.subject && listed.length && !listed.includes(data.subject)) throw new Error("هذه المادة ليست من موادك");
+	if (data.formatId) {
+		const exists = (await sql`select id from grade_formats where id = ${data.formatId} and school_id = ${staff.school_id}`)[0];
+		if (!exists) throw new Error("القالب غير موجود");
+		await sql`
+      insert into grade_format_uses (school_id, staff_id, format_id)
+      values (${staff.school_id}, ${staff.user_id}, ${data.formatId})
+      on conflict (school_id, staff_id) do update set format_id = ${data.formatId}
+    `;
+	}
+	if (data.payload.sheet === "blank") return { ok: true, sheet: "blank" };
 	return applyFormatToStaff(sql, staff, data);
 });
 export const deleteGradeFormat = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ id: number() })).handler(async ({ context, data }) => {
@@ -7053,7 +7155,13 @@ export const deleteGradeFormat = createServerFn({ method: "POST" }).middleware([
 	const row = (await sql`select id, owner_id from grade_formats where id = ${data.id} and school_id = ${staff.school_id}`)[0];
 	if (!row) throw new Error("التنسيق غير موجود");
 	if (row.owner_id !== staff.user_id && staff.role !== "admin") throw new Error("لا يمكنك حذف تنسيق معلم آخر");
+	const others = Number((await sql`
+    select count(*)::int as n from grade_format_uses
+    where school_id = ${staff.school_id} and format_id = ${data.id} and staff_id <> ${staff.user_id}
+  `)[0]?.n) || 0;
+	if (others > 0) throw new Error("القالب مستخدم من معلم آخر ولا يمكن حذفه");
 	await sql`delete from grade_formats where id = ${data.id} and school_id = ${staff.school_id}`;
+	await sql`delete from grade_format_uses where school_id = ${staff.school_id} and format_id = ${data.id}`;
 	return { ok: true };
 });
 export const getFollowLedger = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {

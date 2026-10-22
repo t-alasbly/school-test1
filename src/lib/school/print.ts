@@ -114,10 +114,12 @@ ${collectedStyles()}
   img { max-height: 52px; width: auto; object-fit: contain; }
   table, .official-table, .grade-equal, .grade-sheet {
     width: 100% !important;
-    border-collapse: collapse;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
     text-align: center;
     margin: 6px 0 10px;
     table-layout: fixed;
+    border: 1px solid #111 !important;
   }
   thead { display: table-header-group; }
   tr { break-inside: avoid; }
@@ -125,10 +127,12 @@ ${collectedStyles()}
   .grade-sheet tbody td, .grade-equal tbody td {
     height: var(--row-h, 8mm) !important;
     min-height: var(--row-h, 8mm) !important;
+    max-height: none !important;
     box-sizing: border-box;
     padding-top: 0;
     padding-bottom: 0;
     line-height: 1;
+    overflow: visible !important;
   }
   .grade-sheet thead tr:first-child th, .grade-equal thead th {
     background: #9aa0a6 !important;
@@ -148,7 +152,7 @@ ${collectedStyles()}
     print-color-adjust: exact;
   }
   .grade-name, td.grade-name { text-align: right !important; font-weight: 700 !important; font-size: var(--name-font, 13px) !important; }
-  th, td { border: 1px solid #111; padding: 1px 3px; vertical-align: middle; font-size: 11px; }
+  th, td { border: 1px solid #111 !important; padding: 1px 3px; vertical-align: middle; font-size: 11px; background-clip: padding-box; }
   .grade-warn { display: none !important; }
   input, .grade-sheet input, .roster-fit input {
     border: 0 !important;

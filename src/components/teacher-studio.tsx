@@ -1491,6 +1491,13 @@ export function ClassRecords({
   const [sheetTitle, setSheetTitle] = useState("");
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
+  const [yearFormatId, setYearFormatId] = useState("");
+  const formatsQuery = useQuery({
+    queryKey: ["grade-studio"],
+    queryFn: () => getGradeStudio(),
+    enabled: view === "year",
+  });
+  const yearPack = formatsQuery.data as { activeFormatId?: number | null; formats?: { id: number; name: string; payload?: FormatPayload }[] } | undefined;
   const [gradeRow, setGradeRow] = useState(8);
   const sheetIds = mergeClassIds?.length ? mergeClassIds : [classId];
   const sheetQueries = useQueries({
@@ -1529,9 +1536,22 @@ export function ClassRecords({
     });
     return next;
   }
+  const periodReady = useRef(false);
   useEffect(() => {
-    if (data?.openPeriod) setPeriodNo(data.openPeriod);
+    if (periodReady.current || !data?.openPeriod) return;
+    periodReady.current = true;
+    setPeriodNo(data.openPeriod);
   }, [data?.openPeriod]);
+  useEffect(() => {
+    const active = yearPack?.activeFormatId;
+    if (!active) return;
+    const item = (yearPack?.formats ?? []).find((row) => row.id === active);
+    if (!item?.payload) return;
+    setYearFormatId(String(active));
+    const sheet = item.payload.sheet === "blank" ? "blank" : "record";
+    setGradeShape(sheet);
+    if (sheet === "blank" && item.payload.gradeCols?.length) setGradeCols(item.payload.gradeCols.map((col) => ({ ...col })));
+  }, [yearPack?.activeFormatId]);
   useEffect(() => {
     if (!data?.class) return;
     const year = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date());
@@ -1543,27 +1563,33 @@ export function ClassRecords({
     } else if (school.printMargins) setSheetMargins(school.printMargins);
     const marks: Record<string, string> = {};
     for (const id of sheetIds) {
-      try {
-        const savedMarks = localStorage.getItem(`grade-marks:${id}:${subject}`);
-        if (savedMarks) Object.assign(marks, JSON.parse(savedMarks));
-      } catch { /* keep empty */ }
-    }
-    setBlankMarks(marks);
-    if (data.students?.length) {
-      for (const id of sheetIds) {
-        const slice: Record<string, string> = {};
-        for (const student of data.students) {
-          if ((student.classId || classId) !== id) continue;
-          for (const [key, value] of Object.entries(marks)) {
-            if (key.startsWith(`${student.id}:`)) slice[key] = value;
-          }
-        }
-        if (Object.keys(slice).length) localStorage.setItem(`grade-marks:${id}:${subject}`, JSON.stringify(slice));
+      const keys = [`grade-marks:${id}:${subject || data.subject || "-"}`, `grade-marks:${id}:${subject}`, `grade-marks:${id}:-`];
+      for (const key of keys) {
+        try {
+          const savedMarks = localStorage.getItem(key);
+          if (savedMarks) Object.assign(marks, JSON.parse(savedMarks));
+        } catch { /* keep empty */ }
       }
     }
+    setBlankMarks(marks);
+    try {
+      const savedCols = localStorage.getItem(`grade-cols:${classId}:${subject || "-"}`);
+      if (savedCols) {
+        const parsed = JSON.parse(savedCols);
+        if (Array.isArray(parsed) && parsed.length) setGradeCols(parsed);
+      }
+    } catch { /* keep defaults */ }
     setShowTeacherSign(localStorage.getItem(`grade-sign-teacher:${classId}`) !== "0");
     setShowPrincipalSign(localStorage.getItem(`grade-sign-principal:${classId}`) !== "0");
   }, [classId, subject, data?.class?.label, data?.subject, sheetIds.join(",")]);
+  const colsReady = useRef(false);
+  useEffect(() => {
+    if (!colsReady.current) {
+      colsReady.current = true;
+      return;
+    }
+    localStorage.setItem(`grade-cols:${classId}:${subject || "-"}`, JSON.stringify(gradeCols));
+  }, [gradeCols, classId, subject]);
   const seenPrint = useRef(0);
   useEffect(() => {
     if (!printTick || printTick === seenPrint.current || pending || !printRef.current) return;
@@ -1585,7 +1611,17 @@ export function ClassRecords({
   });
   const save = useMutation({
     mutationFn: (payload: { studentId: number; classId?: number; participation: number; exam: number; extras?: Record<string, number> }) =>
-      savePeriodMark({ data: { classId: payload.classId || classId, periodNo: selected?.no ?? 1, subject: data?.subject || subject || undefined, ...payload } }),
+      savePeriodMark({
+        data: {
+          studentId: payload.studentId,
+          participation: payload.participation,
+          exam: payload.exam,
+          extras: payload.extras,
+          classId: payload.classId || classId,
+          periodNo: selected?.no ?? 1,
+          subject: data?.subject || subject || undefined,
+        },
+      }),
     onSuccess: (_result, payload) => void queryClient.invalidateQueries({ queryKey: ["class-eval", payload.classId || classId] }),
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الدرجة")),
   });
@@ -1836,18 +1872,24 @@ export function ClassRecords({
     else toast.success(tr("وُزعت الدرجة على كل الطلاب وحُفظت في فصولهم"));
     void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
   }
+  function marksStorageKey(id: number) {
+    return `grade-marks:${id}:${subject || data?.subject || "-"}`;
+  }
   function storeBlank(marks: Record<string, string>) {
     const ids = sheetIds.length ? sheetIds : [classId];
     for (const id of ids) {
-      const slice: Record<string, string> = {};
+      let prev: Record<string, string> = {};
+      try { prev = JSON.parse(localStorage.getItem(marksStorageKey(id)) || "{}"); } catch { prev = {}; }
+      const slice = { ...prev };
       for (const student of data?.students ?? []) {
-        if ((student.classId || classId) !== id) continue;
+        if (Number(student.classId || classId) !== Number(id)) continue;
         for (const col of gradeCols) {
           const key = `${student.id}:${col.id}`;
-          if (marks[key] != null) slice[key] = marks[key];
+          if (marks[key] == null || marks[key] === "") delete slice[key];
+          else slice[key] = marks[key];
         }
       }
-      localStorage.setItem(`grade-marks:${id}:${subject}`, JSON.stringify(slice));
+      localStorage.setItem(marksStorageKey(id), JSON.stringify(slice));
     }
   }
   function applyBlankColumn(col: ExtraCol) {
@@ -1952,8 +1994,31 @@ export function ClassRecords({
       ) : null}
       {view === "year" ? (
         <div className="no-print flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setGradeShape("record")} className={cn("min-h-8 rounded-full border px-3 text-sm font-semibold", gradeShape === "record" ? "border-primary bg-primary/10 text-primary" : "border-border")}>{tr("الكشف الحالي")}</button>
-          <button type="button" onClick={() => setGradeShape("blank")} className={cn("min-h-8 rounded-full border px-3 text-sm font-semibold", gradeShape === "blank" ? "border-primary bg-primary/10 text-primary" : "border-border")}>{tr("كشف الدرجات")}</button>
+          <Select className="h-9 w-auto min-w-44" value={yearFormatId} onChange={(event) => setYearFormatId(event.target.value)}>
+            <option value="">{tr("اختر قالب أعمال السنة")}</option>
+            {(yearPack?.formats ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </Select>
+          <Button type="button" size="sm" disabled={!yearFormatId} onClick={() => {
+            const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
+            if (!item?.payload) return;
+            const payload: FormatPayload = {
+              ...item.payload,
+              sheet: item.payload.sheet === "blank" ? "blank" : "record",
+              gradeCols: item.payload.gradeCols ?? [],
+              periods: item.payload.periods?.length ? item.payload.periods : [{ title: "الفترة", tasksMax: 40, examMax: 20, columns: [] }],
+              cards: item.payload.cards ?? [],
+              finalExamMax: item.payload.finalExamMax ?? 40,
+              finalColumns: item.payload.finalColumns ?? [],
+              combine: item.payload.combine === "avg" ? "avg" : "sum",
+            };
+            void applyGradeFormat({ data: { formatId: item.id, subject: subject || undefined, periodNo: 0, payload } }).then(() => {
+              setGradeShape(payload.sheet === "blank" ? "blank" : "record");
+              if (payload.sheet === "blank" && payload.gradeCols?.length) setGradeCols(payload.gradeCols.map((col) => ({ ...col })));
+              toast.success(tr("طُبّق القالب"));
+              void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
+              void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
+            }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر التطبيق")));
+          }}>{tr("تطبيق")}</Button>
           {gradeShape === "record" ? (
             <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setRecordLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
           ) : null}
@@ -2112,11 +2177,15 @@ export function ClassRecords({
                       {taskColumns.length ? taskColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
                         if (next === null) return;
-                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                        const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
+                        setDrafts((prev) => ({ ...prev, [key]: updated }));
+                        persist(updated);
                       }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("أعمال السنة")} (${formatPoints(selected.tasksMax)})`, draft.participation, `${key}:tasks`, selected.closed, (value) => {
                         const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
                         if (next === null) return;
-                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, participation: next } }));
+                        const updated = { ...draft, participation: next };
+                        setDrafts((prev) => ({ ...prev, [key]: updated }));
+                        persist(updated);
                       }, (value) => {
                         const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
                         if (next === null) return;
@@ -2125,11 +2194,15 @@ export function ClassRecords({
                       {examColumns.length ? examColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
                         if (next === null) return;
-                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                        const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
+                        setDrafts((prev) => ({ ...prev, [key]: updated }));
+                        persist(updated);
                       }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("اختبار الفترة")} (${formatPoints(selected.examMax)})`, draft.exam, `${key}:exam`, selected.closed, (value) => {
                         const next = acceptGrade(value, selected.examMax, `${key}:exam`);
                         if (next === null) return;
-                        setDrafts((prev) => ({ ...prev, [key]: { ...draft, exam: next } }));
+                        const updated = { ...draft, exam: next };
+                        setDrafts((prev) => ({ ...prev, [key]: updated }));
+                        persist(updated);
                       }, (value) => {
                         const next = acceptGrade(value, selected.examMax, `${key}:exam`);
                         if (next === null) return;
@@ -2255,7 +2328,9 @@ export function ClassRecords({
                               onChange={(event) => {
                                 const next = acceptGrade(event.target.value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
                                 if (next === null) return;
-                                setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                                const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
+                                setDrafts((prev) => ({ ...prev, [key]: updated }));
+                                persist(updated);
                               }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
@@ -2274,7 +2349,9 @@ export function ClassRecords({
                           onChange={(event) => {
                             const next = acceptGrade(event.target.value, selected.tasksMax, `${key}:tasks`);
                             if (next === null) return;
-                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, participation: next } }));
+                            const updated = { ...draft, participation: next };
+                            setDrafts((prev) => ({ ...prev, [key]: updated }));
+                            persist(updated);
                           }}
                           onBlur={(event) => {
                             const next = acceptGrade(event.target.value, selected.tasksMax, `${key}:tasks`);
@@ -2297,7 +2374,9 @@ export function ClassRecords({
                               onChange={(event) => {
                                 const next = acceptGrade(event.target.value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
                                 if (next === null) return;
-                                setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                                const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
+                                setDrafts((prev) => ({ ...prev, [key]: updated }));
+                                persist(updated);
                               }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
@@ -2316,7 +2395,9 @@ export function ClassRecords({
                           onChange={(event) => {
                             const next = acceptGrade(event.target.value, selected.examMax, `${key}:exam`);
                             if (next === null) return;
-                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, exam: next } }));
+                            const updated = { ...draft, exam: next };
+                            setDrafts((prev) => ({ ...prev, [key]: updated }));
+                            persist(updated);
                           }}
                           onBlur={(event) => {
                             const next = acceptGrade(event.target.value, selected.examMax, `${key}:exam`);
@@ -2337,7 +2418,9 @@ export function ClassRecords({
                           onChange={(event) => {
                             const next = acceptGrade(event.target.value, Number(column.max) || 0, `${key}:${column.id}`);
                             if (next === null) return;
-                            setDrafts((prev) => ({ ...prev, [key]: { ...draft, extras: { ...draft.extras, [column.id]: next } } }));
+                            const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
+                            setDrafts((prev) => ({ ...prev, [key]: updated }));
+                            persist(updated);
                           }}
                           onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                         />
@@ -2681,7 +2764,7 @@ type FormatColumn = { title: string; group: "tasks" | "exam" | "eval"; max: numb
 type FinalColumn = { id: string; title: string; max: number };
 type FormatPeriod = { title: string; tasksMax: number; examMax: number; columns: FormatColumn[] };
 type FormatCard = { label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; columnRef: string };
-type FormatPayload = { combine: "sum" | "avg"; periods: FormatPeriod[]; cards: FormatCard[]; finalExamMax: number; finalColumns: FinalColumn[] };
+type FormatPayload = { combine: "sum" | "avg"; periods: FormatPeriod[]; cards: FormatCard[]; finalExamMax: number; finalColumns: FinalColumn[]; sheet?: "record" | "blank"; gradeCols?: ExtraCol[] };
 
 function columnRef(column: FormatColumn) {
   return `${column.group}:${column.title}`;
@@ -2705,6 +2788,8 @@ function formatMark(payload: FormatPayload, at: number) {
     cards: payload.cards ?? [],
     finalExamMax: payload.finalExamMax ?? 40,
     finalColumns: payload.finalColumns ?? [],
+    sheet: payload.sheet === "blank" ? "blank" : "record",
+    gradeCols: payload.gradeCols ?? [],
   });
 }
 
@@ -2732,7 +2817,8 @@ export function GradeFormatStudio() {
   const data = query.data as {
     subjects?: { name: string; combine?: "sum" | "avg"; periods?: PeriodPlan[]; finalExamMax?: number; finalColumns?: FinalColumn[] }[];
     cards?: FormatCard[];
-    formats?: { id: number; name: string; ownerName: string; mine: boolean; payload: FormatPayload }[];
+    formats?: { id: number; name: string; ownerName: string; mine: boolean; locked?: boolean; payload: FormatPayload }[];
+    activeFormatId?: number | null;
   } | undefined;
   const [name, setName] = useState("");
   const [picked, setPicked] = useState("");
@@ -2766,6 +2852,8 @@ export function GradeFormatStudio() {
       cards: (data.cards ?? []).map((card) => ({ label: card.label, points: card.points, bucket: card.bucket, enabled: card.enabled !== false, columnRef: card.columnRef || "" })),
       finalExamMax: Number(first?.finalExamMax) || 40,
       finalColumns: (first?.finalColumns ?? []).map((column, index) => ({ id: column.id || `f${index + 1}`, title: column.title, max: Number(column.max) || 0 })),
+      sheet: "record",
+      gradeCols: [],
     };
     const at = designSlot(next);
     setDesignAt(at);
@@ -2777,8 +2865,8 @@ export function GradeFormatStudio() {
     void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
   };
   const apply = useMutation({
-    mutationFn: (input: { payload: FormatPayload; subject?: string; periodNo?: number }) =>
-      applyGradeFormat({ data: { subject: input.subject || undefined, periodNo: input.periodNo ?? 0, payload: input.payload } }),
+    mutationFn: (input: { payload: FormatPayload; subject?: string; periodNo?: number; formatId?: number }) =>
+      applyGradeFormat({ data: { subject: input.subject || undefined, periodNo: input.periodNo ?? 0, formatId: input.formatId, payload: input.payload } }),
     onSuccess: () => {
       toast.success(tr("طُبّق التنسيق"));
       refresh();
@@ -2789,13 +2877,18 @@ export function GradeFormatStudio() {
     mutationFn: async () => {
       if (!draft) throw new Error("لا يوجد تنسيق");
       if (name.trim().length < 2) throw new Error("اكتب اسماً للتنسيق");
+      const pickedRow = (data?.formats ?? []).find((item) => String(item.id) === picked);
+      const locked = Boolean(pickedRow?.locked);
+      if (locked && name.trim() === pickedRow?.name) throw new Error("هذا القالب مستخدم من معلم آخر. احفظه باسم جديد");
       const stored = stampDesign(draft, designAt, 0);
       const live = stampDesign(draft, designAt, periodNo);
-      await saveGradeFormat({ data: { name: name.trim(), payload: stored } });
-      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, payload: live } });
+      const saved = await saveGradeFormat({ data: { name: name.trim(), payload: stored, id: pickedRow && pickedRow.mine && !locked ? pickedRow.id : undefined } });
+      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, formatId: saved.id, payload: live } });
+      return saved;
     },
-    onSuccess: () => {
-      toast.success(tr("حُفظ القالب وطُبّق"));
+    onSuccess: (saved) => {
+      toast.success(saved?.copied ? tr("القالب مستخدم، وحُفظ باسم جديد") : tr("حُفظ القالب وطُبّق"));
+      if (saved?.id) setPicked(String(saved.id));
       setName("");
       setAskSave(false);
       if (draft) setSavedMark(formatMark(draft, designAt));
@@ -2832,7 +2925,7 @@ export function GradeFormatStudio() {
     <section className="space-y-4">
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">{tr("تنسيق الدرجات")}</h2>
-        <p className="text-sm text-fg-muted">{tr("هذا تنسيق فترة واحدة. اختر أين يُطبَّق، ثم احفظ أو طبّق.")}</p>
+        <p className="text-sm text-fg-muted">{tr("اختر قالب أعمال السنة ثم طبّقه. يظهر جدول واحد عند الدخول على أعمال السنة.")}</p>
       </header>
 
       <section className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">
@@ -2853,17 +2946,19 @@ export function GradeFormatStudio() {
             cards: (item.payload.cards ?? []).map((card) => ({ label: card.label, points: Number(card.points) || 0, bucket: card.bucket === "quizzes" ? "quizzes" : "tasks", enabled: card.enabled !== false, columnRef: card.columnRef || "" })),
             finalExamMax: Number(item.payload.finalExamMax) || 40,
             finalColumns: (item.payload.finalColumns ?? []).map((column, index) => ({ id: column.id || `f${index + 1}`, title: column.title, max: Number(column.max) || 0 })),
+            sheet: item.payload.sheet === "blank" ? "blank" : "record",
+            gradeCols: (item.payload.gradeCols ?? []).map((column) => ({ id: column.id, title: column.title, width: Number(column.width) || 18, max: Number(column.max) || 0 })),
           };
           const at = designSlot(next);
           setDesignAt(at);
           setSavedMark(formatMark(next, at));
           setAskSave(false);
           setDraft(next);
-          setName("");
+          setName(item.locked ? "" : item.name);
         }}>
           <option value="">{tr("تنسيقي الحالي")}</option>
           {(data?.formats ?? []).map((item) => (
-            <option key={item.id} value={item.id}>{item.name} · {item.mine ? tr("تنسيقي") : item.ownerName}</option>
+            <option key={item.id} value={item.id}>{item.name}{item.locked ? ` · ${tr("مستخدم")}` : item.mine ? ` · ${tr("تنسيقي")}` : ` · ${item.ownerName}`}</option>
           ))}
         </Select>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -2877,9 +2972,14 @@ export function GradeFormatStudio() {
           </Select>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant={draft.sheet !== "blank" ? "default" : "secondary"} onClick={() => setDraft({ ...draft, sheet: "record" })}>{tr("قالب الكشف الحالي")}</Button>
+          <Button type="button" size="sm" variant={draft.sheet === "blank" ? "default" : "secondary"} onClick={() => setDraft({ ...draft, sheet: "blank", gradeCols: draft.gradeCols?.length ? draft.gradeCols : GRADE_SHEET_COLUMNS.map((col) => ({ ...col })) })}>{tr("قالب كشف الدرجات")}</Button>
           <Button type="button" size="sm" variant={draft.combine === "sum" ? "default" : "secondary"} onClick={() => setDraft({ ...draft, combine: "sum" })}>{tr("جمع الفترات")}</Button>
           <Button type="button" size="sm" variant={draft.combine === "avg" ? "default" : "secondary"} onClick={() => setDraft({ ...draft, combine: "avg" })}>{tr("متوسط الفترات")}</Button>
         </div>
+        {(data?.formats ?? []).find((item) => String(item.id) === picked)?.locked ? (
+          <p className="rounded-[var(--radius-md)] border border-amber-500 bg-amber-50 p-2 text-sm dark:bg-amber-500/10">{tr("هذا القالب مستخدم من معلم آخر. لا يمكن تعديله، واحفظ التعديل باسم جديد.")}</p>
+        ) : null}
         {askSave ? (
           <div className="space-y-2 rounded-[var(--radius-md)] border border-amber-500 bg-amber-50 p-3 text-sm dark:bg-amber-500/10">
             <p className="font-semibold">{tr("التعديل غير محفوظ")}</p>
@@ -2892,16 +2992,29 @@ export function GradeFormatStudio() {
         ) : null}
         <div className="flex flex-wrap items-end gap-2">
           <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={tr("اسم القالب")} className="max-w-xs" />
-          <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>{tr("حفظ")}</Button>
+          <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>{(data?.formats ?? []).find((item) => String(item.id) === picked)?.locked ? tr("حفظ باسم جديد") : tr("حفظ")}</Button>
           <Button type="button" variant="secondary" disabled={apply.isPending} onClick={() => {
             if (formatMark(draft, designAt) !== savedMark) { setAskSave(true); return; }
             setAskSave(false);
-            apply.mutate({ payload: stampDesign(draft, designAt, periodNo), subject, periodNo });
+            apply.mutate({ payload: stampDesign(draft, designAt, periodNo), subject, periodNo, formatId: picked ? Number(picked) : undefined });
           }}>{tr("تطبيق")}</Button>
-          {mine ? <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا التنسيق؟ لا يمكن التراجع."))) remove.mutate(Number(picked)); }}>{tr("حذف التنسيق")}</Button> : null}
+          {mine && !(data?.formats ?? []).find((item) => String(item.id) === picked)?.locked ? <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا التنسيق؟ لا يمكن التراجع."))) remove.mutate(Number(picked)); }}>{tr("حذف التنسيق")}</Button> : null}
         </div>
       </section>
 
+      {draft.sheet === "blank" ? (
+        <section className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
+          <h3 className="text-sm font-semibold">{tr("أعمدة كشف الدرجات")}</h3>
+          {(draft.gradeCols ?? []).map((col, index) => (
+            <div key={col.id || index} className="flex flex-wrap items-center gap-2">
+              <Input value={col.title} onChange={(event) => setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item) })} />
+              <Input className="w-20" inputMode="decimal" value={String(col.max || "")} placeholder={tr("الحد")} onChange={(event) => setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, max: Number(event.target.value) || 0 } : item) })} />
+              <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).filter((_, itemIndex) => itemIndex !== index) }); }}>{tr("حذف")}</Button>
+            </div>
+          ))}
+          <Button type="button" size="sm" variant="secondary" onClick={() => setDraft({ ...draft, gradeCols: [...(draft.gradeCols ?? []), { id: `g${Date.now()}`.slice(0, 20), title: "عمود", width: 18, max: 10 }] })}>{tr("إضافة عمود")}</Button>
+        </section>
+      ) : (
       <section className="grid gap-3 lg:grid-cols-2">
         {design ? ([
           ["tasks", "أعمال السنة", "درجة أعمال السنة", design.tasksMax, taskName, setTaskName, taskShare, setTaskShare],
@@ -2971,6 +3084,7 @@ export function GradeFormatStudio() {
           );
         })() : null}
       </section>
+      )}
 
       {staffCan(staff, "viewClassFollow") ? (
       <section className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">

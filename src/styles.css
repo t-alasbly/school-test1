@@ -372,18 +372,34 @@
     background: #f3f4f6 !important;
     color: #111 !important;
   }
+  body.printing-form #school-print-mount .print-form .grade-sheet,
+  body.printing-form #school-print-mount .print-form .grade-equal,
+  body.printing-form #school-print-mount .print-form table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border: 1px solid #111 !important;
+  }
+  body.printing-form #school-print-mount .print-form .grade-sheet th,
+  body.printing-form #school-print-mount .print-form .grade-sheet td,
+  body.printing-form #school-print-mount .print-form .grade-equal th,
+  body.printing-form #school-print-mount .print-form .grade-equal td,
+  body.printing-form #school-print-mount .print-form table th,
+  body.printing-form #school-print-mount .print-form table td {
+    border: 1px solid #111 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
   body.printing-form #school-print-mount .print-form .grade-sheet tbody tr,
   body.printing-form #school-print-mount .print-form .grade-equal tbody tr,
   body.printing-form #school-print-mount .print-form .grade-sheet tbody td,
   body.printing-form #school-print-mount .print-form .grade-equal tbody td {
     height: var(--row-h, 8mm) !important;
     min-height: var(--row-h, 8mm) !important;
-    max-height: var(--row-h, 8mm) !important;
     box-sizing: border-box !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     line-height: 1 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
   body.printing-form #school-print-mount .print-form .grade-sheet tbody input,
   body.printing-form #school-print-mount .print-form .grade-equal tbody input {
