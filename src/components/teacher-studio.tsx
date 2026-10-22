@@ -2510,7 +2510,7 @@ export function ClassRecords({
       {view === "year" && sheetMode === "period" && selected?.closed ? (
         <p className="rounded-[var(--radius-md)] bg-muted px-3 py-2 text-sm">{tr("الفترة مغلقة والكشف ثابت. أعد فتحها إذا أردت التعديل.")}</p>
       ) : null}
-      {view === "year" ? (
+      {view === "year" && sheetMode === "period" ? (
         <div className="grade-phone">
           {data.students.map((student, index) => {
             const score = student.byPeriod?.find((period) => period.no === selected?.no) ?? { participation: 0, exam: 0, evalPoints: 0, total: 0, extras: {} as Record<string, number> };
@@ -2620,7 +2620,7 @@ export function ClassRecords({
       ) : null}
       <div
         ref={printRef}
-        className="print-form year-sheet rounded-[var(--radius-md)] border border-border bg-white p-4 text-black"
+        className={`print-form year-sheet rounded-[var(--radius-md)] border border-border bg-white p-4 text-black${sheetMode === "exam" || sheetMode === "final" ? " exam-visible" : ""}`}
         style={{
           ["--print-margin-top" as string]: `${sheetMargins.top}mm`,
           ["--print-margin-right" as string]: `${sheetMargins.right}mm`,
@@ -2874,8 +2874,7 @@ export function ClassRecords({
                       <Input
                         className="exam-entry h-8 w-full px-1 text-center"
                         inputMode="decimal"
-                        key={`${student.id}-exam-${student.sheetExam ?? 0}`}
-                        defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
+                        value={finalLive[String(student.id)] ?? (student.sheetExam ? String(student.sheetExam) : "")}
                         placeholder="0"
                         onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))}
                         onBlur={(event) => {
