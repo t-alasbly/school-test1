@@ -251,6 +251,13 @@
   .year-sheet { display: block !important; }
   .grade-phone { display: none !important; }
 }
+.grade-sheet input.exam-entry {
+  height: 2.1rem !important;
+  min-width: 4.5rem;
+  border: 1px solid #111 !important;
+  background: #fff !important;
+  border-radius: 4px;
+}
 .grade-sheet input,
 .roster-fit input {
   height: 2rem;

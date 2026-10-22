@@ -2169,6 +2169,28 @@ export function ClassRecords({
             <span>{tr("سقف الاختبار")}</span>
             <Input className="w-20" inputMode="decimal" value={needExam} onChange={(event) => setNeedExam(Math.min(100, Math.max(1, Number(event.target.value) || 40)))} />
           </label>
+          {sheetMode === "exam" ? (
+            <label className="space-y-1 text-sm">
+              <span>{tr("درجة الاختبار للكل")}</span>
+              <span className="flex items-center gap-1">
+                <Input className="w-20" inputMode="decimal" value={bulkExam} placeholder={String(needExam)} onChange={(event) => setBulkExam(event.target.value)} />
+                <Button type="button" size="sm" onClick={() => {
+                  const next = withinMax(bulkExam, needExam);
+                  if (next === null || next === "") {
+                    toast.error(next === "" ? tr("اكتب الدرجة أولاً") : tr(`أعلى من ${formatPoints(needExam)}`));
+                    return;
+                  }
+                  const live: Record<string, string> = {};
+                  for (const student of data?.students ?? []) live[String(student.id)] = next;
+                  setFinalLive((prev) => ({ ...prev, ...live }));
+                  void Promise.all((data?.students ?? []).map((student) => savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data?.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }))).then(() => {
+                    toast.success(tr("وُزعت درجة الاختبار على كل الطلاب"));
+                    void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
+                  }).catch(() => toast.error(tr("تعذر حفظ درجة الاختبار")));
+                }}>{tr("للكل")}</Button>
+              </span>
+            </label>
+          ) : null}
           <Button type="button" size="sm" onClick={() => {
             localStorage.setItem(`grade-final-layout:${subject}`, JSON.stringify({ pullId, needYear, needExam }));
             const name = sheetMode === "final" ? "النتيجة النهائية" : "اختبار نهاية السنة";
@@ -2553,7 +2575,7 @@ export function ClassRecords({
                     <>
                       <p className="flex justify-between text-sm font-semibold"><span>{tr("أعمال السنة")}</span><span>{sheetGrade(equatedMark(student, needYear))}</span></p>
                       <label className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
-                        <span className="text-sm">{tr("الاختبار من")} {formatPoints(needExam)}</span>
+                        <span className="text-sm font-semibold">{tr("درجة الاختبار لكل طالب")}</span>
                         <Input className="h-11 w-24 border text-center text-base" inputMode="decimal" defaultValue={student.sheetExam ? String(student.sheetExam) : ""} placeholder="0" onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))} onBlur={(event) => {
                           const next = withinMax(event.target.value, needExam);
                           if (next === null) return;
@@ -2568,6 +2590,30 @@ export function ClassRecords({
               </article>
             );
           })}
+        </div>
+      ) : null}
+      {view === "year" && sheetMode === "exam" ? (
+        <div className="no-print space-y-2 rounded-[var(--radius-md)] border border-border bg-card p-3">
+          <p className="text-sm font-semibold">{tr("إدخال درجة الاختبار لكل طالب")} ({formatPoints(needExam)})</p>
+          {data.students.map((student, index) => (
+            <label key={student.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2 py-1">
+              <span className="min-w-0 text-sm font-semibold">{index + 1}. {student.name}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-xs text-fg-muted">{tr("أعمال السنة")} {sheetGrade(equatedMark(student, needYear))}</span>
+                <Input className="h-11 w-24 border text-center text-base" inputMode="decimal" value={finalLive[String(student.id)] ?? (student.sheetExam ? String(student.sheetExam) : "")} placeholder="0" onChange={(event) => setFinalLive((prev) => ({ ...prev, [String(student.id)]: event.target.value }))} onBlur={(event) => {
+                  const next = withinMax(event.target.value, needExam);
+                  if (next === null) {
+                    setCellWarn((prev) => ({ ...prev, [`final:${student.id}`]: `أعلى من ${formatPoints(needExam)}` }));
+                    return;
+                  }
+                  setCellWarn((prev) => { const copy = { ...prev }; delete copy[`final:${student.id}`]; return copy; });
+                  setFinalLive((prev) => ({ ...prev, [String(student.id)]: next }));
+                  void savePeriodMark({ data: { classId: student.classId || classId, periodNo: 0, subject: data.subject || subject || undefined, studentId: student.id, participation: 0, exam: Number(next) || 0 } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval", student.classId || classId] }));
+                }} />
+              </span>
+              {cellWarn[`final:${student.id}`] ? <span className="grade-warn">{cellWarn[`final:${student.id}`]}</span> : null}
+            </label>
+          ))}
         </div>
       ) : null}
       <div
@@ -2804,7 +2850,6 @@ export function ClassRecords({
                 <tr className="bg-[#9aa0a6] text-white">
                   <th className="border border-black px-2 py-1">{tr("م")}</th>
                   <th className="grade-name border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
-                  {periods.map((period) => <th key={period.no} className="border border-black px-2 py-1">{period.title}</th>)}
                   <th className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(needYear)})</th>
                   <th className="border border-black px-2 py-1">{tr("الاختبار النهائي")} ({formatPoints(needExam)})</th>
                   <th className="border border-black px-2 py-1">{tr("المجموع")} ({formatPoints(needYear + needExam)})</th>
@@ -2815,11 +2860,10 @@ export function ClassRecords({
                   <tr key={student.id} className={index % 2 ? "bg-[#f3f4f6]" : undefined} style={{ height: `${recordRow}mm` }}>
                     <td className="border border-black px-1 text-center">{index + 1}</td>
                     <td className="grade-name border border-black px-2 text-right font-bold" style={{ fontSize: `${nameFont}px` }}>{student.name}</td>
-                    {periods.map((period) => <td key={period.no} className="border border-black px-1 text-center">{sheetGrade(periodFigure(student, period.no).score)}</td>)}
                     <td className="border border-black px-1 text-center font-semibold">{sheetGrade(equatedMark(student, needYear))}</td>
                     <td className="border border-black p-0.5">
                       <Input
-                        className="grade-cell h-8 w-full border-0 bg-transparent px-1 text-center shadow-none"
+                        className="exam-entry h-8 w-full px-1 text-center"
                         inputMode="decimal"
                         key={`${student.id}-exam-${student.sheetExam ?? 0}`}
                         defaultValue={student.sheetExam ? String(student.sheetExam) : ""}
