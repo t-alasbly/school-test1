@@ -43,9 +43,21 @@ function sheetGrade(value: number) {
   return formatPoints(value);
 }
 
-function isSumColumn(col: { id: string; title?: string }) {
+function isSumColumn(col: { id: string; title?: string; calc?: string }) {
   const title = (col.title || "").replace(/\s/g, "");
-  return col.id === "total" || title === "المجموع" || title.startsWith("المجموع");
+  return col.calc === "sum" || col.id === "total" || title === "المجموع" || title.startsWith("المجموع");
+}
+
+function isCalcColumn(col: { calc?: string; id: string; title?: string }) {
+  return col.calc === "sum" || col.calc === "avg" || (isSumColumn(col) && col.calc !== "");
+}
+
+function columnMath(col: { id: string; calc?: string; sources?: string[]; title?: string }, cols: { id: string; calc?: string; title?: string }[], values: Record<string, string | number | undefined>) {
+  const manual = cols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg" && !isSumColumn(item));
+  const ids = col.sources?.length ? col.sources : col.calc === "avg" ? [] : manual.map((item) => item.id);
+  if (!ids.length) return 0;
+  const total = ids.reduce((sum, id) => sum + (Number(values[id]) || 0), 0);
+  return col.calc === "avg" ? total / ids.length : total;
 }
 
 function withinMax(raw: string, max: number) {
@@ -1332,7 +1344,7 @@ function StudentReport({
   );
 }
 
-type PeriodPlan = { no: number; title: string; tasksMax: number; examMax: number; closed: boolean; columns?: { id: string; title: string; group?: "tasks" | "exam" | "eval"; max?: number }[] };
+type PeriodPlan = { no: number; title: string; tasksMax: number; examMax: number; closed: boolean; columns?: { id: string; title: string; group?: "tasks" | "exam" | "eval"; max?: number; calc?: "" | "sum" | "avg"; sources?: string[] }[] };
 type PeriodScore = { no: number; participation: number; exam: number; evalPoints: number; total: number; extras?: Record<string, number> };
 
 function GradeSummary({
@@ -1491,6 +1503,7 @@ export function ClassRecords({
   const [sheetTitle, setSheetTitle] = useState("");
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
+  const [recordCols, setRecordCols] = useState<NonNullable<PeriodPlan["columns"]> | null>(null);
   const [yearFormatId, setYearFormatId] = useState("");
   const formatsQuery = useQuery({
     queryKey: ["grade-studio"],
@@ -1526,6 +1539,7 @@ export function ClassRecords({
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
+  const liveColumns = recordCols ?? liveColumns;
   function acceptGrade(raw: string, max: number, id: string) {
     const next = withinMax(raw, max);
     setCellWarn((prev) => {
@@ -1668,7 +1682,7 @@ export function ClassRecords({
           } else if (value > limit) throw new Error(`الحد الأعلى للاختبار النهائي هو ${limit}`);
         }
         if (which === "tasks") {
-          const taskColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks");
+          const taskColumns = (liveColumns).filter((column) => (column.group ?? "eval") === "tasks");
           if (taskColumns.length) {
             const sum = taskColumns.length * value;
             if ((selected?.tasksMax ?? 0) > 0 && sum > (selected?.tasksMax ?? 0)) throw new Error(`مجموع الأعمدة أعلى من أعمال السنة (${selected?.tasksMax})`);
@@ -1682,7 +1696,7 @@ export function ClassRecords({
           }
         }
         if (which === "periodExam") {
-          const examColumns = (selected?.columns ?? []).filter((column) => column.group === "exam");
+          const examColumns = (liveColumns).filter((column) => column.group === "exam");
           if (examColumns.length) {
             const sum = examColumns.length * value;
             if ((selected?.examMax ?? 0) > 0 && sum > (selected?.examMax ?? 0)) throw new Error(`مجموع أعمدة الاختبار أعلى من حد الفترة (${selected?.examMax})`);
@@ -1843,7 +1857,7 @@ export function ClassRecords({
       const current = drafts[key] ?? {
         participation: String(score?.participation ?? 0),
         exam: String(score?.exam ?? 0),
-        extras: Object.fromEntries((selected.columns ?? []).map((column) => [column.id, String(score?.extras?.[column.id] ?? 0)])),
+        extras: Object.fromEntries(liveColumns.map((column) => [column.id, String(score?.extras?.[column.id] ?? 0)])),
       };
       const updated = {
         participation: col.kind === "participation" ? next : current.participation,
@@ -1909,9 +1923,9 @@ export function ClassRecords({
     toast.success(tr("وُزعت الدرجة على كل الطلاب"));
   }
   const title = view === "year" ? "كشف أعمال السنة" : view === "analysis" ? "تحليل النتائج" : "تقرير الحضور";
-  const taskColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks");
-  const examColumns = (selected?.columns ?? []).filter((column) => column.group === "exam");
-  const evalColumns = (selected?.columns ?? []).filter((column) => (column.group ?? "eval") === "eval");
+  const taskColumns = liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
+  const examColumns = liveColumns.filter((column) => column.group === "exam");
+  const evalColumns = liveColumns.filter((column) => (column.group ?? "eval") === "eval");
   const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + (classFollow ? 1 : 0) + 1;
   const widthTotal = 10 + nameMm + gradeSlots * colMm;
   const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
@@ -1957,7 +1971,7 @@ export function ClassRecords({
       ) : null}
       {view === "year" && gradeShape === "blank" ? (
         <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
-          {gradeCols.filter((col) => !isSumColumn(col)).map((col) => (
+          {gradeCols.filter((col) => !isSumColumn(col) && col.calc !== "avg").map((col) => (
             <label key={col.id} className="space-y-1 text-sm">
               <span>{col.title || tr("عمود")} {tr("للكل")}</span>
               <span className="flex items-center gap-1">
@@ -1971,7 +1985,7 @@ export function ClassRecords({
       ) : null}
       {view === "year" && gradeShape !== "blank" && sheetMode === "period" && selected && !selected.closed ? (
         <div className="grade-bulk no-print flex flex-wrap items-end gap-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
-          {(taskColumns.length ? taskColumns.map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.tasksMax, kind: "extra" as const })) : [{ id: "tasks", title: tr("أعمال السنة"), max: selected.tasksMax, kind: "participation" as const }]).concat(examColumns.length ? examColumns.map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.examMax, kind: "extra" as const })) : [{ id: "exam", title: tr("اختبار الفترة"), max: selected.examMax, kind: "exam" as const }]).map((col) => (
+          {(taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").length ? taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.tasksMax, kind: "extra" as const })) : [{ id: "tasks", title: tr("أعمال السنة"), max: selected.tasksMax, kind: "participation" as const }]).concat(examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").length ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").map((column) => ({ id: column.id, title: column.title, max: Number(column.max) || selected.examMax, kind: "extra" as const })) : [{ id: "exam", title: tr("اختبار الفترة"), max: selected.examMax, kind: "exam" as const }]).map((col) => (
             <label key={col.id} className="space-y-1 text-sm">
               <span>{col.title} {tr("للكل")}</span>
               <span className="flex items-center gap-1">
@@ -2013,25 +2027,33 @@ export function ClassRecords({
             };
             void applyGradeFormat({ data: { formatId: item.id, subject: subject || undefined, periodNo: 0, payload } }).then(() => {
               setGradeShape(payload.sheet === "blank" ? "blank" : "record");
+              setRecordCols(null);
               if (payload.sheet === "blank" && payload.gradeCols?.length) setGradeCols(payload.gradeCols.map((col) => ({ ...col })));
               toast.success(tr("طُبّق القالب"));
               void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
               void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
             }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر التطبيق")));
           }}>{tr("تطبيق")}</Button>
+          {(() => {
+            const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
+            if (!item?.payload) return null;
+            const cols = item.payload.sheet === "blank" ? (item.payload.gradeCols ?? []) : (item.payload.periods?.[0]?.columns ?? []);
+            const applied = String(yearPack?.activeFormatId ?? "") === yearFormatId;
+            return (
+              <div className="basis-full rounded-[var(--radius-md)] border border-border bg-card p-2">
+                <p className="text-sm font-semibold">{applied ? tr("القالب الحالي") : tr("معاينة قبل التطبيق")}: {item.name}</p>
+                <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")}</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {cols.map((col) => <span key={col.id || col.title} className="rounded border border-border px-2 py-0.5 text-xs">{col.title || tr("عمود")}{col.calc === "sum" ? ` (${tr("جمع")})` : col.calc === "avg" ? ` (${tr("متوسط")})` : ""}</span>)}
+                </div>
+              </div>
+            );
+          })()}
           {gradeShape === "record" ? (
             <button type="button" className="min-h-8 rounded-full border border-border px-3 text-sm font-semibold" onClick={() => setRecordLayoutOpen((open) => !open)}>{tr("تنسيق الجدول")}</button>
           ) : null}
           <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("xlsx")}>{tr("تصدير إكسل")}</Button>
           <Button type="button" size="sm" variant="secondary" onClick={() => void exportGrades("pdf")}>{tr("تصدير PDF")}</Button>
-          <label className="inline-flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={showTeacherSign} onChange={(event) => { setShowTeacherSign(event.target.checked); localStorage.setItem(`grade-sign-teacher:${classId}`, event.target.checked ? "1" : "0"); }} />
-            {tr("اسم المعلم")}
-          </label>
-          <label className="inline-flex items-center gap-1 text-sm">
-            <input type="checkbox" checked={showPrincipalSign} onChange={(event) => { setShowPrincipalSign(event.target.checked); localStorage.setItem(`grade-sign-principal:${classId}`, event.target.checked ? "1" : "0"); }} />
-            {tr("اسم المدير")}
-          </label>
           <label className="text-sm">
               <span className="me-2">{tr("استيراد إكسل")}</span>
               <input
@@ -2076,7 +2098,73 @@ export function ClassRecords({
               }} />
             </label>
           ))}
-          <Button type="button" size="sm" onClick={() => setRecordLayoutOpen(false)}>{tr("حفظ")}</Button>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={showTeacherSign} onChange={(event) => { setShowTeacherSign(event.target.checked); localStorage.setItem(`grade-sign-teacher:${classId}`, event.target.checked ? "1" : "0"); }} />
+              {tr("اسم المعلم")}
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={showPrincipalSign} onChange={(event) => { setShowPrincipalSign(event.target.checked); localStorage.setItem(`grade-sign-principal:${classId}`, event.target.checked ? "1" : "0"); }} />
+              {tr("اسم المدير")}
+            </label>
+          </div>
+          <ul className="basis-full space-y-2">
+            {liveColumns.map((col, index) => (
+              <li key={col.id} className="space-y-1 rounded border border-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
+                  <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) || 0 } : item))} />
+                  <Select className="h-9 w-auto" value={col.group || "tasks"} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, group: event.target.value === "exam" || event.target.value === "eval" ? event.target.value : "tasks" } : item))}>
+                    <option value="tasks">{tr("أعمال السنة")}</option>
+                    <option value="exam">{tr("اختبار")}</option>
+                    <option value="eval">{tr("تقويم")}</option>
+                  </Select>
+                  <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" ? event.target.value : "" } : item))}>
+                    <option value="">{tr("إدخال")}</option>
+                    <option value="sum">{tr("جمع")}</option>
+                    <option value="avg">{tr("متوسط")}</option>
+                  </Select>
+                  <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
+                    const next = [...liveColumns];
+                    const [item] = next.splice(index, 1);
+                    next.splice(index - 1, 0, item);
+                    setRecordCols(next);
+                  }}>{tr("تقديم")}</button>
+                  <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setRecordCols(liveColumns.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
+                </div>
+                {col.calc === "sum" || col.calc === "avg" ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {liveColumns.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg").map((item) => (
+                      <label key={item.id} className="inline-flex items-center gap-1">
+                        <input type="checkbox" checked={col.sources?.includes(item.id) || false} onChange={(event) => {
+                          const sources = new Set(col.sources ?? []);
+                          if (event.target.checked) sources.add(item.id); else sources.delete(item.id);
+                          setRecordCols(liveColumns.map((entry) => entry.id === col.id ? { ...entry, sources: [...sources] } : entry));
+                        }} />
+                        {item.title || tr("عمود")}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="text-sm font-medium text-primary" onClick={() => setRecordCols([...liveColumns, { id: `c${Date.now()}`.slice(0, 20), title: "عمود", group: "tasks", max: 10 }])}>{tr("إضافة عمود")}</button>
+          <Button type="button" size="sm" onClick={() => {
+            if (selected) {
+              savePlan.mutate({
+                combine: data?.combine === "avg" ? "avg" : "sum",
+                periods: periods.map((period) => ({
+                  title: period.title,
+                  tasksMax: period.tasksMax,
+                  examMax: period.examMax,
+                  closed: period.closed,
+                  columns: period.no === selected.no ? liveColumns : (period.columns ?? []),
+                })),
+              });
+            }
+            setRecordLayoutOpen(false);
+          }}>{tr("حفظ")}</Button>
         </div>
       ) : null}
       {view === "year" && gradeShape === "blank" ? (
@@ -2106,12 +2194,28 @@ export function ClassRecords({
               </label>
             ))}
           </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={showTeacherSign} onChange={(event) => { setShowTeacherSign(event.target.checked); localStorage.setItem(`grade-sign-teacher:${classId}`, event.target.checked ? "1" : "0"); }} />
+              {tr("اسم المعلم")}
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={showPrincipalSign} onChange={(event) => { setShowPrincipalSign(event.target.checked); localStorage.setItem(`grade-sign-principal:${classId}`, event.target.checked ? "1" : "0"); }} />
+              {tr("اسم المدير")}
+            </label>
+          </div>
           <ul className="space-y-2">
             {gradeCols.map((col, index) => (
-              <li key={col.id} className="flex flex-wrap items-center gap-2">
+              <li key={col.id} className="space-y-1 rounded border border-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
                 <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
-                <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
+                <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
                 <Input className="w-16" type="number" min={8} max={80} value={col.width} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, width: Math.min(80, Math.max(8, Number(event.target.value) || 18)) } : item))} />
+                <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" ? event.target.value : "", sources: item.sources ?? [] } : item))}>
+                  <option value="">{tr("إدخال")}</option>
+                  <option value="sum">{tr("جمع")}</option>
+                  <option value="avg">{tr("متوسط")}</option>
+                </Select>
                 <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                   const next = [...gradeCols];
                   const [item] = next.splice(index, 1);
@@ -2119,6 +2223,21 @@ export function ClassRecords({
                   setGradeCols(next);
                 }}>{tr("تقديم")}</button>
                 <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setGradeCols(gradeCols.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
+                </div>
+                {col.calc === "sum" || col.calc === "avg" ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {gradeCols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg" && !isSumColumn(item)).map((item) => (
+                      <label key={item.id} className="inline-flex items-center gap-1">
+                        <input type="checkbox" checked={col.sources?.includes(item.id) || false} onChange={(event) => {
+                          const sources = new Set(col.sources ?? []);
+                          if (event.target.checked) sources.add(item.id); else sources.delete(item.id);
+                          setGradeCols(gradeCols.map((entry) => entry.id === col.id ? { ...entry, sources: [...sources] } : entry));
+                        }} />
+                        {item.title || tr("عمود")}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -2139,7 +2258,7 @@ export function ClassRecords({
             const draft = drafts[key] ?? {
               participation: String(score.participation ?? 0),
               exam: String(score.exam ?? 0),
-              extras: Object.fromEntries((selected?.columns ?? []).map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
+              extras: Object.fromEntries((liveColumns).map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
             };
             const persist = (next = draft) => save.mutate({
               studentId: student.id,
@@ -2161,8 +2280,8 @@ export function ClassRecords({
               <article key={student.id} className="rounded-xl border border-border bg-white p-3">
                 <p className="text-base font-bold leading-6">{index + 1}. {student.name}</p>
                 <div className="mt-2 space-y-2">
-                  {gradeShape === "blank" ? gradeCols.map((col) => isSumColumn(col) ? (
-                    <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(gradeCols.filter((item) => !isSumColumn(item)).reduce((total, item) => total + (Number(blankMarks[`${student.id}:${item.id}`]) || 0), 0))}</span></p>
+                  {gradeShape === "blank" ? gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? (
+                    <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(columnMath(col, gradeCols, Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]))))}</span></p>
                   ) : box(col.title || tr("عمود"), blankMarks[`${student.id}:${col.id}`] ?? "", `${student.id}:${col.id}`, false, (value) => {
                     const next = acceptGrade(value, Number(col.max) || 0, `${student.id}:${col.id}`);
                     if (next === null) return;
@@ -2174,7 +2293,9 @@ export function ClassRecords({
                   }, () => undefined)) : null}
                   {gradeShape !== "blank" && sheetMode === "period" && selected ? (
                     <>
-                      {taskColumns.length ? taskColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
+                      {taskColumns.length ? taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                        <p key={column.id} className="flex justify-between text-sm font-semibold"><span>{column.title}</span><span>{sheetGrade(columnMath(column, liveColumns, draft.extras))}</span></p>
+                      ) : box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
                         if (next === null) return;
                         const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
@@ -2191,7 +2312,9 @@ export function ClassRecords({
                         if (next === null) return;
                         persist({ ...draft, participation: next });
                       })}
-                      {examColumns.length ? examColumns.map((column) => box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
+                      {examColumns.length ? examColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                        <p key={column.id} className="flex justify-between text-sm font-semibold"><span>{column.title}</span><span>{sheetGrade(columnMath(column, liveColumns, draft.extras))}</span></p>
+                      ) : box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
                         if (next === null) return;
                         const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
@@ -2261,9 +2384,9 @@ export function ClassRecords({
               <tr>
                 <th className="border border-black px-2 py-1">{tr("م")}</th>
                 <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
-                {(selected.columns ?? []).some((column) => (column.group ?? "eval") === "tasks") ? (
+                {liveColumns.some((column) => (column.group ?? "eval") === "tasks") ? (
                   <>
-                    {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
+                    {liveColumns.filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
                       <th key={column.id} className="border border-black px-2 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>
                     ))}
                     <th className="border border-black px-2 py-1">{tr("مجموع المشاركة")} ({formatPoints(selected.tasksMax)})</th>
@@ -2271,9 +2394,9 @@ export function ClassRecords({
                 ) : (
                   <th className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(selected.tasksMax)})</th>
                 )}
-                {(selected.columns ?? []).some((column) => column.group === "exam") ? (
+                {liveColumns.some((column) => column.group === "exam") ? (
                   <>
-                    {(selected.columns ?? []).filter((column) => column.group === "exam").map((column) => (
+                    {liveColumns.filter((column) => column.group === "exam").map((column) => (
                       <th key={column.id} className="border border-black px-2 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>
                     ))}
                     <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
@@ -2281,7 +2404,7 @@ export function ClassRecords({
                 ) : (
                   <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
                 )}
-                {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "eval").map((column) => (
+                {liveColumns.filter((column) => (column.group ?? "eval") === "eval").map((column) => (
                   <th key={column.id} className="border border-black px-2 py-1">{column.title}</th>
                 ))}
                 {classFollow ? <th className="border border-black px-2 py-1">{tr("بطاقات المتابعة")}</th> : null}
@@ -2295,15 +2418,15 @@ export function ClassRecords({
                 const draft = drafts[key] ?? {
                   participation: String(score.participation),
                   exam: String(score.exam),
-                  extras: Object.fromEntries((selected.columns ?? []).map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
+                  extras: Object.fromEntries(liveColumns.map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
                 };
                 const taskSum = taskColumns.length
-                  ? taskColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
+                  ? taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
                   : Number(draft.participation) || 0;
                 const examSum = examColumns.length
-                  ? examColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
+                  ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
                   : Number(draft.exam) || 0;
-                const extraSum = evalColumns.reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0);
+                const extraSum = evalColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0);
                 const periodSum = taskSum + examSum + extraSum + (classFollow ? Number(score.evalPoints) || 0 : 0);
                 const persist = (next = draft) => save.mutate({
                   studentId: student.id,
@@ -2316,9 +2439,11 @@ export function ClassRecords({
                   <tr key={student.id} style={{ height: `${recordRow}mm` }}>
                     <td className="grade-no border border-black px-1 py-1 text-center" style={{ height: `${recordRow}mm` }}>{index + 1}</td>
                     <td className="grade-name border border-black px-2 py-1 text-right font-bold" style={{ height: `${recordRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
-                    {(selected.columns ?? []).some((column) => (column.group ?? "eval") === "tasks") ? (
+                    {liveColumns.some((column) => (column.group ?? "eval") === "tasks") ? (
                       <>
-                        {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
+                        {liveColumns.filter((column) => (column.group ?? "eval") === "tasks").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                          <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
+                        ) : (
                           <td key={column.id} className="border border-black px-2 py-1">
                             <Input
                               value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
@@ -2362,9 +2487,11 @@ export function ClassRecords({
                         {cellWarn[`${key}:tasks`] ? <span className="grade-warn no-print">{cellWarn[`${key}:tasks`]}</span> : null}
                       </td>
                     )}
-                    {(selected.columns ?? []).some((column) => column.group === "exam") ? (
+                    {liveColumns.some((column) => column.group === "exam") ? (
                       <>
-                        {(selected.columns ?? []).filter((column) => column.group === "exam").map((column) => (
+                        {liveColumns.filter((column) => column.group === "exam").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                          <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
+                        ) : (
                           <td key={column.id} className="border border-black px-2 py-1">
                             <Input
                               value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
@@ -2408,7 +2535,9 @@ export function ClassRecords({
                         {cellWarn[`${key}:exam`] ? <span className="grade-warn no-print">{cellWarn[`${key}:exam`]}</span> : null}
                       </td>
                     )}
-                    {(selected.columns ?? []).filter((column) => (column.group ?? "eval") === "eval").map((column) => (
+                    {liveColumns.filter((column) => (column.group ?? "eval") === "eval").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                      <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
+                    ) : (
                       <td key={column.id} className="border border-black px-2 py-1">
                         <Input
                           value={(draft.extras[column.id] && draft.extras[column.id] !== "0") ? draft.extras[column.id] : ""}
@@ -2524,8 +2653,8 @@ export function ClassRecords({
                 </tr>
                 <tr>
                   {gradeCols.map((col) => {
-                    const scored = gradeCols.filter((item) => !isSumColumn(item));
-                    const max = isSumColumn(col) ? scored.reduce((sum, item) => sum + (Number(item.max) || 0), 0) : col.max;
+                    const scored = gradeCols.filter((item) => !isCalcColumn(item) && !isSumColumn(item));
+                    const max = isCalcColumn(col) || isSumColumn(col) ? (col.calc === "avg" ? "" : scored.filter((item) => !col.sources?.length || col.sources.includes(item.id)).reduce((sum, item) => sum + (Number(item.max) || 0), 0)) : col.max;
                     return <th key={`${col.id}-max`} className="border border-black bg-[#e5e7eb] px-1 py-1">{max || ""}</th>;
                   })}
                 </tr>
@@ -2536,9 +2665,9 @@ export function ClassRecords({
                     <td className="border border-black px-1 text-center" style={{ height: `${gradeRow}mm` }}>{index + 1}</td>
                     <td className="grade-name border border-black px-1 text-right font-bold" style={{ height: `${gradeRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
                     {gradeCols.map((col) => {
-                      if (isSumColumn(col)) {
-                        const sum = gradeCols.filter((item) => !isSumColumn(item)).reduce((total, item) => total + (Number(blankMarks[`${student.id}:${item.id}`]) || 0), 0);
-                        return <td key={col.id} className="border border-black px-1 text-center font-semibold">{sheetGrade(sum)}</td>;
+                      if (isCalcColumn(col) || isSumColumn(col)) {
+                        const values = Object.fromEntries(gradeCols.map((item) => [item.id, blankMarks[`${student.id}:${item.id}`] ?? ""]));
+                        return <td key={col.id} className="border border-black px-1 text-center font-semibold">{sheetGrade(columnMath(col, gradeCols, values))}</td>;
                       }
                       return (
                       <td key={col.id} className="border border-black p-0.5">

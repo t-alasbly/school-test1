@@ -6136,7 +6136,7 @@ function columnGroup(column) {
 	return column?.group === "tasks" || column?.group === "exam" || column?.group === "eval" ? column.group : "eval";
 }
 function sumColumnGroup(columns, extras, group) {
-	return (columns ?? []).filter((column) => columnGroup(column) === group).reduce((sum, column) => {
+	return (columns ?? []).filter((column) => columnGroup(column) === group && column?.calc !== "sum" && column?.calc !== "avg").reduce((sum, column) => {
 		const value = Number(extras?.[column.id]) || 0;
 		const max = Number(column?.max) || 0;
 		return sum + (max > 0 ? Math.min(Math.max(value, 0), max) : value);
@@ -6207,7 +6207,9 @@ function parseSubjectPlan(raw, tasksMax, quizzesMax) {
 			id: String(column?.id || `c${columnIndex + 1}`).slice(0, 20),
 			title: String(column?.title || "عمود").slice(0, 40),
 			group: column?.group === "tasks" || column?.group === "exam" || column?.group === "eval" ? column.group : "eval",
-			max: Math.min(100, Math.max(0, Number(column?.max) || 0))
+			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
+			calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		})) : []
 	}));
 }
@@ -6837,7 +6839,10 @@ var gradeFormatPayload = object({
 				"exam",
 				"eval"
 			]).optional(),
-			max: number().min(0).max(100).optional()
+			max: number().min(0).max(100).optional(),
+			id: string().max(20).optional(),
+			calc: _enum(["", "sum", "avg"]).optional(),
+			sources: array(string().max(20)).max(12).optional()
 		})).max(9).optional()
 	})).min(1).max(4),
 	finalExamMax: number().min(0).max(100).optional(),
@@ -6851,7 +6856,9 @@ var gradeFormatPayload = object({
 		id: string().max(20).optional(),
 		title: string().max(40),
 		width: number().min(8).max(80).optional(),
-		max: number().min(0).max(100).optional()
+		max: number().min(0).max(100).optional(),
+		calc: _enum(["", "sum", "avg"]).optional(),
+		sources: array(string().max(20)).max(12).optional()
 	})).max(12).optional(),
 	cards: array(object({
 		label: string().min(1).max(40),
@@ -6875,10 +6882,13 @@ function cleanFormat(data) {
 			title: String(period?.title || "فترة").trim().slice(0, 40) || "فترة",
 			tasksMax: Math.min(100, Math.max(0, Number(period?.tasksMax) || 0)),
 			examMax: Math.min(100, Math.max(0, Number(period?.examMax) || 0)),
-			columns: (Array.isArray(period?.columns) ? period.columns : []).map((column) => ({
+			columns: (Array.isArray(period?.columns) ? period.columns : []).map((column, index) => ({
+				id: String(column?.id || `${column?.group === "exam" ? "e" : column?.group === "tasks" ? "t" : "v"}${index + 1}`).slice(0, 20),
 				title: String(column?.title || "قسم").trim().slice(0, 40) || "قسم",
 				group: column?.group === "tasks" || column?.group === "exam" ? column.group : "eval",
-				max: Math.min(100, Math.max(0, Number(column?.max) || 0))
+				max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
+				calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+				sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 			}))
 		})),
 		finalExamMax: Math.min(100, Math.max(0, Number(data?.finalExamMax) || 40)),
@@ -6899,7 +6909,9 @@ function cleanFormat(data) {
 			id: String(column?.id || `g${index + 1}`).slice(0, 20),
 			title: String(column?.title || "عمود").trim().slice(0, 40) || "عمود",
 			width: Math.min(80, Math.max(8, Number(column?.width) || 18)),
-			max: Math.min(100, Math.max(0, Number(column?.max) || 0))
+			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
+			calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		}))
 	};
 }
@@ -6913,16 +6925,22 @@ async function applyFormatToStaff(sql, staff, data) {
 	const subjects = data.subject ? [data.subject] : names.length ? names : [""];
 	for (const name of subjects) {
 		const current = await subjectPlanOf(sql, staff, name);
+		const carried = [];
 		const next = current.periods.map((period, index) => {
 			const indexed = payload.periods[Math.min((periodNo || index + 1) - 1, payload.periods.length - 1)];
 			const source = periodNo ? indexed?.columns?.length ? indexed : designOf(payload) : designOf(payload);
 			if (periodNo && period.no !== periodNo) return period;
 			const columns = (source?.columns ?? []).map((column, columnIndex) => {
+				const previous = (period.columns ?? []).find((item) => item.title === column.title && columnGroup(item) === column.group);
+				const id = String(column.id || previous?.id || `c${column.group[0]}${columnIndex}`).slice(0, 20);
+				if (previous?.id && previous.id !== id) carried.push({ no: period.no, from: previous.id, to: id });
 				return {
-					id: (period.columns ?? []).find((item) => item.title === column.title && columnGroup(item) === column.group)?.id || `c${index}${columnIndex}${column.group[0]}`.slice(0, 20),
+					id,
 					title: column.title,
 					group: column.group,
-					max: Math.min(100, Math.max(0, Number(column.max) || 0))
+					max: Math.min(100, Math.max(0, Number(column.max) || 0)),
+					calc: column.calc === "sum" || column.calc === "avg" ? column.calc : "",
+					sources: Array.isArray(column.sources) ? column.sources : []
 				};
 			});
 			return {
@@ -6941,6 +6959,27 @@ async function applyFormatToStaff(sql, staff, data) {
 			finalColumns: payload.finalColumns ?? []
 		};
 		await writePlanBook(sql, staff, book);
+		if (carried.length) {
+			const rows = await sql`
+        select student_id, period_no, coalesce(extras, '{}') as extras
+        from student_period_marks
+        where staff_id = ${staff.user_id} and subject = ${name}
+      `;
+			for (const row of rows) {
+				const extras = parseExtras(row.extras);
+				let changed = false;
+				for (const move of carried) {
+					if (move.no !== row.period_no || extras[move.from] == null || extras[move.to] != null) continue;
+					extras[move.to] = extras[move.from];
+					changed = true;
+				}
+				if (!changed) continue;
+				await sql`
+          update student_period_marks set extras = ${JSON.stringify(extras)}
+          where staff_id = ${staff.user_id} and student_id = ${row.student_id} and period_no = ${row.period_no} and subject = ${name}
+        `;
+			}
+		}
 	}
 	const linked = await subjectPlanOf(sql, staff, subjects[0] || "");
 	const open = linked.periods.find((period) => !period.closed) ?? linked.periods[0];
@@ -7278,7 +7317,9 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 				"exam",
 				"eval"
 			]).optional(),
-			max: number().min(0).max(100).optional()
+			max: number().min(0).max(100).optional(),
+			calc: _enum(["", "sum", "avg"]).optional(),
+			sources: array(string().max(20)).max(12).optional()
 		})).max(9).optional()
 	})).min(1).max(4)
 })).handler(async ({ context, data }) => {
@@ -7310,7 +7351,9 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 			id: String(column.id || `c${columnIndex + 1}`).slice(0, 20),
 			title: String(column.title || "عمود").slice(0, 40),
 			group: column.group === "tasks" || column.group === "exam" || column.group === "eval" ? column.group : "eval",
-			max: Math.min(100, Math.max(0, Number(column.max) || 0))
+			max: Math.min(100, Math.max(0, Number(column.max) || 0)),
+			calc: column.calc === "sum" || column.calc === "avg" ? column.calc : "",
+			sources: Array.isArray(column.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		}))
 	}));
 	const key = (data.subject ?? "").trim() || "*";
