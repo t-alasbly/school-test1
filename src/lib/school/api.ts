@@ -6208,7 +6208,7 @@ function parseSubjectPlan(raw, tasksMax, quizzesMax) {
 			title: String(column?.title || "عمود").slice(0, 40),
 			group: column?.group === "tasks" || column?.group === "exam" || column?.group === "eval" ? column.group : "eval",
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
-			calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
 			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		})) : []
 	}));
@@ -6840,7 +6840,7 @@ var gradeFormatPayload = object({
 			]).optional(),
 			max: number().min(0).max(100).optional(),
 			id: string().max(20).optional(),
-			calc: _enum(["", "sum", "avg"]).optional(),
+			calc: _enum(["", "sum", "avg", "cards"]).optional(),
 			sources: array(string().max(20)).max(12).optional()
 		})).max(9).optional()
 	})).min(1).max(4),
@@ -6856,7 +6856,7 @@ var gradeFormatPayload = object({
 		title: string().max(40),
 		width: number().min(8).max(80).optional(),
 		max: number().min(0).max(100).optional(),
-		calc: _enum(["", "sum", "avg"]).optional(),
+		calc: _enum(["", "sum", "avg", "cards"]).optional(),
 		sources: array(string().max(20)).max(12).optional()
 	})).max(12).optional(),
 	cards: array(object({
@@ -6886,7 +6886,7 @@ function cleanFormat(data) {
 				title: String(column?.title || "قسم").trim().slice(0, 40) || "قسم",
 				group: column?.group === "tasks" || column?.group === "exam" ? column.group : "eval",
 				max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
-				calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+				calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
 				sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 			}))
 		})),
@@ -6909,7 +6909,7 @@ function cleanFormat(data) {
 			title: String(column?.title || "عمود").trim().slice(0, 40) || "عمود",
 			width: Math.min(80, Math.max(8, Number(column?.width) || 18)),
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
-			calc: column?.calc === "sum" || column?.calc === "avg" ? column.calc : "",
+			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
 			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		}))
 	};
@@ -6938,7 +6938,7 @@ async function applyFormatToStaff(sql, staff, data) {
 					title: column.title,
 					group: column.group,
 					max: Math.min(100, Math.max(0, Number(column.max) || 0)),
-					calc: column.calc === "sum" || column.calc === "avg" ? column.calc : "",
+					calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "",
 					sources: Array.isArray(column.sources) ? column.sources : []
 				};
 			});
@@ -7317,7 +7317,7 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 				"eval"
 			]).optional(),
 			max: number().min(0).max(100).optional(),
-			calc: _enum(["", "sum", "avg"]).optional(),
+			calc: _enum(["", "sum", "avg", "cards"]).optional(),
 			sources: array(string().max(20)).max(12).optional()
 		})).max(9).optional()
 	})).min(1).max(4)
@@ -7351,7 +7351,7 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 			title: String(column.title || "عمود").slice(0, 40),
 			group: column.group === "tasks" || column.group === "exam" || column.group === "eval" ? column.group : "eval",
 			max: Math.min(100, Math.max(0, Number(column.max) || 0)),
-			calc: column.calc === "sum" || column.calc === "avg" ? column.calc : "",
+			calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "",
 			sources: Array.isArray(column.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
 		}))
 	}));

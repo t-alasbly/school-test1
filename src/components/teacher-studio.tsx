@@ -54,6 +54,7 @@ function isCalcColumn(col: { calc?: string; id: string; title?: string }) {
 }
 
 function columnMath(col: { id: string; calc?: string; sources?: string[]; title?: string }, cols: { id: string; calc?: string; title?: string }[], values: Record<string, string | number | undefined>) {
+  if (col.calc === "cards") return Number(values[col.id]) || 0;
   const manual = cols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg" && !isSumColumn(item));
   const ids = col.sources?.length ? col.sources : col.calc === "avg" ? [] : manual.map((item) => item.id);
   if (!ids.length) return 0;
@@ -1345,7 +1346,7 @@ function StudentReport({
   );
 }
 
-type PeriodPlan = { no: number; title: string; tasksMax: number; examMax: number; closed: boolean; columns?: { id: string; title: string; group?: "tasks" | "exam" | "eval"; max?: number; calc?: "" | "sum" | "avg"; sources?: string[] }[] };
+type PeriodPlan = { no: number; title: string; tasksMax: number; examMax: number; closed: boolean; columns?: { id: string; title: string; group?: "tasks" | "exam" | "eval"; max?: number; calc?: "" | "sum" | "avg" | "cards"; sources?: string[] }[] };
 type PeriodScore = { no: number; participation: number; exam: number; evalPoints: number; total: number; extras?: Record<string, number> };
 
 function GradeSummary({
@@ -1883,11 +1884,11 @@ export function ClassRecords({
       const taskSum = taskColumns.length ? taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0) : Number(score?.participation) || 0;
       const examSum = examColumns.length ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(extras[column.id]) || 0), 0) : Number(score?.exam) || 0;
       const cells = [String(index + 1), student.name, ...idCell(student)];
-      if (taskColumns.length) cells.push(...taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(taskSum)));
+      if (taskColumns.length) cells.push(...taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(taskSum)));
       else cells.push(String(score?.participation ?? 0));
-      if (examColumns.length) cells.push(...examColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(examSum)));
+      if (examColumns.length) cells.push(...examColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(sheetGrade(examSum)));
       else cells.push(String(score?.exam ?? 0));
-      cells.push(...evalColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(score?.total ?? taskSum + examSum));
+      cells.push(...evalColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? String(sheetGrade(columnMath(column, liveColumns, extras))) : String(extras[column.id] ?? 0)), String(score?.total ?? taskSum + examSum));
       return cells;
     });
     return { heads, rows };
@@ -1909,7 +1910,7 @@ export function ClassRecords({
           title: column.title,
           group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
           max: Number(column.max) || 0,
-          calc: column.calc === "sum" || column.calc === "avg" ? column.calc : undefined,
+          calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : undefined,
           sources: column.sources,
         })),
       })),
@@ -2019,7 +2020,7 @@ export function ClassRecords({
     if (!manual.length) return cap((Number(draft?.participation ?? row?.participation) || 0) + (Number(draft?.exam ?? row?.exam) || 0), (period?.tasksMax ?? 0) + (period?.examMax ?? 0));
     const tasks = manual.filter((column) => (column.group ?? "eval") === "tasks");
     const exams = manual.filter((column) => column.group === "exam");
-    const evals = classFollow ? manual.filter((column) => column.group === "eval") : [];
+    const evals = manual.filter((column) => column.group === "eval");
     const taskScore = tasks.length ? cap(tasks.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0), period?.tasksMax ?? 0) : (Number(draft?.participation ?? row?.participation) || 0);
     const examScore = exams.length ? cap(exams.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0), period?.examMax ?? 0) : (Number(draft?.exam ?? row?.exam) || 0);
     const evalScore = evals.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0);
@@ -2096,7 +2097,7 @@ export function ClassRecords({
   const title = view === "year" ? "كشف أعمال السنة" : view === "analysis" ? "تحليل النتائج" : "تقرير الحضور";
   const taskColumns = liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
   const examColumns = liveColumns.filter((column) => column.group === "exam");
-  const evalColumns = classFollow ? liveColumns.filter((column) => column.group === "eval") : [];
+  const evalColumns = liveColumns.filter((column) => column.group === "eval");
   const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + 1;
   const widthTotal = seqMm + nameMm + gradeSlots * colMm;
   const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
@@ -2387,16 +2388,17 @@ export function ClassRecords({
               <li key={col.id} className="space-y-1 rounded border border-border p-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
-                  <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) || 0 } : item))} />
+                  <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) || 0 } : item))} />
                   <Select className="h-9 w-auto" value={col.group || "tasks"} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, group: event.target.value === "exam" || event.target.value === "eval" ? event.target.value : "tasks" } : item))}>
                     <option value="tasks">{tr("أعمال السنة")}</option>
-                    <option value="exam">{tr("اختبار")}</option>
+                    <option value="exam">{tr("اختبار الفترة")}</option>
                     <option value="eval">{tr("تقويم")}</option>
                   </Select>
-                  <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" ? event.target.value : "" } : item))}>
-                    <option value="">{tr("إدخال")}</option>
-                    <option value="sum">{tr("جمع")}</option>
-                    <option value="avg">{tr("متوسط")}</option>
+                  <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "" } : item))}>
+                    <option value="">{tr("إدخال يدوي")}</option>
+                    <option value="sum">{tr("جمع أعمدة")}</option>
+                    <option value="avg">{tr("متوسط أعمدة")}</option>
+                    <option value="cards">{tr("أدوات التقويم الصفي")}</option>
                   </Select>
                   <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                     const next = [...liveColumns];
@@ -2408,6 +2410,7 @@ export function ClassRecords({
                 </div>
                 {col.calc === "sum" || col.calc === "avg" ? (
                   <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="basis-full text-fg-muted">{col.calc === "avg" ? tr("المتوسط يحسب هذه الأعمدة") : tr("الجمع يجمع هذه الأعمدة")}</span>
                     {liveColumns.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg").map((item) => (
                       <label key={item.id} className="inline-flex items-center gap-1">
                         <input type="checkbox" checked={col.sources?.includes(item.id) || false} onChange={(event) => {
@@ -2420,10 +2423,10 @@ export function ClassRecords({
                     ))}
                   </div>
                 ) : null}
-                {classFollow && (data?.cards ?? []).some((card) => card.enabled !== false) ? (
+                {col.calc === "cards" ? (
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="basis-full text-fg-muted">{tr("أدوات المتابعة التي تُضاف درجتها إلى هذا العمود")}</span>
-                    {(data?.cards ?? []).filter((card) => card.enabled !== false).map((card) => {
+                    <span className="basis-full text-fg-muted">{tr("هذه الخانة تجمع أدوات التقويم الصفي المحددة، ولا تُكتب يدويًا")}</span>
+                    {(data?.cards ?? []).filter((card) => card.enabled !== false).length ? (data?.cards ?? []).filter((card) => card.enabled !== false).map((card) => {
                       const current = cardColumn?.[card.id] ?? card.columnId ?? "";
                       return (
                         <label key={card.id} className="inline-flex items-center gap-1">
@@ -2437,7 +2440,7 @@ export function ClassRecords({
                           {card.label} ({formatPoints(card.points)})
                         </label>
                       );
-                    })}
+                    }) : <span>{tr("لا توجد أدوات بعد. أضف صح وأتقن وحل الواجب من المتابعة الصفية.")}</span>}
                   </div>
                 ) : null}
               </li>
@@ -2458,7 +2461,7 @@ export function ClassRecords({
                   columns,
                 })),
               });
-              if (classFollow && cardColumn) {
+              if (cardColumn) {
                 void linkFollowCards({ data: { links: (data?.cards ?? []).map((card) => {
                   const columnId = cardColumn[card.id] ?? card.columnId ?? "";
                   const column = columns.find((item) => item.id === columnId);
@@ -2607,7 +2610,7 @@ export function ClassRecords({
                   }, () => undefined)) : null}
                   {gradeShape !== "blank" && sheetMode === "period" && selected ? (
                     <>
-                      {taskColumns.length ? taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                      {taskColumns.length ? taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
                         <p key={column.id} className="flex justify-between text-sm font-semibold"><span>{column.title}</span><span>{sheetGrade(columnMath(column, liveColumns, draft.extras))}</span></p>
                       ) : box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.tasksMax, `${key}:${column.id}`);
@@ -2624,7 +2627,7 @@ export function ClassRecords({
                         if (next === null) return;
                         persist({ ...draft, participation: next });
                       })}
-                      {examColumns.length ? examColumns.map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                      {examColumns.length ? examColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
                         <p key={column.id} className="flex justify-between text-sm font-semibold"><span>{column.title}</span><span>{sheetGrade(columnMath(column, liveColumns, draft.extras))}</span></p>
                       ) : box(`${column.title}${column.max ? ` (${formatPoints(column.max)})` : ""}`, draft.extras[column.id] ?? "", `${key}:${column.id}`, selected.closed, (value) => {
                         const next = acceptGrade(value, Number(column.max) || selected.examMax, `${key}:${column.id}`);
@@ -2770,7 +2773,7 @@ export function ClassRecords({
                     <td className="grade-name border border-black px-2 py-1 text-right font-bold" style={{ height: `${recordRow}mm`, fontSize: `${nameFont}px` }}>{student.name}</td>
                     {liveColumns.some((column) => (column.group ?? "eval") === "tasks") ? (
                       <>
-                        {liveColumns.filter((column) => (column.group ?? "eval") === "tasks").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                        {liveColumns.filter((column) => (column.group ?? "eval") === "tasks").map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
                           <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
                         ) : (
                           <td key={column.id} className="border border-black px-2 py-1">
@@ -2816,7 +2819,7 @@ export function ClassRecords({
                     )}
                     {liveColumns.some((column) => column.group === "exam") ? (
                       <>
-                        {liveColumns.filter((column) => column.group === "exam").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                        {liveColumns.filter((column) => column.group === "exam").map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
                           <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
                         ) : (
                           <td key={column.id} className="border border-black px-2 py-1">
@@ -2860,7 +2863,7 @@ export function ClassRecords({
                         {cellWarn[`${key}:exam`] ? <span className="grade-warn no-print">{cellWarn[`${key}:exam`]}</span> : null}
                       </td>
                     )}
-                    {liveColumns.filter((column) => (column.group ?? "eval") === "eval").map((column) => column.calc === "sum" || column.calc === "avg" ? (
+                    {liveColumns.filter((column) => column.group === "eval").map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
                       <td key={column.id} className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(columnMath(column, liveColumns, draft.extras))}</td>
                     ) : (
                       <td key={column.id} className="border border-black px-2 py-1">
