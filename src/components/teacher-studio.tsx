@@ -3236,7 +3236,7 @@ export function ClassRecords({
   );
 }
 
-type FormatColumn = { id?: string; title: string; group: "tasks" | "exam" | "eval"; max: number; calc?: "" | "sum" | "avg"; sources?: string[] };
+type FormatColumn = { id?: string; title: string; group: "tasks" | "exam" | "eval"; max: number; calc?: "" | "sum" | "avg" | "cards"; sources?: string[] };
 type FinalColumn = { id: string; title: string; max: number };
 type FormatPeriod = { title: string; tasksMax: number; examMax: number; columns: FormatColumn[] };
 type FormatCard = { label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; columnRef: string };
@@ -3417,7 +3417,7 @@ export function GradeFormatStudio() {
               title: period.title || "فترة",
               tasksMax: Number(period.tasksMax) || 0,
               examMax: Number(period.examMax) || 0,
-              columns: (period.columns ?? []).map((column) => ({ title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0 })),
+              columns: (period.columns ?? []).map((column) => ({ title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0, calc: (column as { calc?: string }).calc === "sum" || (column as { calc?: string }).calc === "avg" || (column as { calc?: string }).calc === "cards" ? (column as { calc?: "" | "sum" | "avg" | "cards" }).calc : "", sources: (column as { sources?: string[] }).sources ?? [] })),
             })),
             cards: (item.payload.cards ?? []).map((card) => ({ label: card.label, points: Number(card.points) || 0, bucket: card.bucket === "quizzes" ? "quizzes" : "tasks", enabled: card.enabled !== false, columnRef: card.columnRef || "" })),
             finalExamMax: Number(item.payload.finalExamMax) || 40,
@@ -3528,6 +3528,61 @@ export function GradeFormatStudio() {
             </div>
           );
         }) : null}
+        {design ? (
+          <div className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3 lg:col-span-2">
+            <h3 className="text-sm font-semibold">{tr("طريقة حساب كل خانة")}</h3>
+            <p className="text-xs text-fg-muted">{tr("لكل خانة: إدخال يدوي، أو جمع أعمدة، أو متوسط أعمدة، أو جمع أدوات التقويم الصفي.")}</p>
+            {design.columns.map((column, index) => (
+              <div key={`${column.group}-${column.title}-${index}`} className="space-y-1 rounded border border-border p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-28 text-sm font-semibold">{column.title}</span>
+                  <span className="text-xs text-fg-muted">{column.group === "exam" ? tr("اختبار") : column.group === "tasks" ? tr("أعمال السنة") : tr("تقويم")}</span>
+                  <Select className="h-9 w-auto" value={column.calc || ""} onChange={(event) => {
+                    const calc = event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "";
+                    patchDesign({ columns: design.columns.map((item, itemIndex) => itemIndex === index ? { ...item, calc } : item) });
+                  }}>
+                    <option value="">{tr("إدخال يدوي")}</option>
+                    <option value="sum">{tr("جمع أعمدة")}</option>
+                    <option value="avg">{tr("متوسط أعمدة")}</option>
+                    <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                  </Select>
+                </div>
+                {column.calc === "sum" || column.calc === "avg" ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {design.columns.filter((item, itemIndex) => itemIndex !== index && item.calc !== "sum" && item.calc !== "avg").map((item) => {
+                      const id = item.id || `${item.group}:${item.title}`;
+                      return (
+                        <label key={id} className="inline-flex items-center gap-1">
+                          <input type="checkbox" checked={column.sources?.includes(id) || false} onChange={(event) => {
+                            const sources = new Set(column.sources ?? []);
+                            if (event.target.checked) sources.add(id); else sources.delete(id);
+                            patchDesign({ columns: design.columns.map((entry, entryIndex) => entryIndex === index ? { ...entry, sources: [...sources] } : entry) });
+                          }} />
+                          {item.title}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {column.calc === "cards" ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="basis-full text-fg-muted">{tr("تجمع هذه الأدوات، ولا تُكتب الدرجة يدويًا")}</span>
+                    {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => {
+                      const ref = columnRef(column);
+                      return (
+                        <label key={card.label} className="inline-flex items-center gap-1">
+                          <input type="checkbox" checked={card.columnRef === ref} onChange={(event) => setDraft({ ...draft, cards: draft.cards.map((item) => item.label === card.label ? { ...item, columnRef: event.target.checked ? ref : "" } : item) })} />
+                          {card.label} ({formatPoints(card.points)})
+                        </label>
+                      );
+                    }) : <span>{tr("أضف أدوات المتابعة أولًا من القسم الذي تحت هذه الصفحة.")}</span>}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            <Button type="button" size="sm" variant="secondary" onClick={() => patchDesign({ columns: [...design.columns, { title: "تقويم", group: "eval", max: 10, calc: "cards" }] })}>{tr("إضافة خانة تقويم")}</Button>
+          </div>
+        ) : null}
         {draft ? (() => {
           const parts = draft.finalColumns ?? [];
           const used = parts.reduce((sum, column) => sum + (Number(column.max) || 0), 0);

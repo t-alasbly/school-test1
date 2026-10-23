@@ -28,11 +28,12 @@ import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/class/$classId")({
-  validateSearch: (search: Record<string, unknown>): { student?: number; subject?: string; period?: string; from?: "desk" } => ({
+  validateSearch: (search: Record<string, unknown>): { student?: number; subject?: string; period?: string; from?: "desk"; pane?: "behavior" | "one" | "group" | "year" } => ({
     student: Number(search.student) > 0 ? Number(search.student) : undefined,
     subject: typeof search.subject === "string" && search.subject.trim() ? search.subject.trim().slice(0, 40) : undefined,
     period: typeof search.period === "string" && /^p\d+$/.test(search.period) ? search.period : undefined,
     from: search.from === "desk" ? "desk" : undefined,
+    pane: search.pane === "behavior" || search.pane === "one" || search.pane === "group" || search.pane === "year" ? search.pane : undefined,
   }),
   component: ClassPage,
 });
@@ -56,7 +57,7 @@ type FollowMode = "behavior" | "one" | "group" | "year";
 
 function ClassBody() {
   const { classId } = Route.useParams();
-  const { student: studentParam, subject: lessonFromTable, period: periodFromTable, from } = Route.useSearch();
+  const { student: studentParam, subject: lessonFromTable, period: periodFromTable, from, pane } = Route.useSearch();
   const fromDesk = from === "desk";
   const id = Number(classId);
   const { stages, classes, staff } = useWorkspace();
@@ -68,7 +69,7 @@ function ClassBody() {
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
   const [groupOpen, setGroupOpen] = useState(false);
-  const [followMode, setFollowMode] = useState<FollowMode>(classFollow ? "one" : yearSheet ? "year" : "behavior");
+  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? (classFollow ? "one" : yearSheet ? "year" : "behavior"));
   const [printTick, setPrintTick] = useState(0);
   const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { targets } = useGroupPick();
@@ -120,7 +121,13 @@ function ClassBody() {
     subject: lessonFromTable,
     period: periodFromTable,
     from: fromDesk ? ("desk" as const) : undefined,
+    pane: followMode,
   };
+
+  function openPane(mode: FollowMode) {
+    setFollowMode(mode);
+    void navigate({ to: "/class/$classId", params: { classId: String(id) }, search: { ...keepSearch, pane: mode }, replace: true });
+  }
 
   function changeClass(nextStage: number, nextClass: number | null) {
     if (nextClass) {
@@ -198,7 +205,7 @@ function ClassBody() {
           <button
             key={mode}
             type="button"
-            onClick={() => setFollowMode(mode)}
+            onClick={() => openPane(mode)}
             className={cn(
               "min-h-8 rounded-full border px-3 py-1 text-sm font-semibold",
               followMode === mode ? "border-primary bg-primary/10 text-primary" : "border-border bg-card",
