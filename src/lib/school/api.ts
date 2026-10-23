@@ -6464,8 +6464,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 		const points = Number(row.points);
 		const periodColumns = periods.find((period) => period.no === periodNo)?.columns ?? [];
 		const cardColumns = periodColumns.filter((column) => column.calc === "cards");
-		const linked = new Set(cardColumns.flatMap((column) => column.sources ?? []));
-		const grabbed = linked.has(String(row.label || "")) || (cardColumns.length === 1 && !(cardColumns[0].sources ?? []).length);
+		const grabbed = cardColumns.length > 0;
 		if (!grabbed && !row.column_id) {
 			if (row.bucket === "quizzes") bucket.quizzes += points;
 			else bucket.tasks += points;
@@ -6530,19 +6529,15 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 				};
 				const extras = parseExtras(marked?.extras);
 				const columns = period.columns ?? [];
-				for (const column of columns) {
-					if (column.calc !== "cards") continue;
-					const labels = new Set((column.sources ?? []).map((label) => String(label)));
-					const onlyOpen = !labels.size && columns.filter((item) => item.calc === "cards" && !(item.sources ?? []).length).length === 1;
-					if (!labels.size && !onlyOpen) continue;
+				const cardColumn = columns.find((column) => column.calc === "cards");
+				if (cardColumn) {
 					let follow = 0;
 					for (const row of evals) {
 						if (Number(row.student_id) !== Number(student.id) || (Number(row.period_no) || 1) !== period.no) continue;
-						if (labels.size && !labels.has(String(row.label || ""))) continue;
 						follow += Number(row.points) || 0;
 					}
-					const cap = Number(column.max) || 0;
-					extras[column.id] = cap > 0 ? Math.min(follow, cap) : follow;
+					const cap = Number(cardColumn.max) || 0;
+					extras[cardColumn.id] = cap > 0 ? Math.min(follow, cap) : follow;
 				}
 				const taskParts = columns.some((column) => columnGroup(column) === "tasks");
 				const examParts = columns.some((column) => columnGroup(column) === "exam");
@@ -6679,7 +6674,7 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	const periodOpen = plan.periods.some((period) => !period.closed);
 	let targets = [];
 	if (cardId) {
-		targets = (open.columns ?? []).filter((column) => column.calc === "cards" && (column.sources ?? []).includes(label));
+		targets = (open.columns ?? []).filter((column) => column.calc === "cards").slice(0, 1);
 		if (!targets.length) {
 			const parts = String(cardRef || "").split(":");
 			const numbered = parts.length >= 3 && /^\d+$/.test(parts[0]);

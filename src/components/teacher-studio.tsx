@@ -2398,7 +2398,7 @@ export function ClassRecords({
                     <option value="">{tr("إدخال يدوي")}</option>
                     <option value="sum">{tr("جمع أعمدة")}</option>
                     <option value="avg">{tr("متوسط أعمدة")}</option>
-                    <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                    <option value="cards">{tr("المتابعة الصفية")}</option>
                   </Select>
                   <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                     const next = [...liveColumns];
@@ -2424,24 +2424,7 @@ export function ClassRecords({
                   </div>
                 ) : null}
                 {col.calc === "cards" ? (
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="basis-full text-fg-muted">{tr("هذه الخانة تجمع أدوات التقويم الصفي المحددة، ولا تُكتب يدويًا")}</span>
-                    {(data?.cards ?? []).filter((card) => card.enabled !== false).length ? (data?.cards ?? []).filter((card) => card.enabled !== false).map((card) => {
-                      const current = cardColumn?.[card.id] ?? card.columnId ?? "";
-                      return (
-                        <label key={card.id} className="inline-flex items-center gap-1">
-                          <input type="checkbox" checked={current === col.id} onChange={(event) => {
-                            setCardColumn((prev) => {
-                              const base = { ...(prev ?? Object.fromEntries((data?.cards ?? []).map((item) => [item.id, item.columnId || ""]))) };
-                              base[card.id] = event.target.checked ? col.id : (base[card.id] === col.id ? "" : base[card.id]);
-                              return base;
-                            });
-                          }} />
-                          {card.label} ({formatPoints(card.points)})
-                        </label>
-                      );
-                    }) : <span>{tr("لا توجد أدوات بعد. أضف صح وأتقن وحل الواجب من المتابعة الصفية.")}</span>}
-                  </div>
+                  <p className="text-xs text-fg-muted">{tr("تُجلب درجة المتابعة الصفية كاملة إلى هذه الخانة، دون تحديد كل أداة.")}</p>
                 ) : null}
               </li>
             ))}
@@ -2534,7 +2517,7 @@ export function ClassRecords({
                   <option value="">{tr("إدخال يدوي")}</option>
                   <option value="sum">{tr("جمع أعمدة")}</option>
                   <option value="avg">{tr("متوسط أعمدة")}</option>
-                  <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                  <option value="cards">{tr("المتابعة الصفية")}</option>
                 </Select>
                 <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                   const next = [...gradeCols];
@@ -3491,7 +3474,7 @@ export function GradeFormatStudio() {
                 <option value="">{tr("إدخال يدوي")}</option>
                 <option value="sum">{tr("جمع أعمدة")}</option>
                 <option value="avg">{tr("متوسط أعمدة")}</option>
-                <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                <option value="cards">{tr("المتابعة الصفية")}</option>
               </Select>
               <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).filter((_, itemIndex) => itemIndex !== index) }); }}>{tr("حذف")}</Button>
             </div>
@@ -3577,7 +3560,7 @@ export function GradeFormatStudio() {
           return (
             <div key={`${period.title}-${periodIndex}`} className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
               <h3 className="text-sm font-semibold">{tr("طريقة حساب خانات")} {period.title}</h3>
-              <p className="text-xs text-fg-muted">{tr("لكل خانة: إدخال يدوي، أو جمع أعمدة، أو متوسط أعمدة، أو جمع أدوات التقويم الصفي.")}</p>
+              <p className="text-xs text-fg-muted">{tr("لكل خانة: إدخال يدوي، أو جمع أعمدة، أو متوسط أعمدة، أو المتابعة الصفية كاملة.")}</p>
               {period.columns.length ? period.columns.map((column, index) => (
                 <div key={`${column.group}-${column.title}-${index}`} className="space-y-1 rounded border border-border p-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -3590,7 +3573,7 @@ export function GradeFormatStudio() {
                       <option value="">{tr("إدخال يدوي")}</option>
                       <option value="sum">{tr("جمع أعمدة")}</option>
                       <option value="avg">{tr("متوسط أعمدة")}</option>
-                      <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                      <option value="cards">{tr("المتابعة الصفية")}</option>
                     </Select>
                   </div>
                   {column.calc === "sum" || column.calc === "avg" ? (
@@ -3611,19 +3594,7 @@ export function GradeFormatStudio() {
                     </div>
                   ) : null}
                   {column.calc === "cards" ? (
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="basis-full text-fg-muted">{tr("درجات هذه الأدوات تُجمع في هذه الخانة داخل الفترة")}</span>
-                      {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => (
-                        <label key={card.label} className="inline-flex items-center gap-1">
-                          <input type="checkbox" checked={(column.sources ?? []).includes(card.label)} onChange={(event) => {
-                            const sources = new Set(column.sources ?? []);
-                            if (event.target.checked) sources.add(card.label); else sources.delete(card.label);
-                            patchPeriod(periodIndex, { columns: period.columns.map((entry, entryIndex) => entryIndex === index ? { ...entry, sources: [...sources] } : entry) });
-                          }} />
-                          {card.label} ({formatPoints(card.points)})
-                        </label>
-                      )) : <span>{tr("أضف أدوات المتابعة من القسم الأسفل ثم اخترها هنا.")}</span>}
-                    </div>
+                    <p className="text-xs text-fg-muted">{tr("تُجلب درجة المتابعة الصفية كاملة إلى هذه الخانة.")}</p>
                   ) : null}
                 </div>
               )) : <p className="text-xs text-fg-muted">{tr("لا توجد خانات في هذه الفترة. أضفها من أعمال السنة أو الاختبار أعلاه.")}</p>}
