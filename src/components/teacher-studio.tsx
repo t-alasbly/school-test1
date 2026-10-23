@@ -2530,10 +2530,11 @@ export function ClassRecords({
                 <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
                 <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
                 <Input className="w-16" type="number" min={8} max={80} value={col.width} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, width: Math.min(80, Math.max(8, Number(event.target.value) || 18)) } : item))} />
-                <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" ? event.target.value : "", sources: item.sources ?? [] } : item))}>
-                  <option value="">{tr("إدخال")}</option>
-                  <option value="sum">{tr("جمع")}</option>
-                  <option value="avg">{tr("متوسط")}</option>
+                <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "", sources: item.sources ?? [] } : item))}>
+                  <option value="">{tr("إدخال يدوي")}</option>
+                  <option value="sum">{tr("جمع أعمدة")}</option>
+                  <option value="avg">{tr("متوسط أعمدة")}</option>
+                  <option value="cards">{tr("أدوات التقويم الصفي")}</option>
                 </Select>
                 <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                   const next = [...gradeCols];
@@ -3323,7 +3324,7 @@ export function GradeFormatStudio() {
         title: period.title,
         tasksMax: period.tasksMax,
         examMax: period.examMax,
-        columns: (period.columns ?? []).map((column) => ({ title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0 })),
+        columns: (period.columns ?? []).map((column) => ({ title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0, calc: (column as { calc?: string }).calc === "sum" || (column as { calc?: string }).calc === "avg" || (column as { calc?: string }).calc === "cards" ? (column as { calc?: "" | "sum" | "avg" | "cards" }).calc : "", sources: (column as { sources?: string[] }).sources ?? [] })),
       })),
       cards: (data.cards ?? []).map((card) => ({ label: card.label, points: card.points, bucket: card.bucket, enabled: card.enabled !== false, columnRef: card.columnRef || "" })),
       finalExamMax: Number(first?.finalExamMax) || 40,
@@ -3356,10 +3357,8 @@ export function GradeFormatStudio() {
       const pickedRow = (data?.formats ?? []).find((item) => String(item.id) === picked);
       const locked = Boolean(pickedRow?.locked);
       if (locked && name.trim() === pickedRow?.name) throw new Error("هذا القالب مستخدم من معلم آخر. احفظه باسم جديد");
-      const stored = stampDesign(draft, designAt, 0);
-      const live = stampDesign(draft, designAt, periodNo);
-      const saved = await saveGradeFormat({ data: { name: name.trim(), payload: stored, id: pickedRow && pickedRow.mine && !locked ? pickedRow.id : undefined } });
-      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, formatId: saved.id, payload: live } });
+      const saved = await saveGradeFormat({ data: { name: name.trim(), payload: draft, id: pickedRow && pickedRow.mine && !locked ? pickedRow.id : undefined } });
+      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, formatId: saved.id, payload: draft } });
       return saved;
     },
     onSuccess: (saved) => {
@@ -3382,9 +3381,12 @@ export function GradeFormatStudio() {
   const choices = design?.columns ?? [];
   const mine = Boolean(picked && (data?.formats ?? []).some((item) => String(item.id) === picked && item.mine));
   function patchDesign(next: Partial<FormatPeriod>) {
+    patchPeriod(designAt, next);
+  }
+  function patchPeriod(index: number, next: Partial<FormatPeriod>) {
     setDraft((current) => current && ({
       ...current,
-      periods: current.periods.map((period, index) => index === designAt ? { ...period, ...next } : period),
+      periods: current.periods.map((period, periodIndex) => periodIndex === index ? { ...period, ...next } : period),
     }));
   }
   function addCard() {
@@ -3462,7 +3464,7 @@ export function GradeFormatStudio() {
             <p className="text-fg-muted">{tr("احفظ القالب باسم، أو تابع التطبيق دون حفظ القالب.")}</p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>{tr("حفظ القالب")}</Button>
-              <Button type="button" variant="secondary" disabled={apply.isPending} onClick={() => { setAskSave(false); apply.mutate({ payload: stampDesign(draft, designAt, periodNo), subject, periodNo }); }}>{tr("متابعة بدون حفظ")}</Button>
+              <Button type="button" variant="secondary" disabled={apply.isPending} onClick={() => { setAskSave(false); apply.mutate({ payload: draft, subject, periodNo }); }}>{tr("متابعة بدون حفظ")}</Button>
             </div>
           </div>
         ) : null}
@@ -3472,7 +3474,7 @@ export function GradeFormatStudio() {
           <Button type="button" variant="secondary" disabled={apply.isPending} onClick={() => {
             if (formatMark(draft, designAt) !== savedMark) { setAskSave(true); return; }
             setAskSave(false);
-            apply.mutate({ payload: stampDesign(draft, designAt, periodNo), subject, periodNo, formatId: picked ? Number(picked) : undefined });
+            apply.mutate({ payload: draft, subject, periodNo, formatId: picked ? Number(picked) : undefined });
           }}>{tr("تطبيق")}</Button>
           {mine && !(data?.formats ?? []).find((item) => String(item.id) === picked)?.locked ? <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا التنسيق؟ لا يمكن التراجع."))) remove.mutate(Number(picked)); }}>{tr("حذف التنسيق")}</Button> : null}
         </div>
@@ -3485,6 +3487,12 @@ export function GradeFormatStudio() {
             <div key={col.id || index} className="flex flex-wrap items-center gap-2">
               <Input value={col.title} onChange={(event) => setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item) })} />
               <Input className="w-20" inputMode="decimal" value={String(col.max || "")} placeholder={tr("الحد")} onChange={(event) => setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, max: Number(event.target.value) || 0 } : item) })} />
+              <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "" } : item) })}>
+                <option value="">{tr("إدخال يدوي")}</option>
+                <option value="sum">{tr("جمع أعمدة")}</option>
+                <option value="avg">{tr("متوسط أعمدة")}</option>
+                <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+              </Select>
               <Button type="button" size="sm" variant="secondary" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setDraft({ ...draft, gradeCols: (draft.gradeCols ?? []).filter((_, itemIndex) => itemIndex !== index) }); }}>{tr("حذف")}</Button>
             </div>
           ))}
@@ -3528,61 +3536,6 @@ export function GradeFormatStudio() {
             </div>
           );
         }) : null}
-        {design ? (
-          <div className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3 lg:col-span-2">
-            <h3 className="text-sm font-semibold">{tr("طريقة حساب كل خانة")}</h3>
-            <p className="text-xs text-fg-muted">{tr("لكل خانة: إدخال يدوي، أو جمع أعمدة، أو متوسط أعمدة، أو جمع أدوات التقويم الصفي.")}</p>
-            {design.columns.map((column, index) => (
-              <div key={`${column.group}-${column.title}-${index}`} className="space-y-1 rounded border border-border p-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-28 text-sm font-semibold">{column.title}</span>
-                  <span className="text-xs text-fg-muted">{column.group === "exam" ? tr("اختبار") : column.group === "tasks" ? tr("أعمال السنة") : tr("تقويم")}</span>
-                  <Select className="h-9 w-auto" value={column.calc || ""} onChange={(event) => {
-                    const calc = event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "";
-                    patchDesign({ columns: design.columns.map((item, itemIndex) => itemIndex === index ? { ...item, calc } : item) });
-                  }}>
-                    <option value="">{tr("إدخال يدوي")}</option>
-                    <option value="sum">{tr("جمع أعمدة")}</option>
-                    <option value="avg">{tr("متوسط أعمدة")}</option>
-                    <option value="cards">{tr("أدوات التقويم الصفي")}</option>
-                  </Select>
-                </div>
-                {column.calc === "sum" || column.calc === "avg" ? (
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    {design.columns.filter((item, itemIndex) => itemIndex !== index && item.calc !== "sum" && item.calc !== "avg").map((item) => {
-                      const id = item.id || `${item.group}:${item.title}`;
-                      return (
-                        <label key={id} className="inline-flex items-center gap-1">
-                          <input type="checkbox" checked={column.sources?.includes(id) || false} onChange={(event) => {
-                            const sources = new Set(column.sources ?? []);
-                            if (event.target.checked) sources.add(id); else sources.delete(id);
-                            patchDesign({ columns: design.columns.map((entry, entryIndex) => entryIndex === index ? { ...entry, sources: [...sources] } : entry) });
-                          }} />
-                          {item.title}
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {column.calc === "cards" ? (
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="basis-full text-fg-muted">{tr("تجمع هذه الأدوات، ولا تُكتب الدرجة يدويًا")}</span>
-                    {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => {
-                      const ref = columnRef(column);
-                      return (
-                        <label key={card.label} className="inline-flex items-center gap-1">
-                          <input type="checkbox" checked={card.columnRef === ref} onChange={(event) => setDraft({ ...draft, cards: draft.cards.map((item) => item.label === card.label ? { ...item, columnRef: event.target.checked ? ref : "" } : item) })} />
-                          {card.label} ({formatPoints(card.points)})
-                        </label>
-                      );
-                    }) : <span>{tr("أضف أدوات المتابعة أولًا من القسم الذي تحت هذه الصفحة.")}</span>}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-            <Button type="button" size="sm" variant="secondary" onClick={() => patchDesign({ columns: [...design.columns, { title: "تقويم", group: "eval", max: 10, calc: "cards" }] })}>{tr("إضافة خانة تقويم")}</Button>
-          </div>
-        ) : null}
         {draft ? (() => {
           const parts = draft.finalColumns ?? [];
           const used = parts.reduce((sum, column) => sum + (Number(column.max) || 0), 0);
@@ -3616,6 +3569,67 @@ export function GradeFormatStudio() {
         })() : null}
       </section>
       )}
+
+      <section className="space-y-3">
+        {(periodNo === 0 ? draft.periods.map((_, index) => index) : [Math.min(draft.periods.length, Math.max(1, periodNo)) - 1]).map((periodIndex) => {
+          const period = draft.periods[periodIndex];
+          if (!period) return null;
+          return (
+            <div key={`${period.title}-${periodIndex}`} className="space-y-2 rounded-[var(--radius-lg)] border border-border bg-card p-3">
+              <h3 className="text-sm font-semibold">{tr("طريقة حساب خانات")} {period.title}</h3>
+              <p className="text-xs text-fg-muted">{tr("لكل خانة: إدخال يدوي، أو جمع أعمدة، أو متوسط أعمدة، أو جمع أدوات التقويم الصفي.")}</p>
+              {period.columns.length ? period.columns.map((column, index) => (
+                <div key={`${column.group}-${column.title}-${index}`} className="space-y-1 rounded border border-border p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-28 text-sm font-semibold">{column.title || tr("عمود")}</span>
+                    <span className="text-xs text-fg-muted">{column.group === "exam" ? tr("اختبار") : column.group === "tasks" ? tr("أعمال السنة") : tr("تقويم")}</span>
+                    <Select className="h-9 w-auto" value={column.calc || ""} onChange={(event) => {
+                      const calc = event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "";
+                      patchPeriod(periodIndex, { columns: period.columns.map((item, itemIndex) => itemIndex === index ? { ...item, calc } : item) });
+                    }}>
+                      <option value="">{tr("إدخال يدوي")}</option>
+                      <option value="sum">{tr("جمع أعمدة")}</option>
+                      <option value="avg">{tr("متوسط أعمدة")}</option>
+                      <option value="cards">{tr("أدوات التقويم الصفي")}</option>
+                    </Select>
+                  </div>
+                  {column.calc === "sum" || column.calc === "avg" ? (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {period.columns.filter((item, itemIndex) => itemIndex !== index && item.calc !== "sum" && item.calc !== "avg").map((item) => {
+                        const id = item.id || `${item.group}:${item.title}`;
+                        return (
+                          <label key={id} className="inline-flex items-center gap-1">
+                            <input type="checkbox" checked={column.sources?.includes(id) || false} onChange={(event) => {
+                              const sources = new Set(column.sources ?? []);
+                              if (event.target.checked) sources.add(id); else sources.delete(id);
+                              patchPeriod(periodIndex, { columns: period.columns.map((entry, entryIndex) => entryIndex === index ? { ...entry, sources: [...sources] } : entry) });
+                            }} />
+                            {item.title}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {column.calc === "cards" ? (
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => {
+                        const ref = `${periodIndex + 1}:${columnRef(column)}`;
+                        return (
+                          <label key={card.label} className="inline-flex items-center gap-1">
+                            <input type="checkbox" checked={card.columnRef === ref || card.columnRef === columnRef(column)} onChange={(event) => setDraft({ ...draft, cards: draft.cards.map((item) => item.label === card.label ? { ...item, columnRef: event.target.checked ? ref : "" } : item) })} />
+                            {card.label} ({formatPoints(card.points)})
+                          </label>
+                        );
+                      }) : <span>{tr("أضف أدوات المتابعة من القسم الأسفل.")}</span>}
+                    </div>
+                  ) : null}
+                </div>
+              )) : <p className="text-xs text-fg-muted">{tr("لا توجد خانات في هذه الفترة. أضفها من أعمال السنة أو الاختبار أعلاه.")}</p>}
+              <Button type="button" size="sm" variant="secondary" onClick={() => patchPeriod(periodIndex, { columns: [...period.columns, { title: "تقويم", group: "eval", max: 10, calc: "cards" }] })}>{tr("إضافة خانة تقويم")}</Button>
+            </div>
+          );
+        })}
+      </section>
 
       {staffCan(staff, "viewClassFollow") ? (
       <section className="space-y-3 rounded-[var(--radius-lg)] border border-border bg-card p-3">

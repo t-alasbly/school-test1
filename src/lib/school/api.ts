@@ -6927,7 +6927,8 @@ async function applyFormatToStaff(sql, staff, data) {
 		const carried = [];
 		const next = current.periods.map((period, index) => {
 			const indexed = payload.periods[Math.min((periodNo || index + 1) - 1, payload.periods.length - 1)];
-			const source = periodNo ? indexed?.columns?.length ? indexed : designOf(payload) : designOf(payload);
+			const own = payload.periods[index];
+			const source = periodNo ? (indexed?.columns?.length ? indexed : designOf(payload)) : (own?.columns?.length ? own : designOf(payload));
 			if (periodNo && period.no !== periodNo) return period;
 			const columns = (source?.columns ?? []).map((column, columnIndex) => {
 				const previous = (period.columns ?? []).find((item) => item.title === column.title && columnGroup(item) === column.group);

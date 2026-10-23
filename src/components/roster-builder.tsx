@@ -19,7 +19,7 @@ export const COL_MM_MIN = 8;
 export const COL_MM_MAX = 80;
 
 export type BuiltinCol = keyof typeof DEFAULT_COL_MM;
-export type ExtraCol = { id: string; title: string; width: number; max?: number; calc?: "" | "sum" | "avg"; sources?: string[] };
+export type ExtraCol = { id: string; title: string; width: number; max?: number; calc?: "" | "sum" | "avg" | "cards"; sources?: string[] };
 export type RosterPayload = {
   title: string;
   showPhone: boolean;
