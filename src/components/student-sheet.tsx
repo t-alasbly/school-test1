@@ -480,97 +480,37 @@ export function StudentSheet({
               {notes.length === 0 ? (
                 <p className="text-sm text-fg-muted">{tr("لا توجد ملاحظات مسجّلة بعد.")}</p>
               ) : (
-            <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
-              <table className="w-full min-w-[60rem] border-collapse text-sm">
-                <thead>
-                  <tr className="bg-muted text-right">
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التاريخ")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الحصة / المادة")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("النوع")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("نوع المخالفة")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الدرجة")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التكرار")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("المعلم")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("التفاصيل")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الحالة")}</th>
-                    <th className="border-b border-border px-3 py-2 font-medium">{tr("الإجراء")}</th>
-                    <th className="no-print w-40 whitespace-nowrap border-b border-border px-3 py-2 font-medium">
-                      {tr("تصحيح")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {notes.map((note) => {
-                    const tone = noteTone(note.type, note.status);
-                    return (
-                      <Fragment key={note.id}>
-                      <tr className="align-top">
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap text-xs text-fg-muted">
-                          {formatStamp(note.createdAt)}
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          <NoteSession
-                            periodKey={note.periodKey}
-                            subject={note.teacherSubject}
-                            season={school.season}
-                          />
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          <Badge tone={tone}>{tr(NOTE_META[note.type].label)}</Badge>
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          {note.behaviorTypeName ? tr(note.behaviorTypeName) : "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.type === "behavior" ? (
-                            <Badge tone={note.occurrence > 1 ? "danger" : "default"}>
-                              {occurrenceLabel(note.occurrence)}
-                            </Badge>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.teacherName}
-                          {note.teacherSubject ? (
-                            <span className="block text-xs text-fg-subtle">{note.teacherSubject}</span>
-                          ) : null}
-                          {note.enteredByName && note.enteredByName !== note.teacherName ? (
-                            <span className="block text-xs text-fg-muted">{tr("المسجل")}: {note.enteredByName}</span>
-                          ) : null}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 text-fg-muted">
-                          {note.details || "—"}
-                        </td>
-                        <td className="border-b border-border px-3 py-2 whitespace-nowrap">
-                          {note.status === "closed" ? (
-                            <span className="text-ok">{tr("أُغلقت")}</span>
-                          ) : (
-                            <span className="text-warn">{tr("مفتوحة")}</span>
-                          )}
-                        </td>
-                        <td className="border-b border-border px-3 py-2">
-                          {note.status === "closed" ? note.actionTaken || "—" : "—"}
-                        </td>
-                        <td className="no-print w-40 whitespace-nowrap border-b border-border px-2 py-2">
-                          {canEditRecords || note.teacherId === staff.userId ? (
-                            <NoteRecordTools note={note} teacherId={note.teacherId} />
-                          ) : null}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan={11} className="border-b border-border px-3 pb-3">
-                          <NoteThread noteId={note.id} dest={(note.dest as NoteDest | undefined) ?? (note.referCounselor ? "counselor" : "vp")} compact />
-                        </td>
-                      </tr>
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {notes.map((note, index) => {
+                const tone = noteTone(note.type, note.status);
+                return (
+                  <article key={note.id} className="overflow-hidden rounded-[var(--radius-md)] border border-border" style={{ background: index % 2 ? "rgba(15,79,74,0.04)" : "transparent" }}>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={tone}>{tr(NOTE_META[note.type].label)}</Badge>
+                        {note.behaviorTypeName ? <span className="text-sm font-semibold">{tr(note.behaviorTypeName)}</span> : null}
+                        {note.behaviorDegree ? <span className="text-xs text-fg-muted">{degreeLabel(note.behaviorDegree)}</span> : null}
+                        {note.type === "behavior" ? <Badge tone={note.occurrence > 1 ? "danger" : "default"}>{occurrenceLabel(note.occurrence)}</Badge> : null}
+                      </div>
+                      <span className="text-xs text-fg-muted">{formatStamp(note.occurredAt || note.createdAt)}</span>
+                    </div>
+                    <p className="px-3 py-2 text-sm leading-7">{note.details || tr("بدون وصف")}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 px-3 pb-2 text-xs text-fg-muted">
+                      <span>{tr("المادة")}: {note.teacherSubject || "—"}</span>
+                      <span>{tr("المعلم")}: {note.teacherName}</span>
+                      {note.enteredByName && note.enteredByName !== note.teacherName ? <span>{tr("المسجل")}: {note.enteredByName}</span> : null}
+                      <span>{note.status === "closed" ? tr("أُغلقت") : tr("مفتوحة")}</span>
+                      <span>{tr("الإجراء")}: {note.status === "closed" ? note.actionTaken || "—" : "—"}</span>
+                    </div>
+                    <div className="no-print flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
+                      {canEditRecords || note.teacherId === staff.userId ? <NoteRecordTools note={note} teacherId={note.teacherId} /> : <span />}
+                    </div>
+                    <div className="border-t border-border px-3 py-2">
+                      <NoteThread noteId={note.id} dest={(note.dest as NoteDest | undefined) ?? (note.referCounselor ? "counselor" : "vp")} compact />
+                    </div>
+                  </article>
+                );
+              })}
             </div>
               )}
               <ImprovementsBlock

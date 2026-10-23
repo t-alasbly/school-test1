@@ -7368,6 +7368,24 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 		periods
 	};
 });
+export const linkFollowCards = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
+	links: array(object({
+		cardId: number(),
+		columnId: string().max(20),
+		columnRef: string().max(80)
+	})).max(40)
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireDesk(context.userId);
+	await ensureTeacherEval(sql);
+	for (const link of data.links) {
+		await sql`
+      update eval_cards
+      set column_id = ${link.columnId.slice(0, 20)}, column_ref = ${link.columnRef.slice(0, 80)}
+      where id = ${link.cardId} and school_id = ${staff.school_id} and staff_id = ${staff.user_id}
+    `;
+	}
+	return { ok: true };
+});
 export const setPeriodClosed = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	no: number().min(1).max(4),
 	closed: boolean(),

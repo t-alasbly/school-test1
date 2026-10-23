@@ -25,6 +25,7 @@ import {
   saveEvalScale,
   savePeriodMark,
   saveSubjectPlan,
+  linkFollowCards,
   setPeriodClosed,
   setTeacherPins,
   undoClassEval,
@@ -1513,6 +1514,7 @@ export function ClassRecords({
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
   const [recordCols, setRecordCols] = useState<NonNullable<PeriodPlan["columns"]> | null>(null);
+  const [cardColumn, setCardColumn] = useState<Record<number, string> | null>(null);
   const [yearFormatId, setYearFormatId] = useState("");
   const formatsQuery = useQuery({
     queryKey: ["grade-studio"],
@@ -2394,12 +2396,33 @@ export function ClassRecords({
                     ))}
                   </div>
                 ) : null}
+                {classFollow && (data?.cards ?? []).some((card) => card.enabled !== false) ? (
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="basis-full text-fg-muted">{tr("أدوات المتابعة التي تُضاف درجتها إلى هذا العمود")}</span>
+                    {(data?.cards ?? []).filter((card) => card.enabled !== false).map((card) => {
+                      const current = cardColumn?.[card.id] ?? card.columnId ?? "";
+                      return (
+                        <label key={card.id} className="inline-flex items-center gap-1">
+                          <input type="checkbox" checked={current === col.id} onChange={(event) => {
+                            setCardColumn((prev) => {
+                              const base = { ...(prev ?? Object.fromEntries((data?.cards ?? []).map((item) => [item.id, item.columnId || ""]))) };
+                              base[card.id] = event.target.checked ? col.id : (base[card.id] === col.id ? "" : base[card.id]);
+                              return base;
+                            });
+                          }} />
+                          {card.label} ({formatPoints(card.points)})
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
           <button type="button" className="text-sm font-medium text-primary" onClick={() => setRecordCols([...liveColumns, { id: `c${Date.now()}`.slice(0, 20), title: "عمود", group: "tasks", max: 10 }])}>{tr("إضافة عمود")}</button>
           <Button type="button" size="sm" onClick={() => {
             if (selected) {
+              const columns = liveColumns;
               savePlan.mutate({
                 combine: data?.combine === "avg" ? "avg" : "sum",
                 periods: periods.map((period) => ({
@@ -2408,9 +2431,16 @@ export function ClassRecords({
                   tasksMax: period.tasksMax,
                   examMax: period.examMax,
                   closed: period.closed,
-                  columns: liveColumns,
+                  columns,
                 })),
               });
+              if (classFollow && cardColumn) {
+                void linkFollowCards({ data: { links: (data?.cards ?? []).map((card) => {
+                  const columnId = cardColumn[card.id] ?? card.columnId ?? "";
+                  const column = columns.find((item) => item.id === columnId);
+                  return { cardId: card.id, columnId, columnRef: column ? `${column.group || "tasks"}:${column.title}` : "" };
+                }) } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval"] }));
+              }
             }
             setFormatOpen(false);
           }}>{tr("حفظ")}</Button>
