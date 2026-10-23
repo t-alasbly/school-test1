@@ -6209,7 +6209,7 @@ function parseSubjectPlan(raw, tasksMax, quizzesMax) {
 			group: column?.group === "tasks" || column?.group === "exam" || column?.group === "eval" ? column.group : "eval",
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
 			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
-			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
+			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
 		})) : []
 	}));
 }
@@ -6391,7 +6391,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 	const quizzesMax = periods[0]?.examMax || 20;
 	const openPeriod = periods.find((period) => !period.closed)?.no ?? null;
 	const evals = lessonSubject ? await sql`
-    select student_id, bucket, points, period_no, coalesce(column_id, '') as column_id
+    select student_id, bucket, points, period_no, coalesce(label, '') as label, coalesce(column_id, '') as column_id
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (subject = ${lessonSubject} or subject = '')
@@ -6462,7 +6462,11 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 			quizzes: 0
 		};
 		const points = Number(row.points);
-		if (!row.column_id) {
+		const periodColumns = periods.find((period) => period.no === periodNo)?.columns ?? [];
+		const cardColumns = periodColumns.filter((column) => column.calc === "cards");
+		const linked = new Set(cardColumns.flatMap((column) => column.sources ?? []));
+		const grabbed = linked.has(String(row.label || "")) || (cardColumns.length === 1 && !(cardColumns[0].sources ?? []).length);
+		if (!grabbed && !row.column_id) {
 			if (row.bucket === "quizzes") bucket.quizzes += points;
 			else bucket.tasks += points;
 			periodTally.set(key, bucket);
@@ -6526,6 +6530,20 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 				};
 				const extras = parseExtras(marked?.extras);
 				const columns = period.columns ?? [];
+				for (const column of columns) {
+					if (column.calc !== "cards") continue;
+					const labels = new Set((column.sources ?? []).map((label) => String(label)));
+					const onlyOpen = !labels.size && columns.filter((item) => item.calc === "cards" && !(item.sources ?? []).length).length === 1;
+					if (!labels.size && !onlyOpen) continue;
+					let follow = 0;
+					for (const row of evals) {
+						if (Number(row.student_id) !== Number(student.id) || (Number(row.period_no) || 1) !== period.no) continue;
+						if (labels.size && !labels.has(String(row.label || ""))) continue;
+						follow += Number(row.points) || 0;
+					}
+					const cap = Number(column.max) || 0;
+					extras[column.id] = cap > 0 ? Math.min(follow, cap) : follow;
+				}
 				const taskParts = columns.some((column) => columnGroup(column) === "tasks");
 				const examParts = columns.some((column) => columnGroup(column) === "exam");
 				const participation = taskParts ? clampScore(sumColumnGroup(columns, extras, "tasks"), period.tasksMax) : clampScore(Number(marked?.participation ?? 0), period.tasksMax);
@@ -6659,13 +6677,18 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	const open = plan.periods.find((period) => !period.closed) ?? plan.periods[0];
 	if (!open) throw new Error("لا توجد فترة لتسجيل المتابعة");
 	const periodOpen = plan.periods.some((period) => !period.closed);
+	let targets = [];
 	if (cardId) {
-		const ref = String(cardRef || "");
-		const split = ref.indexOf(":");
-		const group = split >= 0 ? ref.slice(0, split) : "";
-		const title = split >= 0 ? ref.slice(split + 1) : "";
-		const found = (open.columns ?? []).find((column) => columnGroup(column) === group && column.title === title);
-		if (found) columnId = found.id;
+		targets = (open.columns ?? []).filter((column) => column.calc === "cards" && (column.sources ?? []).includes(label));
+		if (!targets.length) {
+			const parts = String(cardRef || "").split(":");
+			const numbered = parts.length >= 3 && /^\d+$/.test(parts[0]);
+			const group = numbered ? parts[1] : parts[0];
+			const title = numbered ? parts.slice(2).join(":") : parts.slice(1).join(":");
+			const found = title ? (open.columns ?? []).find((column) => columnGroup(column) === group && column.title === title) : null;
+			if (found) targets.push(found);
+		}
+		if (targets[0]) columnId = targets[0].id;
 		else if (columnId && !(open.columns ?? []).some((column) => column.id === columnId)) columnId = "";
 	}
 	const lessonKey = (data.lessonKey ?? "").trim().slice(0, 20);
@@ -6679,7 +6702,7 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
       values (${staff.school_id}, ${staff.user_id}, ${studentId}, ${cls.id}, ${cardId}, ${label}, ${points}, ${bucket}, ${lessonSubject}, ${open.no}, ${lessonKey}, ${columnId}, ${actorId})
       returning id
     `)[0];
-		if (columnId && periodOpen) await shiftMarkColumn(sql, staff, studentId, cls.id, open, lessonSubject, columnId, Number(points));
+		if (columnId && periodOpen) for (const column of (targets.length ? targets : [{ id: columnId }])) await shiftMarkColumn(sql, staff, studentId, cls.id, open, lessonSubject, column.id, Number(points));
 		ids.push(row.id);
 	}
 	if (!ids.length) throw new Error("لم يُختر طالب من هذا الفصل");
@@ -6841,7 +6864,7 @@ var gradeFormatPayload = object({
 			max: number().min(0).max(100).optional(),
 			id: string().max(20).optional(),
 			calc: _enum(["", "sum", "avg", "cards"]).optional(),
-			sources: array(string().max(20)).max(12).optional()
+			sources: array(string().max(40)).max(20).optional()
 		})).max(9).optional()
 	})).min(1).max(4),
 	finalExamMax: number().min(0).max(100).optional(),
@@ -6857,7 +6880,7 @@ var gradeFormatPayload = object({
 		width: number().min(8).max(80).optional(),
 		max: number().min(0).max(100).optional(),
 		calc: _enum(["", "sum", "avg", "cards"]).optional(),
-		sources: array(string().max(20)).max(12).optional()
+		sources: array(string().max(40)).max(20).optional()
 	})).max(12).optional(),
 	cards: array(object({
 		label: string().min(1).max(40),
@@ -6887,7 +6910,7 @@ function cleanFormat(data) {
 				group: column?.group === "tasks" || column?.group === "exam" ? column.group : "eval",
 				max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
 				calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
-				sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
+				sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
 			}))
 		})),
 		finalExamMax: Math.min(100, Math.max(0, Number(data?.finalExamMax) || 40)),
@@ -6910,7 +6933,7 @@ function cleanFormat(data) {
 			width: Math.min(80, Math.max(8, Number(column?.width) || 18)),
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
 			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
-			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
+			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
 		}))
 	};
 }
@@ -7319,7 +7342,7 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 			]).optional(),
 			max: number().min(0).max(100).optional(),
 			calc: _enum(["", "sum", "avg", "cards"]).optional(),
-			sources: array(string().max(20)).max(12).optional()
+			sources: array(string().max(40)).max(20).optional()
 		})).max(9).optional()
 	})).min(1).max(4)
 })).handler(async ({ context, data }) => {
@@ -7353,7 +7376,7 @@ export const saveSubjectPlan = createServerFn({ method: "POST" }).middleware([au
 			group: column.group === "tasks" || column.group === "exam" || column.group === "eval" ? column.group : "eval",
 			max: Math.min(100, Math.max(0, Number(column.max) || 0)),
 			calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "",
-			sources: Array.isArray(column.sources) ? column.sources.map((id) => String(id).slice(0, 20)).slice(0, 12) : []
+			sources: Array.isArray(column.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
 		}))
 	}));
 	const key = (data.subject ?? "").trim() || "*";

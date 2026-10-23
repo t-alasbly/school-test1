@@ -1552,7 +1552,7 @@ export function ClassRecords({
   const periods = data?.periods ?? [];
   const selected = periods.find((period) => period.no === periodNo) ?? periods[0];
   const firstColumns = (periods.find((period) => period.no === 1) ?? periods[0])?.columns ?? [];
-  const liveColumns = recordCols ?? (sheetMode === "period" ? firstColumns : (selected?.columns ?? firstColumns));
+  const liveColumns = recordCols ?? ((selected?.columns?.length ? selected.columns : firstColumns));
   function acceptGrade(raw: string, max: number, id: string) {
     const next = withinMax(raw, max);
     setCellWarn((prev) => {
@@ -3612,15 +3612,17 @@ export function GradeFormatStudio() {
                   ) : null}
                   {column.calc === "cards" ? (
                     <div className="flex flex-wrap gap-2 text-xs">
-                      {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => {
-                        const ref = `${periodIndex + 1}:${columnRef(column)}`;
-                        return (
-                          <label key={card.label} className="inline-flex items-center gap-1">
-                            <input type="checkbox" checked={card.columnRef === ref || card.columnRef === columnRef(column)} onChange={(event) => setDraft({ ...draft, cards: draft.cards.map((item) => item.label === card.label ? { ...item, columnRef: event.target.checked ? ref : "" } : item) })} />
-                            {card.label} ({formatPoints(card.points)})
-                          </label>
-                        );
-                      }) : <span>{tr("أضف أدوات المتابعة من القسم الأسفل.")}</span>}
+                      <span className="basis-full text-fg-muted">{tr("درجات هذه الأدوات تُجمع في هذه الخانة داخل الفترة")}</span>
+                      {draft.cards.filter((card) => card.enabled !== false).length ? draft.cards.filter((card) => card.enabled !== false).map((card) => (
+                        <label key={card.label} className="inline-flex items-center gap-1">
+                          <input type="checkbox" checked={(column.sources ?? []).includes(card.label)} onChange={(event) => {
+                            const sources = new Set(column.sources ?? []);
+                            if (event.target.checked) sources.add(card.label); else sources.delete(card.label);
+                            patchPeriod(periodIndex, { columns: period.columns.map((entry, entryIndex) => entryIndex === index ? { ...entry, sources: [...sources] } : entry) });
+                          }} />
+                          {card.label} ({formatPoints(card.points)})
+                        </label>
+                      )) : <span>{tr("أضف أدوات المتابعة من القسم الأسفل ثم اخترها هنا.")}</span>}
                     </div>
                   ) : null}
                 </div>
