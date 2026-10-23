@@ -1676,7 +1676,7 @@ export function ClassRecords({
           subject: data?.subject || subject || undefined,
         },
       }),
-    onSuccess: (_result, payload) => void queryClient.invalidateQueries({ queryKey: ["class-eval", payload.classId || classId] }),
+    onSuccess: () => undefined,
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الدرجة")),
   });
   const savePlan = useMutation({
@@ -1941,7 +1941,7 @@ export function ClassRecords({
     }
     const value = Number(next) || 0;
     const written: typeof drafts = {};
-    let failed = 0;
+    const jobs: { studentId: number; classId?: number; participation: number; exam: number; extras: Record<string, number> }[] = [];
     for (const student of data.students) {
       const score = student.byPeriod?.find((period) => period.no === selected.no);
       const key = `${student.id}:${selected.no}`;
@@ -1956,25 +1956,29 @@ export function ClassRecords({
         extras: { ...current.extras, ...(col.kind === "extra" ? { [col.id]: next } : {}) },
       };
       written[key] = updated;
-      try {
-        await savePeriodMark({
-          data: {
-            classId: student.classId || classId,
-            periodNo: selected.no,
-            subject: data.subject || subject || undefined,
-            studentId: student.id,
-            participation: Number(updated.participation) || 0,
-            exam: Number(updated.exam) || 0,
-            extras: Object.fromEntries(Object.entries(updated.extras).map(([id, item]) => [id, Number(item) || 0])),
-          },
-        });
-      } catch {
-        failed += 1;
-      }
+      jobs.push({
+        studentId: student.id,
+        classId: student.classId,
+        participation: Number(updated.participation) || 0,
+        exam: Number(updated.exam) || 0,
+        extras: Object.fromEntries(Object.entries(updated.extras).map(([id, item]) => [id, Number(item) || 0])),
+      });
     }
     setDrafts((prev) => ({ ...prev, ...written }));
+    const results = await Promise.all(jobs.map((job) => savePeriodMark({
+      data: {
+        classId: job.classId || classId,
+        periodNo: selected.no,
+        subject: data.subject || subject || undefined,
+        studentId: job.studentId,
+        participation: job.participation,
+        exam: job.exam,
+        extras: job.extras,
+      },
+    }).then(() => true).catch(() => false)));
+    const failed = results.filter((ok) => !ok).length;
     if (failed) toast.error(tr(`تعذر حفظ ${failed} طالب`));
-    else toast.success(tr("وُزعت الدرجة على كل الطلاب وحُفظت في فصولهم"));
+    else toast.success(tr("وُزعت الدرجة على كل الطلاب وحُفظت"));
     void queryClient.invalidateQueries({ queryKey: ["class-eval"] });
   }
   function marksStorageKey(id: number) {
@@ -1997,9 +2001,29 @@ export function ClassRecords({
       const sum = totals.reduce((total, value) => total + value, 0);
       return data.combine === "sum" ? sum : (totals.length ? sum / totals.length : 0);
     }
-    const rows = student.byPeriod ?? [];
-    const sum = rows.reduce((total, period) => total + (Number(period.total) || 0), 0);
-    return data.combine === "sum" ? sum : (student.yearWork ?? (rows.length ? sum / rows.length : 0));
+    const totals = (periods.length ? periods : [{ no: 1 }]).map((period) => periodScoreOf(student, period.no));
+    const sum = totals.reduce((total, value) => total + value, 0);
+    return data.combine === "sum" ? sum : (totals.length ? sum / totals.length : 0);
+  }
+  function periodScoreOf(student: { id: number; byPeriod?: PeriodScore[] }, no: number) {
+    const period = periods.find((item) => item.no === no);
+    const row = student.byPeriod?.find((item) => item.no === no);
+    const columns = (period?.columns?.length ? period.columns : firstColumns) ?? [];
+    const draft = drafts[`${student.id}:${no}`];
+    const extras: Record<string, number> = {};
+    if (draft) {
+      for (const [id, value] of Object.entries(draft.extras)) extras[id] = Number(value) || 0;
+    } else if (row?.extras) Object.assign(extras, row.extras);
+    const manual = columns.filter((column) => column.calc !== "sum" && column.calc !== "avg");
+    const cap = (value: number, max: number) => (max > 0 ? Math.min(value, max) : value);
+    if (!manual.length) return cap((Number(draft?.participation ?? row?.participation) || 0) + (Number(draft?.exam ?? row?.exam) || 0), (period?.tasksMax ?? 0) + (period?.examMax ?? 0));
+    const tasks = manual.filter((column) => (column.group ?? "eval") === "tasks");
+    const exams = manual.filter((column) => column.group === "exam");
+    const evals = classFollow ? manual.filter((column) => column.group === "eval") : [];
+    const taskScore = tasks.length ? cap(tasks.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0), period?.tasksMax ?? 0) : (Number(draft?.participation ?? row?.participation) || 0);
+    const examScore = exams.length ? cap(exams.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0), period?.examMax ?? 0) : (Number(draft?.exam ?? row?.exam) || 0);
+    const evalScore = evals.reduce((sum, column) => sum + cap(extras[column.id] || 0, Number(column.max) || 0), 0);
+    return taskScore + examScore + evalScore;
   }
   function pulledCols() {
     if (gradeShape === "blank") return gradeCols;
@@ -2014,7 +2038,7 @@ export function ClassRecords({
       return { score, max: max || ((period?.tasksMax ?? 0) + (period?.examMax ?? 0)) };
     }
     const row = student.byPeriod?.find((item) => item.no === no);
-    return { score: Number(row?.total) || 0, max: (period?.tasksMax ?? 0) + (period?.examMax ?? 0) };
+    return { score: periodScoreOf(student, no), max: (period?.tasksMax ?? 0) + (period?.examMax ?? 0) || Number(row?.total) || 0 };
   }
   function periodRatio(student: { id: number; byPeriod?: { no?: number; total?: number }[] }) {
     const rows = (periods.length ? periods : [{ no: 1 }]).map((period) => periodFigure(student, period.no));
@@ -2072,8 +2096,8 @@ export function ClassRecords({
   const title = view === "year" ? "كشف أعمال السنة" : view === "analysis" ? "تحليل النتائج" : "تقرير الحضور";
   const taskColumns = liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
   const examColumns = liveColumns.filter((column) => column.group === "exam");
-  const evalColumns = liveColumns.filter((column) => (column.group ?? "eval") === "eval");
-  const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + (classFollow ? 1 : 0) + 1;
+  const evalColumns = classFollow ? liveColumns.filter((column) => column.group === "eval") : [];
+  const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + 1;
   const widthTotal = seqMm + nameMm + gradeSlots * colMm;
   const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
   const blankSum = seqMm + nameMm + gradeCols.reduce((sum, col) => sum + (Number(col.width) || 18), 0);
@@ -2590,13 +2614,11 @@ export function ClassRecords({
                         if (next === null) return;
                         const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
                         setDrafts((prev) => ({ ...prev, [key]: updated }));
-                        persist(updated);
                       }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("أعمال السنة")} (${formatPoints(selected.tasksMax)})`, draft.participation, `${key}:tasks`, selected.closed, (value) => {
                         const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
                         if (next === null) return;
                         const updated = { ...draft, participation: next };
                         setDrafts((prev) => ({ ...prev, [key]: updated }));
-                        persist(updated);
                       }, (value) => {
                         const next = acceptGrade(value, selected.tasksMax, `${key}:tasks`);
                         if (next === null) return;
@@ -2609,13 +2631,11 @@ export function ClassRecords({
                         if (next === null) return;
                         const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
                         setDrafts((prev) => ({ ...prev, [key]: updated }));
-                        persist(updated);
                       }, (value) => persist({ ...draft, extras: { ...draft.extras, [column.id]: value } }))) : box(`${tr("اختبار الفترة")} (${formatPoints(selected.examMax)})`, draft.exam, `${key}:exam`, selected.closed, (value) => {
                         const next = acceptGrade(value, selected.examMax, `${key}:exam`);
                         if (next === null) return;
                         const updated = { ...draft, exam: next };
                         setDrafts((prev) => ({ ...prev, [key]: updated }));
-                        persist(updated);
                       }, (value) => {
                         const next = acceptGrade(value, selected.examMax, `${key}:exam`);
                         if (next === null) return;
@@ -2714,10 +2734,9 @@ export function ClassRecords({
                 ) : (
                   <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
                 )}
-                {liveColumns.filter((column) => (column.group ?? "eval") === "eval").map((column) => (
+                {evalColumns.map((column) => (
                   <th key={column.id} className="border border-black px-2 py-1">{column.title}</th>
                 ))}
-                {classFollow ? <th className="border border-black px-2 py-1">{tr("بطاقات المتابعة")}</th> : null}
                 <th className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(selected.tasksMax + selected.examMax)})</th>
               </tr>
             </thead>
@@ -2737,7 +2756,7 @@ export function ClassRecords({
                   ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
                   : Number(draft.exam) || 0;
                 const extraSum = evalColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0);
-                const periodSum = taskSum + examSum + extraSum + (classFollow ? Number(score.evalPoints) || 0 : 0);
+                const periodSum = taskSum + examSum + (classFollow ? extraSum : 0);
                 const persist = (next = draft) => save.mutate({
                   studentId: student.id,
                   classId: student.classId,
@@ -2765,7 +2784,6 @@ export function ClassRecords({
                                 if (next === null) return;
                                 const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
                                 setDrafts((prev) => ({ ...prev, [key]: updated }));
-                                persist(updated);
                               }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
@@ -2786,7 +2804,6 @@ export function ClassRecords({
                             if (next === null) return;
                             const updated = { ...draft, participation: next };
                             setDrafts((prev) => ({ ...prev, [key]: updated }));
-                            persist(updated);
                           }}
                           onBlur={(event) => {
                             const next = acceptGrade(event.target.value, selected.tasksMax, `${key}:tasks`);
@@ -2813,7 +2830,6 @@ export function ClassRecords({
                                 if (next === null) return;
                                 const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
                                 setDrafts((prev) => ({ ...prev, [key]: updated }));
-                                persist(updated);
                               }}
                               onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                             />
@@ -2834,7 +2850,6 @@ export function ClassRecords({
                             if (next === null) return;
                             const updated = { ...draft, exam: next };
                             setDrafts((prev) => ({ ...prev, [key]: updated }));
-                            persist(updated);
                           }}
                           onBlur={(event) => {
                             const next = acceptGrade(event.target.value, selected.examMax, `${key}:exam`);
@@ -2859,14 +2874,12 @@ export function ClassRecords({
                             if (next === null) return;
                             const updated = { ...draft, extras: { ...draft.extras, [column.id]: next } };
                             setDrafts((prev) => ({ ...prev, [key]: updated }));
-                            persist(updated);
                           }}
                           onBlur={(event) => persist({ ...draft, extras: { ...draft.extras, [column.id]: event.target.value } })}
                         />
                         {cellWarn[`${key}:${column.id}`] ? <span className="grade-warn no-print">{cellWarn[`${key}:${column.id}`]}</span> : null}
                       </td>
                     ))}
-                    {classFollow ? <td className="border border-black px-2 py-1">{sheetGrade(score.evalPoints)}</td> : null}
                     <td className="border border-black px-2 py-1 text-center font-semibold">{sheetGrade(periodSum)}</td>
                   </tr>
                 );
