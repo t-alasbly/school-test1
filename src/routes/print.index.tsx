@@ -550,7 +550,13 @@ function ReportsBody() {
         }}
       >
         <OfficialLetterhead school={reportSchool} />
-        {mode === "names" ? null : (
+        {mode === "names" ? null : mode === "notes" || mode === "attend" ? (
+          <h2 className="mb-2 text-center text-[15px] font-semibold">
+            {mode === "attend" ? "كشف الغياب" : "كشف المتابعة"}
+            {classLine ? ` — ${classLine}` : ""}
+            {query.data?.subject ? ` — ${query.data.subject}` : ""}
+          </h2>
+        ) : (
         <h2 className="mt-2 mb-2 text-center text-[20px] font-semibold tracking-wide">
           {mode === "messages" ? "كشف رسائل أولياء الأمور" : "سجل المتابعة"}
         </h2>
@@ -574,7 +580,7 @@ function ReportsBody() {
               {" "}<span className="tabular-nums">{students.length}</span>
             </p>
           </div>
-        ) : selectedStudent ? (
+        ) : mode === "notes" || mode === "attend" ? null : selectedStudent ? (
           <table className="official-table mb-3">
             <thead>
               <tr>
@@ -605,29 +611,11 @@ function ReportsBody() {
         </div>
         )}
 
-        {mode === "names" ? null : mode === "notes" || mode === "attend" ? (
-        <div className="official-tint mb-2 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-[#00857c] bg-[#00857c] text-center text-[11px] sm:grid-cols-6">
-          {(
-            [
-              [tr("غياب حصة"), counts.absence],
-              [tr("تأخر حصة"), counts.late],
-              [tr("واجب"), counts.homework],
-              [tr("سلوك"), counts.behavior],
-              ["مفتوحة", counts.open],
-              ["أُغلقت", counts.closed],
-            ] as const
-          ).map(([label, n]) => (
-            <div key={label} className="bg-[#f3faf8] px-1 py-1.5">
-              <p className="font-semibold text-[#0f4f4a]">{label}</p>
-              <p className="text-[13px] font-semibold tabular-nums">{n}</p>
-            </div>
-          ))}
-        </div>
-        ) : (
+        {mode === "names" || mode === "notes" || mode === "attend" ? null : mode === "messages" ? (
           <p className="official-tint mb-2 rounded-sm border border-[#00857c] px-3 py-2 text-center text-[12px]">
             سجل الرسائل المرسلة إلى أولياء الأمور — عدد السجلات: {messages.length}
           </p>
-        )}
+        ) : null}
 
         <div className="overflow-x-auto">
         {mode === "names" ? (
@@ -746,14 +734,14 @@ function ReportsBody() {
             <p className="mb-1 text-center text-[12px]">
               {summary.groups.length} طالب · {summary.groups.reduce((sum, group) => sum + group.count, 0)} يوم
             </p>
-            <table className="official-table">
+            <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
               <thead>
-                <tr>
-                  <th className="w-8">{tr("م")}</th>
-                  <th>{tr("اسم الطالب")}</th>
-                  <th>{tr("الصف")}</th>
-                  <th className="w-16">{tr("عدد الأيام")}</th>
-                  <th>{tr("الأيام والحصص")}</th>
+                <tr className="bg-[#9aa0a6] text-white">
+                  <th className="w-10 border border-black px-1 py-1">{tr("م")}</th>
+                  <th className="border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
+                  <th className="border border-black px-1 py-1">{tr("الصف")}</th>
+                  <th className="w-16 border border-black px-1 py-1">{tr("عدد الأيام")}</th>
+                  <th className="border border-black px-2 py-1 text-right">{tr("الأيام والحصص")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -763,12 +751,12 @@ function ReportsBody() {
                   </tr>
                 ) : (
                   summary.groups.map((group, index) => (
-                    <tr key={group.studentId}>
-                      <td>{index + 1}</td>
-                      <td className="text-right font-medium">{group.studentName}</td>
-                      <td>{group.classLabel}</td>
-                      <td className="font-semibold">{group.count}</td>
-                      <td className="text-right align-top text-[12px]"><MonthDays days={group.days} /></td>
+                    <tr key={group.studentId} className={index % 2 ? "bg-[#f3f4f6]" : undefined}>
+                      <td className="border border-black px-1 text-center">{index + 1}</td>
+                      <td className="border border-black px-2 text-right font-bold">{group.studentName}</td>
+                      <td className="border border-black px-1 text-center">{group.classLabel}</td>
+                      <td className="border border-black px-1 text-center font-semibold">{group.count}</td>
+                      <td className="border border-black px-2 text-right align-top text-[12px]"><MonthDays days={group.days} /></td>
                     </tr>
                   ))
                 )}
@@ -779,16 +767,16 @@ function ReportsBody() {
         {periodSummaries.length > 0 ? (
           <h3 className="mb-1 text-center text-[15px] font-semibold">{type === "all" ? "تفاصيل السجلات" : "تفاصيل الحصص"}</h3>
         ) : null}
-        <table className="official-table official-report-table">
+        <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
           <thead>
-            <tr>
-              <th className="w-8">{tr("م")}</th>
-              <th>{tr("اسم الطالب")}</th>
-              <th>{tr("النوع / المخالفة")}</th>
-              <th>{tr("الحصة · المادة")}</th>
-              <th>{tr("التاريخ")}</th>
-              <th>{tr("الحالة / الإجراء")}</th>
-              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap"></th> : null}
+            <tr className="bg-[#9aa0a6] text-white">
+              <th className="w-10 border border-black px-1 py-1">{tr("م")}</th>
+              <th className="border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
+              <th className="border border-black px-1 py-1">{tr("النوع / المخالفة")}</th>
+              <th className="border border-black px-1 py-1">{tr("الحصة · المادة")}</th>
+              <th className="border border-black px-1 py-1">{tr("التاريخ")}</th>
+              <th className="border border-black px-1 py-1">{tr("الحالة / الإجراء")}</th>
+              {canEditRecords ? <th className="no-print w-24 whitespace-nowrap border border-black"></th> : null}
             </tr>
           </thead>
           <tbody>
@@ -800,15 +788,15 @@ function ReportsBody() {
               </tr>
             ) : (
               notes.map((note: any, index: number) => (
-                <tr key={note.id}>
-                  <td className="tabular-nums">{index + 1}</td>
-                  <td className="text-right">
-                    <span className="block font-medium leading-5">{note.studentName}</span>
-                    <span className="block text-[10px] leading-4">
+                <tr key={note.id} className={index % 2 ? "bg-[#f3f4f6]" : undefined}>
+                  <td className="border border-black px-1 text-center tabular-nums">{index + 1}</td>
+                  <td className="border border-black px-2 text-right font-bold">
+                    <span className="block leading-5">{note.studentName}</span>
+                    <span className="block text-[10px] font-normal leading-4">
                       {classLabel(note.shortName, note.className)}
                     </span>
                   </td>
-                  <td className="text-right">
+                  <td className="border border-black px-1 text-right">
                     <span className="block leading-5">{tr(NOTE_META[note.type as NoteType].label)}</span>
                     {note.behaviorTypeName ? (
                       <span className="block text-[10px] leading-4">
@@ -819,7 +807,7 @@ function ReportsBody() {
                       <span className="block text-[10px] leading-4">{note.details}</span>
                     ) : null}
                   </td>
-                  <td>
+                  <td className="border border-black px-1 text-center">
                     <span className="block leading-5">
                       {periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}
                     </span>
@@ -827,8 +815,8 @@ function ReportsBody() {
                       {note.teacherSubject || note.teacherName || "—"}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap">{formatDay(note.createdAt)}</td>
-                  <td className="text-right">
+                  <td className="border border-black px-1 text-center whitespace-nowrap">{formatDay(note.createdAt)}</td>
+                  <td className="border border-black px-1 text-right">
                     {note.status === "closed"
                       ? note.actionTaken || "أُغلقت"
                       : "قيد المتابعة"}
@@ -862,7 +850,7 @@ function ReportsBody() {
           </label>
         </div>
         {showTeacherSign || showCounselorSign || showPrincipalSign ? (
-        <footer className="mt-6 grid grid-cols-3 gap-3 text-center text-[12px] leading-6">
+        <footer className={mode === "notes" || mode === "attend" ? "mt-8 flex items-start justify-between gap-6 text-sm" : "mt-6 grid grid-cols-3 gap-3 text-center text-[12px] leading-6"}>
           <div>
             {showTeacherSign ? (
               <>
