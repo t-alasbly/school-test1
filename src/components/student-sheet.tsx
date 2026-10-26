@@ -6,6 +6,7 @@ import { NoteSession } from "@/components/note-session";
 import { NoteActions } from "@/components/note-actions";
 import { ExitPermitBadge } from "@/components/exit-permit";
 import { CallParent } from "@/components/call-parent";
+import { DayName } from "@/components/day-name";
 import { StaffMailDialog } from "@/components/staff-mail-dialog";
 import { StaffMailInbox } from "@/components/staff-mail-inbox";
 import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
