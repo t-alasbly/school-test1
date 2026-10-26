@@ -53,6 +53,21 @@ function isCalcColumn(col: { calc?: string; id: string; title?: string }) {
   return col.calc === "sum" || col.calc === "avg" || (isSumColumn(col) && col.calc !== "");
 }
 
+function splitExtra(col: ExtraCol, count: number): ExtraCol[] {
+  const n = Math.min(8, Math.max(2, Math.round(count) || 2));
+  const total = Number(col.max) || 0;
+  const base = total ? Math.round((total / n) * 100) / 100 : 0;
+  return Array.from({ length: n }, (_, index) => {
+    const max = !total ? undefined : index === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base;
+    return {
+      id: `s${Date.now().toString(36)}${index}`.slice(0, 20),
+      title: `${(col.title || "قسم").slice(0, 34)} ${index + 1}`.slice(0, 40),
+      width: col.width,
+      max: max && max > 0 ? max : undefined,
+    };
+  });
+}
+
 function columnMath(col: { id: string; calc?: string; sources?: string[]; title?: string }, cols: { id: string; calc?: string; title?: string }[], values: Record<string, string | number | undefined>) {
   if (col.calc === "cards") return Number(values[col.id]) || 0;
   const manual = cols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg" && !isSumColumn(item));
@@ -1515,6 +1530,8 @@ export function ClassRecords({
   const [schoolYear, setSchoolYear] = useState(() => new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date()));
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
+  const [splitTarget, setSplitTarget] = useState("");
+  const [splitParts, setSplitParts] = useState("4");
   const [recordCols, setRecordCols] = useState<NonNullable<PeriodPlan["columns"]> | null>(null);
   const [splitInto, setSplitInto] = useState({ tasks: "4", exam: "2", eval: "2" });
   const [ceilDraft, setCeilDraft] = useState<{ tasks?: number; exam?: number }>({});
@@ -2701,11 +2718,16 @@ export function ClassRecords({
                 <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
                 <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
                 <Input className="w-16" type="number" min={8} max={80} value={col.width} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, width: Math.min(80, Math.max(8, Number(event.target.value) || 18)) } : item))} />
-                <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "", sources: item.sources ?? [] } : item))}>
+                <Select className="h-9 w-auto" value={splitTarget === col.id ? "split" : (col.calc || "")} onChange={(event) => {
+                  if (event.target.value === "split") { setSplitTarget(col.id); return; }
+                  if (splitTarget === col.id) setSplitTarget("");
+                  setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "", sources: item.sources ?? [] } : item));
+                }}>
                   <option value="">{tr("إدخال يدوي")}</option>
                   <option value="sum">{tr("جمع أعمدة")}</option>
                   <option value="avg">{tr("متوسط أعمدة")}</option>
                   <option value="cards">{tr("المتابعة الصفية")}</option>
+                  <option value="split">{tr("تقسيم إلى أقسام")}</option>
                 </Select>
                 <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
                   const next = [...gradeCols];
@@ -2715,6 +2737,26 @@ export function ClassRecords({
                 }}>{tr("تقديم")}</button>
                 <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setGradeCols(gradeCols.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
                 </div>
+                {splitTarget === col.id ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span>{tr("عدد الأقسام")}</span>
+                    <Input className="h-8 w-16" type="number" min={2} max={8} value={splitParts} onChange={(event) => setSplitParts(event.target.value)} />
+                    <button type="button" className="font-medium text-primary" onClick={() => {
+                      const parts = splitExtra(col, Number(splitParts) || 2);
+                      if (gradeCols.length - 1 + parts.length > 24) {
+                        toast.error(tr("عدد الأعمدة كبير. احذف عمودًا أو قلّل الأقسام."));
+                        return;
+                      }
+                      const next: ExtraCol[] = [];
+                      for (const item of gradeCols) {
+                        if (item.id === col.id) next.push(...parts);
+                        else next.push(item);
+                      }
+                      setGradeCols(next);
+                      setSplitTarget("");
+                    }}>{tr("تقسيم")}</button>
+                  </div>
+                ) : null}
                 {col.calc === "sum" || col.calc === "avg" ? (
                   <div className="flex flex-wrap gap-2 text-xs">
                     {gradeCols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg" && !isSumColumn(item)).map((item) => (
