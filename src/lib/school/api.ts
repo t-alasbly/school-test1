@@ -6968,7 +6968,8 @@ var gradeFormatPayload = object({
 		width: number().min(8).max(80).optional(),
 		max: number().min(0).max(100).optional(),
 		calc: _enum(["", "sum", "avg", "cards"]).optional(),
-		sources: array(string().max(40)).max(20).optional()
+		sources: array(string().max(40)).max(20).optional(),
+		head: string().max(40).optional()
 	})).max(24).optional(),
 	cards: array(object({
 		label: string().min(1).max(40),
@@ -7051,7 +7052,8 @@ function cleanFormat(data) {
 			width: Math.min(80, Math.max(8, Number(column?.width) || 18)),
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
 			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
-			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
+			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : [],
+			head: String(column?.head || "").trim().slice(0, 40)
 		})),
 		layout: cleanSheetLayout(data?.layout)
 	};

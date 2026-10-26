@@ -57,13 +57,40 @@ function splitExtra(col: ExtraCol, count: number): ExtraCol[] {
   const n = Math.min(8, Math.max(2, Math.round(count) || 2));
   const total = Number(col.max) || 0;
   const base = total ? Math.round((total / n) * 100) / 100 : 0;
+  const head = (col.head || col.title || "قسم").replace(/\s+\d+$/, "").trim().slice(0, 40) || "قسم";
   return Array.from({ length: n }, (_, index) => {
     const max = !total ? undefined : index === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base;
     return {
       id: `s${Date.now().toString(36)}${index}`.slice(0, 20),
-      title: `${(col.title || "قسم").slice(0, 34)} ${index + 1}`.slice(0, 40),
+      title: head,
+      head,
       width: col.width,
       max: max && max > 0 ? max : undefined,
+    };
+  });
+}
+
+function columnHead(col: ExtraCol) {
+  if (col.head?.trim()) return col.head.trim();
+  const match = /^(.*)\s+(\d+)$/.exec((col.title || "").trim());
+  return match?.[1]?.trim() || "";
+}
+
+function headerBands(cols: ExtraCol[]) {
+  const bands: { head: string; cols: ExtraCol[] }[] = [];
+  for (const col of cols) {
+    const head = columnHead(col);
+    const last = bands[bands.length - 1];
+    if (head && last && last.head === head) last.cols.push(col);
+    else bands.push({ head, cols: [col] });
+  }
+  return bands.map((band) => {
+    const grouped = Boolean(band.head) && band.cols.length > 1;
+    const total = band.cols.reduce((sum, col) => sum + (Number(col.max) || 0), 0);
+    return {
+      label: grouped ? `${band.head}${total ? ` ${formatPoints(total)}` : ""}` : (band.cols[0]?.title || band.head || "عمود"),
+      cols: band.cols,
+      grouped,
     };
   });
 }
@@ -2122,7 +2149,11 @@ export function ClassRecords({
       return;
     }
     const holder = document.createElement("div");
-    holder.innerHTML = `<h2 style="text-align:center;font-size:16px;margin:0 0 8px">${title}</h2><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px"><thead><tr>${heads.map((head) => `<th style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">${head}</th>`).join("")}</tr></thead><tbody>${rows.map((row, index) => `<tr style="height:${gradeShape === "blank" ? gradeRow : recordRow}mm;background:${index % 2 ? "#f3f4f6" : "#fff"}">${row.map((cell, cellIndex) => `<td style="border:1px solid #000;padding:3px;text-align:${cellIndex === 1 ? "right" : "center"};font-weight:${cellIndex === 1 ? "700" : "400"}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    const bands = gradeShape === "blank" ? headerBands(gradeCols) : [];
+    const headHtml = gradeShape === "blank"
+      ? `<tr><th rowspan="2" style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">م</th><th rowspan="2" style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">اسم الطالب</th>${withId ? `<th rowspan="2" style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">السجل المدني</th>` : ""}${bands.map((band) => `<th colspan="${band.cols.length}" style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">${band.label}</th>`).join("")}</tr><tr>${gradeCols.map((col) => `<th style="border:1px solid #000;padding:4px;background:#e5e7eb">${col.max || ""}</th>`).join("")}</tr>`
+      : `<tr>${heads.map((head) => `<th style="border:1px solid #000;padding:4px;background:#9aa0a6;color:#fff">${head}</th>`).join("")}</tr>`;
+    holder.innerHTML = `<h2 style="text-align:center;font-size:16px;margin:0 0 8px">${title}</h2><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px"><thead>${headHtml}</thead><tbody>${rows.map((row, index) => `<tr style="height:${gradeShape === "blank" ? gradeRow : recordRow}mm;background:${index % 2 ? "#f3f4f6" : "#fff"}">${row.map((cell, cellIndex) => `<td style="border:1px solid #000;padding:3px;text-align:${cellIndex === 1 ? "right" : "center"};font-weight:${cellIndex === 1 ? "700" : "400"}">${cell}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
     printElement(holder);
   }
   async function applyRecordColumn(col: { id: string; title: string; max: number; kind: "participation" | "exam" | "extra" }) {
@@ -2712,10 +2743,23 @@ export function ClassRecords({
             </label>
           </div>
           <ul className="space-y-2">
-            {gradeCols.map((col, index) => (
+            {gradeCols.map((col, index) => {
+              const head = columnHead(col);
+              const siblings = head ? gradeCols.filter((item) => columnHead(item) === head) : [];
+              const grouped = siblings.length > 1;
+              const lead = !grouped || siblings[0]?.id === col.id;
+              return (
               <li key={col.id} className="space-y-1 rounded border border-border p-2">
                 <div className="flex flex-wrap items-center gap-2">
-                <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
+                {lead ? (
+                  <Input className="max-w-40" value={grouped ? head : col.title} maxLength={40} onChange={(event) => {
+                    const next = event.target.value;
+                    if (!grouped) setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, title: next } : item));
+                    else setGradeCols(gradeCols.map((item) => columnHead(item) === head ? { ...item, head: next, title: next } : item));
+                  }} />
+                ) : (
+                  <span className="w-40 text-xs text-fg-muted">{tr("قسم")} {siblings.findIndex((item) => item.id === col.id) + 1}</span>
+                )}
                 <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} disabled={col.calc === "sum" || col.calc === "avg"} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) > 0 ? Number(event.target.value) : undefined } : item))} />
                 <Input className="w-16" type="number" min={8} max={80} value={col.width} onChange={(event) => setGradeCols(gradeCols.map((item) => item.id === col.id ? { ...item, width: Math.min(80, Math.max(8, Number(event.target.value) || 18)) } : item))} />
                 <Select className="h-9 w-auto" value={splitTarget === col.id ? "split" : (col.calc || "")} onChange={(event) => {
@@ -2772,7 +2816,8 @@ export function ClassRecords({
                   </div>
                 ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
           <button type="button" className="text-sm font-medium text-primary" onClick={() => setGradeCols([...gradeCols, { id: `c${Date.now()}`.slice(0, 20), title: "", width: 18 }])}>{tr("إضافة عمود")}</button>
           <Button type="button" size="sm" onClick={() => saveSheetTemplate(false)}>{tr("حفظ التعديل على القالب")}</Button>
@@ -2811,9 +2856,13 @@ export function ClassRecords({
               <article key={student.id} className="rounded-xl border border-border bg-white p-3">
                 <p className="text-base font-bold leading-6">{index + 1}. {student.name}</p>
                 <div className="mt-2 space-y-2">
-                  {gradeShape === "blank" && sheetMode === "period" ? gradeCols.map((col) => isCalcColumn(col) || isSumColumn(col) ? (
+                  {gradeShape === "blank" && sheetMode === "period" ? gradeCols.map((col) => {
+                    const head = columnHead(col);
+                    const siblings = head ? gradeCols.filter((item) => columnHead(item) === head) : [];
+                    const label = siblings.length > 1 ? `${head} ${formatPoints(Number(col.max) || 0)}` : (col.title || tr("عمود"));
+                    return isCalcColumn(col) || isSumColumn(col) ? (
                     <p key={col.id} className="flex justify-between text-sm font-semibold"><span>{col.title || tr("المجموع")}</span><span>{sheetGrade(columnMath(col, gradeCols, Object.fromEntries(gradeCols.map((item) => [item.id, readBlank(student.id, item.id)]))))}</span></p>
-                  ) : box(col.title || tr("عمود"), readBlank(student.id, col.id), blankKey(student.id, col.id), false, (value) => {
+                  ) : box(label, readBlank(student.id, col.id), blankKey(student.id, col.id), false, (value) => {
                     const next = acceptGrade(value, Number(col.max) || 0, blankKey(student.id, col.id));
                     if (next === null) return;
                     setBlankMarks((prev) => {
@@ -2821,7 +2870,8 @@ export function ClassRecords({
                       storeBlank(marks);
                       return marks;
                     });
-                  }, () => undefined)) : null}
+                  }, () => undefined);
+                  }) : null}
                   {gradeShape !== "blank" && sheetMode === "period" && selected ? (
                     <>
                       {taskColumns.length ? taskColumns.map((column) => column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? (
@@ -3236,8 +3286,8 @@ export function ClassRecords({
                 <tr className="bg-[#9aa0a6] text-white">
                   <th className="border border-black px-1 py-1" rowSpan={2} style={{ width: blankPct(seqMm) }}>{tr("م")}</th>
                   <th className="grade-name border border-black px-1 py-1 text-right" rowSpan={2} style={{ width: blankPct(nameMm) }}>{tr("اسم الطالب")}</th>
-                  {gradeCols.map((col) => (
-                    <th key={col.id} className="border border-black px-1 py-1" style={{ width: blankPct(Number(col.width) || 18) }}>{col.title || tr("عمود")}</th>
+                  {headerBands(gradeCols).map((band) => (
+                    <th key={band.cols.map((col) => col.id).join("-")} colSpan={band.cols.length} className="border border-black px-1 py-1" style={{ width: blankPct(band.cols.reduce((sum, col) => sum + (Number(col.width) || 18), 0)) }}>{band.label}</th>
                   ))}
                 </tr>
                 <tr>
@@ -3750,7 +3800,7 @@ export function GradeFormatStudio() {
             finalExamMax: Number(item.payload.finalExamMax) || 40,
             finalColumns: (item.payload.finalColumns ?? []).map((column, index) => ({ id: column.id || `f${index + 1}`, title: column.title, max: Number(column.max) || 0 })),
             sheet: item.payload.sheet === "blank" ? "blank" : "record",
-            gradeCols: (item.payload.gradeCols ?? []).map((column) => ({ id: column.id, title: column.title, width: Number(column.width) || 18, max: Number(column.max) || 0, calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "", sources: column.sources ?? [] })),
+            gradeCols: (item.payload.gradeCols ?? []).map((column) => ({ id: column.id, title: column.title, width: Number(column.width) || 18, max: Number(column.max) || 0, calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "", sources: column.sources ?? [], head: column.head || "" })),
             layout: item.payload.layout,
           };
           const at = designSlot(next);
