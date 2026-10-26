@@ -52,6 +52,38 @@ function localDay(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function briefAction(raw: string | null | undefined, status?: string) {
+  const text = String(raw || "");
+  const bits: string[] = [];
+  const add = (label: string) => {
+    if (!bits.includes(label)) bits.push(label);
+  };
+  if (/تعهد/.test(text)) add("تعهد");
+  if (/أُرسل|ارسل|تم إرسال|رسالة/.test(text)) add("تم إرسال رسالة");
+  if (/إشعار ولي|إبلاغ ولي|دعوة ولي|ولي الأمر/.test(text)) add("إبلاغ ولي الأمر");
+  if (/تنبيه/.test(text)) add("تنبيه");
+  if (/حسم/.test(text)) add("حسم درجة");
+  if (/إحالة|تحويل/.test(text)) add("إحالة");
+  if (/اعتذار/.test(text)) add("اعتذار");
+  if (/نقل/.test(text)) add("نقل");
+  if (!bits.length) return status === "closed" ? "أُغلقت" : "قيد المتابعة";
+  return bits.slice(0, 3).join(" · ");
+}
+
+function typeShort(type: string) {
+  if (type === "behavior") return "سلوكية";
+  if (type === "absence") return "غياب";
+  if (type === "late") return "تأخر";
+  if (type === "homework") return "دراسية";
+  return "ملاحظة";
+}
+
+function compactDay(iso?: string) {
+  const d = new Date(iso || "");
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("ar-SA-u-nu-latn", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(d);
+}
+
 export const Route = createFileRoute("/print/")({ component: ReportsBody });
 
 function ReportsBody() {
@@ -770,64 +802,56 @@ function ReportsBody() {
         <table className="w-full border-collapse text-sm" style={{ tableLayout: "fixed" }}>
           <thead>
             <tr className="bg-[#9aa0a6] text-white">
-              <th className="w-10 border border-black px-1 py-1">{tr("م")}</th>
-              <th className="border border-black px-2 py-1 text-right">{tr("اسم الطالب")}</th>
-              <th className="border border-black px-1 py-1">{tr("النوع / المخالفة")}</th>
-              <th className="border border-black px-1 py-1">{tr("الحصة · المادة")}</th>
-              <th className="border border-black px-1 py-1">{tr("التاريخ")}</th>
-              <th className="border border-black px-1 py-1">{tr("الحالة / الإجراء")}</th>
+              <th className="border border-black px-1 py-1" style={{ width: "6%" }}>{tr("م")}</th>
+              <th className="border border-black px-1 py-1 text-right" style={{ width: "16%" }}>{tr("اسم الطالب")}</th>
+              <th className="border border-black px-1 py-1" style={{ width: "9%" }}>{tr("النوع")}</th>
+              <th className="border border-black px-1 py-1 text-right" style={{ width: "32%" }}>{tr("المخالفة")}</th>
+              <th className="border border-black px-1 py-1" style={{ width: "13%" }}>{tr("الحصة")}</th>
+              <th className="border border-black px-1 py-1" style={{ width: "12%" }}>{tr("التاريخ")}</th>
+              <th className="border border-black px-1 py-1" style={{ width: "12%" }}>{tr("الإجراء")}</th>
               {canEditRecords ? <th className="no-print w-24 whitespace-nowrap border border-black"></th> : null}
             </tr>
           </thead>
           <tbody>
             {notes.length === 0 ? (
               <tr>
-                <td colSpan={canEditRecords ? 7 : 6} className="py-8 text-center">
+                <td colSpan={canEditRecords ? 8 : 7} className="py-8 text-center">
                   لا توجد نتائج ضمن عوامل التصفية الحالية.
                 </td>
               </tr>
             ) : (
-              notes.map((note: any, index: number) => (
+              notes.map((note: any, index: number) => {
+                const violation = note.behaviorTypeName || note.details || "—";
+                const extra = note.behaviorTypeName && note.details && note.details !== note.behaviorTypeName && String(note.details).length <= 48 ? note.details : "";
+                return (
                 <tr key={note.id} className={index % 2 ? "bg-[#f3f4f6]" : undefined}>
                   <td className="border border-black px-1 text-center tabular-nums">{index + 1}</td>
-                  <td className="border border-black px-2 text-right font-bold">
-                    <span className="block leading-5">{note.studentName}</span>
+                  <td className="border border-black px-1 text-right font-bold">
+                    <span className="block text-[12px] leading-5">{note.studentName}</span>
                     <span className="block text-[10px] font-normal leading-4">
                       {classLabel(note.shortName, note.className)}
                     </span>
                   </td>
-                  <td className="border border-black px-1 text-right">
-                    <span className="block leading-5">{tr(NOTE_META[note.type as NoteType].label)}</span>
-                    {note.behaviorTypeName ? (
-                      <span className="block text-[10px] leading-4">
-                        {tr(note.behaviorTypeName)}
-                        {note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}
-                      </span>
-                    ) : note.details ? (
-                      <span className="block text-[10px] leading-4">{note.details}</span>
-                    ) : null}
+                  <td className="border border-black px-1 text-center text-[12px] font-semibold">{tr(typeShort(note.type))}</td>
+                  <td className="border border-black px-1.5 text-right align-top">
+                    <span className="block text-[13px] font-bold leading-5">{tr(violation)}</span>
+                    {note.occurrence > 1 ? <span className="block text-[10px] leading-4">{occurrenceLabel(note.occurrence)}</span> : null}
+                    {extra ? <span className="block text-[10px] leading-4">{extra}</span> : null}
                   </td>
-                  <td className="border border-black px-1 text-center">
-                    <span className="block leading-5">
-                      {periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}
-                    </span>
-                    <span className="block text-[10px] leading-4">
-                      {note.teacherSubject || note.teacherName || "—"}
-                    </span>
+                  <td className="border border-black px-1 text-center align-top">
+                    <span className="block text-[12px] leading-5">{periodShort(note.periodKey, reportSchool.season, reportSchool.schedules)}</span>
+                    {note.teacherSubject ? <span className="block text-[11px] leading-4">{note.teacherSubject}</span> : null}
                   </td>
-                  <td className="border border-black px-1 text-center whitespace-nowrap">{formatDay(note.createdAt)}</td>
-                  <td className="border border-black px-1 text-right">
-                    {note.status === "closed"
-                      ? note.actionTaken || "أُغلقت"
-                      : "قيد المتابعة"}
-                  </td>
+                  <td className="border border-black px-1 text-center text-[11px] whitespace-nowrap">{compactDay(note.occurredAt || note.createdAt)}</td>
+                  <td className="border border-black px-1 text-center text-[12px] font-semibold leading-5">{tr(briefAction(note.actionTaken, note.status))}</td>
                   {canEditRecords ? (
                     <td className="no-print whitespace-nowrap">
                       <NoteRecordTools note={note} />
                     </td>
                   ) : null}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
