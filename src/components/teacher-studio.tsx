@@ -1516,6 +1516,8 @@ export function ClassRecords({
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
   const [recordCols, setRecordCols] = useState<NonNullable<PeriodPlan["columns"]> | null>(null);
+  const [splitInto, setSplitInto] = useState({ tasks: "4", exam: "2", eval: "2" });
+  const [ceilDraft, setCeilDraft] = useState<{ tasks?: number; exam?: number }>({});
   const [cardColumn, setCardColumn] = useState<Record<number, string> | null>(null);
   const [yearFormatId, setYearFormatId] = useState("");
   const formatsQuery = useQuery({
@@ -1979,8 +1981,8 @@ export function ClassRecords({
       },
       periods: periods.map((period) => ({
         title: period.title,
-        tasksMax: period.tasksMax,
-        examMax: period.examMax,
+        tasksMax: ceilDraft.tasks != null ? ceilDraft.tasks : period.tasksMax,
+        examMax: ceilDraft.exam != null ? ceilDraft.exam : period.examMax,
         columns: (recordCols ?? period.columns ?? liveColumns).map((column) => ({
           id: String(column.id || "").slice(0, 20),
           title: column.title,
@@ -2020,6 +2022,30 @@ export function ClassRecords({
       void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
       void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
     }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
+  }
+  function splitSection(group: "tasks" | "exam" | "eval") {
+    const count = Math.min(8, Math.max(1, Number(splitInto[group]) || 1));
+    const ceiling = group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : group === "exam" ? (ceilDraft.exam ?? selected?.examMax ?? 0) : 0;
+    if (group !== "eval" && ceiling <= 0) {
+      toast.error(tr("حدّد درجة القسم أولًا"));
+      return;
+    }
+    const share = ceiling > 0 ? Math.floor((ceiling * 10) / count) / 10 : 5;
+    let leftover = ceiling > 0 ? Math.round((ceiling - share * count) * 10) / 10 : 0;
+    const name = group === "tasks" ? "مشاركة" : group === "exam" ? "اختبار" : "تقويم";
+    const fresh = Array.from({ length: count }, (_, index) => {
+      let max = share || 5;
+      if (leftover >= 0.1) {
+        max = Math.round((max + 0.1) * 10) / 10;
+        leftover = Math.round((leftover - 0.1) * 10) / 10;
+      }
+      return { id: `c${group[0]}${index + 1}${String(Date.now()).slice(-4)}`.slice(0, 20), title: `${name} ${index + 1}`, group, max };
+    });
+    const tasks = group === "tasks" ? fresh : liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
+    const exams = group === "exam" ? fresh : liveColumns.filter((column) => column.group === "exam");
+    const evals = group === "eval" ? fresh : liveColumns.filter((column) => column.group === "eval");
+    setRecordCols([...tasks, ...exams, ...evals]);
+    toast.success(ceiling > 0 ? `${fresh.map((column) => column.max).join(" + ")} = ${ceiling}` : tr("أُضيفت الخانات"));
   }
   async function exportGrades(kind: "xlsx" | "pdf", withId = exportId) {
     const { heads, rows } = sheetMatrix(withId);
@@ -2203,6 +2229,8 @@ export function ClassRecords({
   const taskColumns = liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
   const examColumns = liveColumns.filter((column) => column.group === "exam");
   const evalColumns = liveColumns.filter((column) => column.group === "eval");
+  const tasksCeiling = ceilDraft.tasks ?? selected?.tasksMax ?? 0;
+  const examCeiling = ceilDraft.exam ?? selected?.examMax ?? 0;
   const gradeSlots = (taskColumns.length || 1) + (taskColumns.length ? 1 : 0) + (examColumns.length || 1) + (examColumns.length ? 1 : 0) + evalColumns.length + 1;
   const widthTotal = seqMm + nameMm + gradeSlots * colMm;
   const colPct = (mm: number) => `${Math.round((mm / Math.max(widthTotal, 1)) * 1000) / 10}%`;
@@ -2486,11 +2514,20 @@ export function ClassRecords({
               const cols = liveColumns.filter((column) => (group === "tasks" ? (column.group ?? "eval") === "tasks" : column.group === group));
               return (
                 <li key={group} className="space-y-2 rounded border border-border p-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold">{label}</span>
-                    <button type="button" className="text-sm font-medium text-primary" onClick={() => setRecordCols([...liveColumns, { id: `c${Date.now()}`.slice(0, 20), title: tr("قسم"), group, max: 5 }])}>{tr("إضافة عمود فرعي")}</button>
+                    <span className="flex items-center gap-1 text-xs">
+                      {group !== "eval" ? (
+                        <Input className="h-8 w-16" inputMode="decimal" title={tr("درجة القسم")} value={group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : (ceilDraft.exam ?? selected?.examMax ?? 0)} onChange={(event) => {
+                          const next = Math.min(100, Math.max(0, Number(event.target.value) || 0));
+                          setCeilDraft((prev) => ({ ...prev, [group]: next }));
+                        }} />
+                      ) : null}
+                      <Input className="h-8 w-14" type="number" min={1} max={8} value={splitInto[group]} onChange={(event) => setSplitInto((prev) => ({ ...prev, [group]: event.target.value }))} />
+                      <button type="button" className="font-medium text-primary" onClick={() => splitSection(group)}>{tr("خانات متساوية")}</button>
+                    </span>
                   </div>
-                  {cols.length === 0 ? <p className="text-xs text-fg-muted">{tr("عمود واحد للقسم. أضف أعمدة فرعية إن أردت: عمودًا أو عمودين أو أكثر.")}</p> : null}
+                  {cols.length === 0 ? <p className="text-xs text-fg-muted">{tr("درجة واحدة للقسم. مثال: 20 مشاركة يمكن تقسيمها إلى 5 + 5 + 5 + 5.")}</p> : <p className="text-xs text-fg-muted">{cols.filter((column) => column.calc !== "sum" && column.calc !== "avg").map((column) => column.max || 0).join(" + ")}{group !== "eval" ? ` = ${group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : (ceilDraft.exam ?? selected?.examMax ?? 0)}` : ""}</p>}
                   {cols.map((col) => {
                     const index = liveColumns.findIndex((item) => item.id === col.id);
                     return (
@@ -2543,8 +2580,8 @@ export function ClassRecords({
                 periods: periods.map((period) => ({
                   no: period.no,
                   title: period.title,
-                  tasksMax: period.tasksMax,
-                  examMax: period.examMax,
+                  tasksMax: ceilDraft.tasks != null ? ceilDraft.tasks : period.tasksMax,
+                  examMax: ceilDraft.exam != null ? ceilDraft.exam : period.examMax,
                   closed: period.closed,
                   columns,
                 })),
@@ -2829,12 +2866,12 @@ export function ClassRecords({
                   <tr>
                     <th rowSpan={2} className="border border-black px-2 py-1">{tr("م")}</th>
                     <th rowSpan={2} className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
-                    {taskColumns.length ? <th colSpan={taskColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("المشاركة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(selected.tasksMax)})</th>}
-                    {taskColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع المشاركة")} ({formatPoints(selected.tasksMax)})</th> : null}
-                    {examColumns.length ? <th colSpan={examColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("اختبار الفترة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>}
-                    {examColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الاختبار")} ({formatPoints(selected.examMax)})</th> : null}
+                    {taskColumns.length ? <th colSpan={taskColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("المشاركة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(tasksCeiling)})</th>}
+                    {taskColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع المشاركة")} ({formatPoints(tasksCeiling)})</th> : null}
+                    {examColumns.length ? <th colSpan={examColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("اختبار الفترة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(examCeiling)})</th>}
+                    {examColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الاختبار")} ({formatPoints(examCeiling)})</th> : null}
                     {evalColumns.length ? <th colSpan={evalColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("تقويم")}</th> : null}
-                    <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(selected.tasksMax + selected.examMax)})</th>
+                    <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(tasksCeiling + examCeiling)})</th>
                   </tr>
                   <tr>
                     {taskColumns.map((column) => <th key={column.id} className="border border-black px-1 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>)}
@@ -2861,21 +2898,29 @@ export function ClassRecords({
                   exam: String(score.exam),
                   extras: Object.fromEntries(liveColumns.map((column) => [column.id, String(score.extras?.[column.id] ?? 0)])),
                 };
-                const taskSum = taskColumns.length
+                const taskSum = Math.min(tasksCeiling || 1000, taskColumns.length
                   ? taskColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
-                  : Number(draft.participation) || 0;
-                const examSum = examColumns.length
+                  : Number(draft.participation) || 0);
+                const examSum = Math.min(examCeiling || 1000, examColumns.length
                   ? examColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0)
-                  : Number(draft.exam) || 0;
+                  : Number(draft.exam) || 0);
                 const extraSum = evalColumns.filter((column) => column.calc !== "sum" && column.calc !== "avg").reduce((sum, column) => sum + (Number(draft.extras[column.id]) || 0), 0);
                 const periodSum = taskSum + examSum + (classFollow ? extraSum : 0);
-                const persist = (next = draft) => save.mutate({
-                  studentId: student.id,
-                  classId: student.classId,
-                  participation: Number(next.participation) || 0,
-                  exam: Number(next.exam) || 0,
-                  extras: Object.fromEntries(Object.entries(next.extras).map(([id, value]) => [id, Number(value) || 0])),
-                });
+                const persist = (next = draft) => {
+                  const partTotal = (columns: typeof taskColumns, ceiling: number, fallback: string) => {
+                    const manual = columns.filter((column) => column.calc !== "sum" && column.calc !== "avg" && column.calc !== "cards");
+                    if (!manual.length) return Number(fallback) || 0;
+                    const sum = manual.reduce((total, column) => total + (Number(next.extras[column.id]) || 0), 0);
+                    return ceiling > 0 ? Math.min(ceiling, sum) : sum;
+                  };
+                  save.mutate({
+                    studentId: student.id,
+                    classId: student.classId,
+                    participation: partTotal(taskColumns, tasksCeiling, next.participation),
+                    exam: partTotal(examColumns, examCeiling, next.exam),
+                    extras: Object.fromEntries(Object.entries(next.extras).map(([id, value]) => [id, Number(value) || 0])),
+                  });
+                };
                 return (
                   <tr key={student.id} style={{ height: `${recordRow}mm` }}>
                     <td className="grade-no border border-black px-1 py-1 text-center" style={{ height: `${recordRow}mm` }}>{index + 1}</td>
