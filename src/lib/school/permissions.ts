@@ -391,6 +391,7 @@ export function canSeeClassMoves(staff: Pick<Staff, "role" | "permissions">) {
 }
 
 export function canSeeParentPhone(staff: Pick<Staff, "role" | "permissions">) {
+  if (staff.role === "teacher") return false;
   return staffCan(staff, "sendMessages") || staffCan(staff, "editStudents");
 }
 

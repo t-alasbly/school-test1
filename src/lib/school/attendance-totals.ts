@@ -95,7 +95,7 @@ export const getStudentAttendanceDays = createServerFn({ method: "POST" })
       studentName: student.name,
       classId: student.class_id,
       classLabel: classLabel(student.short_name, student.class_name),
-      parentPhone: perms.sendMessages ? student.parent_phone : "",
+      parentPhone: staff.role === "teacher" || !perms.sendMessages ? "" : student.parent_phone,
       days: days.map((row) => ({
         day: String(row.day).slice(0, 10),
         kind: (row.kind === "leave" ? "leave" : row.kind) as DailyKind | "leave",

@@ -281,7 +281,7 @@ export function WhatsAppDialog({
         <DialogHeader>
           <DialogTitle>رسالة واتساب — {studentName}</DialogTitle>
           <DialogDescription>
-            {number ? `جوال ولي الأمر: ${parentPhone}` : tr("لا يوجد رقم جوال محفوظ")}
+            {staff.role === "teacher" || !number ? tr("لا يوجد رقم جوال محفوظ") : `جوال ولي الأمر: ${parentPhone}`}
           </DialogDescription>
         </DialogHeader>
         {composer}

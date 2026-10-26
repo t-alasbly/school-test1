@@ -238,6 +238,7 @@ function mappedPerms(staff, school) {
 	return parsePermissions(staff.permissions, staff.role, mapSchool(school));
 }
 function revealPhone(staff, school, phone) {
+	if (staff.role === "teacher") return "";
 	const perms = mappedPerms(staff, school);
 	return perms.sendMessages || perms.editStudents ? phone ?? "" : "";
 }
@@ -1861,7 +1862,7 @@ export const getReport = createServerFn({ method: "POST" }).middleware([authMidd
 		name: s.name,
 		classId: s.class_id,
 		stageId: s.stage_id,
-		parentPhone: s.parent_phone ?? "",
+		parentPhone: revealPhone(staff, school, s.parent_phone ?? ""),
 		className: s.class_name,
 		stageName: s.stage_name,
 		shortName: s.short_name,
@@ -3112,12 +3113,13 @@ export const updateStudent = createServerFn({ method: "POST" }).middleware([auth
       select id from classes where id = ${data.classId} and school_id = ${staff.school_id}
     `)[0]) throw new Error("الفصل غير موجود");
 	const name = data.name.trim();
+	const keepPhones = staff.role === "teacher";
 	await sql`
       update students
       set name = ${name}, name_en = ${englishName(name, data.nameEn)},
-          parent_phone = ${data.parentPhone ? normalizeSaudiPhone(data.parentPhone) : ""},
-          parent_phone_2 = ${data.parentPhone2 ? normalizeSaudiPhone(data.parentPhone2) : ""},
-          work_phone = ${data.workPhone ? normalizeSaudiPhone(data.workPhone) : ""},
+          parent_phone = case when ${keepPhones} then parent_phone else ${data.parentPhone ? normalizeSaudiPhone(data.parentPhone) : ""} end,
+          parent_phone_2 = case when ${keepPhones} then parent_phone_2 else ${data.parentPhone2 ? normalizeSaudiPhone(data.parentPhone2) : ""} end,
+          work_phone = case when ${keepPhones} then work_phone else ${data.workPhone ? normalizeSaudiPhone(data.workPhone) : ""} end,
           national_id = ${String(data.nationalId ?? "").replace(/\D/g, "").slice(0, 10)},
           nationality = ${String(data.nationality ?? "").trim().slice(0, 40)},
           class_id = ${data.classId}
@@ -5837,7 +5839,7 @@ function mapMailRow(row, staff) {
 		dest: row.dest === "counselor" || row.dest === "health" || row.dest === "teacher" ? row.dest : "vp",
 		status: row.status === "closed" ? "closed" : "open",
 		lastBody: row.last_body ?? "",
-		parentPhone: row.parent_phone || row.parent_phone_2 || "",
+		parentPhone: staff.role === "teacher" ? "" : (row.parent_phone || row.parent_phone_2 || ""),
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 		mine: row.author_id === staff.user_id,
@@ -6652,7 +6654,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 				name: student.name,
 				nationalId: student.national_id,
 				nationality: student.nationality,
-				phone: phoneOf(student),
+				phone: staff.role === "teacher" ? "" : phoneOf(student),
 				today: student.daily_kind === "absence" || student.daily_kind === "late" ? student.daily_kind : "present",
 				tasks: current.participation,
 				quizzes: current.exam,

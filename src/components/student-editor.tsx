@@ -146,7 +146,7 @@ function StudentEditorDialog({
   classId: number;
   student?: { id: number; name: string; nameEn?: string; parentPhone: string; parentPhone2?: string; workPhone?: string; nationalId?: string; nationality?: string; classId: number };
 }) {
-  const { classes } = useWorkspace();
+  const { classes, staff } = useWorkspace();
   const { t } = useLocale();
   const queryClient = useQueryClient();
   const [name, setName] = useState(student?.name ?? "");
@@ -274,6 +274,8 @@ function StudentEditorDialog({
               }}
             />
           </div>
+          {staff.role === "teacher" ? null : (
+          <>
           <div className="space-y-1.5">
             <Label htmlFor="st-phone">{t("جوال الطالب / ولي الأمر")}</Label>
             <Input
@@ -304,6 +306,8 @@ function StudentEditorDialog({
               placeholder="01xxxxxxxx"
             />
           </div>
+          </>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="st-nid">{t("السجل المدني")}</Label>

@@ -923,48 +923,6 @@ export function degreeLabel(degree: number | null | undefined): string {
 	};
 	return tr(map[degree] ?? String(degree));
 }
-/** يقسم المخالفة التي فيها «أو» إلى أصل ثابت وخيارات يُختار أحدها. */
-export function behaviorOrParts(name: string): { base: string; options: string[] } | null {
-	const raw = name.trim();
-	if (!raw.includes("أو")) return null;
-	const head = raw.split(/\s*،?\s*مثل:?\s*/)[0]?.trim() ?? raw;
-	const chunks = head.split(/\s+أو\s+/);
-	const parts = chunks.map((part) => part.replace(/^[،\s]+|[،\s]+$/g, "").trim()).filter(Boolean);
-	if (parts.length < 2) return null;
-	const first = parts[0] ?? "";
-	const rest = parts.slice(1);
-	const words = first.split(/\s+/).filter(Boolean);
-	const commaEnded = /،\s*$/.test(chunks[0] ?? "");
-	const prepAt = words.findIndex((word, index) => index > 0 && /^(داخل|في|أثناء|باستخدام)/.test(word));
-	if (!commaEnded && prepAt > 0) {
-		return {
-			base: words.slice(0, prepAt).join(" "),
-			options: [words.slice(prepAt).join(" "), ...rest],
-		};
-	}
-	if (!commaEnded && rest.every((part) => part.split(/\s+/).length === 1) && words.length >= 2) {
-		return {
-			base: words.slice(0, -1).join(" "),
-			options: [words[words.length - 1] ?? "", ...rest].filter(Boolean),
-		};
-	}
-	if (words.length <= 2) {
-		const long = rest.find((part) => part.split(/\s+/).length > words.length);
-		const longWords = long?.split(/\s+/) ?? [];
-		const suffixAt = longWords.findIndex((word, index) => index > 0 && /^(من|لل|دون)/.test(word));
-		if (suffixAt > 0) {
-			const suffix = longWords.slice(suffixAt).join(" ");
-			return {
-				base: "",
-				options: parts.map((part) => (part.endsWith(suffix) ? part : `${part} ${suffix}`)),
-			};
-		}
-	}
-	return { base: "", options: parts };
-}
-export function behaviorChoiceText(base: string, option: string) {
-	return [base.trim(), option.trim()].filter(Boolean).join(" ").replace(/\s+/g, " ");
-}
 export const DEGREE_DEDUCT: Record<number, string> = {
 	1: "حسم درجة",
 	2: "حسم درجتين",

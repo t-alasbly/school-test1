@@ -587,7 +587,7 @@ export function StudentSheet({
           </SheetTitle>
           <p className="text-sm text-fg-muted">
             {student?.classLabel}
-            {canMessage && [student?.parentPhone, student?.parentPhone2, student?.workPhone].filter(Boolean).length
+            {staff.role !== "teacher" && canMessage && [student?.parentPhone, student?.parentPhone2, student?.workPhone].filter(Boolean).length
               ? ` · ${[student?.parentPhone, student?.parentPhone2, student?.workPhone].filter(Boolean).join(" · ")}`
               : ""}
           </p>
