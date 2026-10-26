@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { bulkDeleteStudents, getStudentRecordCounts, importStudents, importTeachers, listRoster, mergeDuplicateStudents, previewNoorPdf } from "@/lib/school/api";
+import { bulkDeleteStudents, getStudentRecordCounts, importStudents, importTeachers, listRoster, mergeDuplicateStudents, previewNoorPdf, setStudentRosterNote } from "@/lib/school/api";
 import { DEFAULT_TEACHER_PASSWORD } from "@/lib/school/constants";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -190,6 +190,15 @@ function StudentImport() {
   const [showExistingAudit, setShowExistingAudit] = useState(false);
   const [duplicatePairs, setDuplicatePairs] = useState<DuplicatePair[]>([]);
   const [isScanning, setIsScanning] = useState(false);
+
+  const noteMutation = useMutation({
+    mutationFn: (input: { studentId: number; note: string }) => setStudentRosterNote({ data: input }),
+    onSuccess: () => {
+      toast.success("حُفظت الملاحظة وبقيت بيانات الطالب");
+      void queryClient.invalidateQueries({ queryKey: ["roster"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر حفظ الملاحظة")),
+  });
 
   const bulkMutation = useMutation({
     mutationFn: (input: { scope: "all" | "stage" | "class"; stageId?: number; classId?: number }) =>
@@ -477,6 +486,42 @@ function StudentImport() {
               </Button>
             ) : null}
           </div>
+          {(roster.data?.unlinked ?? []).length ? (
+            <Card className="border-amber-500/40">
+              <CardHeader className="space-y-1">
+                <CardTitle className="text-lg">{tr("طلاب غير مرتبطين بالكشف")}</CardTitle>
+                <p className="text-sm text-fg-muted">
+                  {tr("هؤلاء ليسوا في آخر كشف أسماء. مخالفاتهم وغيابهم ومتابعتهم محفوظة. اكتب ملاحظة مثل «نُقل إلى مدرسة أخرى» للإبقاء عليهم، أو احذفهم.")}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ul className="divide-y divide-border">
+                  {(roster.data?.unlinked ?? []).map((student) => (
+                    <li key={student.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{student.name}</p>
+                        <p className="text-xs text-fg-muted">
+                          {student.classLabel ? `آخر فصل: ${student.classLabel}` : tr("بدون فصل")}
+                          {student.nationalId ? ` · ${student.nationalId}` : ""}
+                        </p>
+                      </div>
+                      <Input
+                        className="w-full sm:w-64"
+                        defaultValue={student.note}
+                        placeholder={tr("مثال: نُقل إلى مدرسة أخرى")}
+                        onBlur={(event) => {
+                          const note = event.target.value.trim();
+                          if (note === (student.note || "")) return;
+                          noteMutation.mutate({ studentId: student.id, note });
+                        }}
+                      />
+                      <DeleteStudentButton student={{ id: student.id, name: student.name, classId: student.classId }} />
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
           {stages.length === 0 ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-fg-muted">
@@ -622,7 +667,7 @@ function NoorImport({ onImported }: { onImported: () => void }) {
         ? `، وتُرك ${result.ambiguous} لأن السجل المدني لا يطابق الاسم`
         : "";
       toast.success(
-        `تم سحب الكشف: ${result.updated} محدّث، ${result.inserted} جديد، ${result.skipped} متجاوز${conflict}. المخالفات المسجّلة بقيت كما هي.`,
+        `تم سحب الكشف: ${result.updated} محدّث، ${result.inserted} جديد، ${result.detached ?? 0} غير مرتبط${conflict}. السجلات المسجّلة بقيت كما هي.`,
       );
       setPreview(null);
       setFileName("");
@@ -650,8 +695,8 @@ function NoorImport({ onImported }: { onImported: () => void }) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-lg">سحب كشف الطلاب من نور</CardTitle>
         <p className="text-sm text-fg-muted">
-          ارفع ملف PDF «كشف الطلاب» كما يخرجه نور. يُحدَّث الطالب في مكانه بالسجل المدني، ثم بالاسم.
-          المخالفات والملاحظات والرسائل لا تُحذف ولا تُنقل، ومن ليس في الملف يبقى كما هو.
+          ارفع ملف PDF «كشف الطلاب» كما يخرجه نور. يُحدَّث فصل الطالب بالسجل المدني ثم بالاسم، دون المساس بالمخالفات أو الغياب أو المتابعة.
+          من ليس في الكشف ينتقل إلى «غير المرتبطين» وتبقى بياناته.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -725,7 +770,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
           ? ` — أُزيل ${result.removedClasses ?? 0} قسماً فارغاً قديماً`
           : "";
       toast.success(
-        `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.skipped} متجاوز${extra}`,
+        `تم الاستيراد: ${result.inserted} جديد، ${result.updated} محدّث، ${result.detached ?? 0} غير مرتبط، ${result.skipped} متجاوز${extra}`,
       );
       onImported();
     },
@@ -819,7 +864,7 @@ function StudentExcelForm({ onImported }: { onImported: () => void }) {
               checked={keepEmpty}
               onChange={(e) => setKeepEmpty(e.target.checked)}
             />
-            حماية السجلات: لا تُحذف الفصول ولا يُدمج الطلاب، وتبقى المخالفات كما هي
+            حماية السجلات: لا تُحذف المخالفات ولا الغياب ولا المتابعة. من ليس في الملف يظهر في غير المرتبطين.
           </label>
           <Button
             disabled={mutation.isPending || !mapping.name || !mapping.stageName || !mapping.className}

@@ -581,7 +581,7 @@ async function listActionTypeRows(sql, schoolId, activeOnly = false) {
 async function listClassOptions(sql, schoolId) {
 	return (await sql`
     select c.id, c.stage_id, st.name as stage_name, c.name, st.short_name,
-      (select count(*)::int from students s where s.class_id = c.id) as student_count,
+      (select count(*)::int from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked') as student_count,
       (select count(*)::int from daily_attendance a
          join students s on s.id = a.student_id
          where s.class_id = c.id and a.school_id = c.school_id
@@ -593,7 +593,7 @@ async function listClassOptions(sql, schoolId) {
     from classes c
     join stages st on st.id = c.stage_id
     where c.school_id = ${schoolId}
-      and exists (select 1 from students s where s.class_id = c.id)
+      and exists (select 1 from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked')
     order by st.sort_order, c.sort_order
   `).map((r) => ({
 		id: r.id,
@@ -898,7 +898,7 @@ export const getStagePage = createServerFn({ method: "POST" }).middleware([authM
 	const list = (hideOthers ? await sql`
           select
             c.id, c.stage_id, c.name, c.sort_order,
-            (select count(*)::int from students s where s.class_id = c.id) as student_count,
+            (select count(*)::int from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked') as student_count,
             (select count(*)::int from notes n
                join students s on s.id = n.student_id
                where s.class_id = c.id and n.status = 'open' and n.teacher_id = ${staff.user_id}) as open_notes
@@ -908,7 +908,7 @@ export const getStagePage = createServerFn({ method: "POST" }).middleware([authM
         ` : await sql`
           select
             c.id, c.stage_id, c.name, c.sort_order,
-            (select count(*)::int from students s where s.class_id = c.id) as student_count,
+            (select count(*)::int from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked') as student_count,
             (select count(*)::int from notes n
                join students s on s.id = n.student_id
                where s.class_id = c.id and n.status = 'open') as open_notes
@@ -1033,6 +1033,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
         limit 1
       ) a on true
       where s.class_id = ${row.id} and s.school_id = ${staff.school_id}
+        and coalesce(s.roster_status, 'active') <> 'unlinked'
       order by s.roster_order nulls last, s.id
     `;
 	const notes = await sql`
@@ -1843,7 +1844,7 @@ export const getReport = createServerFn({ method: "POST" }).middleware([authMidd
       from classes c
       join stages st on st.id = c.stage_id
       where c.school_id = ${staff.school_id}
-        and exists (select 1 from students s where s.class_id = c.id)
+        and exists (select 1 from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked')
       order by st.sort_order, c.sort_order
     `;
 	const studentList = (await sql`
@@ -2168,6 +2169,8 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 	let updated = 0;
 	let skipped = 0;
 	let ambiguous = 0;
+	const seen = new Set();
+	const held = new Set();
 	const classSeq = /* @__PURE__ */ new Map();
 	for (const row of data.rows) {
 		const name = row.name.trim();
@@ -2236,6 +2239,7 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 				const usable = hits.filter((student) => !student.national_id || !nationalId || student.national_id === nationalId);
 				if (usable.length === 1) existing = usable[0];
 				else if (hits.length > 0) {
+					for (const hit of hits) held.add(hit.id);
 					skipped += 1;
 					ambiguous += 1;
 					continue;
@@ -2277,17 +2281,21 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
             national_id = case when ${nationalId} <> '' and coalesce(national_id, '') in ('', ${nationalId}) then ${nationalId} else national_id end,
             nationality = case when ${nationality} <> '' then ${nationality} else nationality end,
             class_id = ${cls.id},
-            roster_order = ${fileOrder}
+            roster_order = ${fileOrder},
+            roster_status = 'active',
+            roster_note = ''
           where id = ${existing.id} and school_id = ${staff.school_id}
         `;
+			seen.add(existing.id);
 			if (roster && nationalId && !existing.national_id) existing.national_id = nationalId;
 			updated += 1;
 		} else {
 			const created = (await sql`
-          insert into students (school_id, class_id, name, name_en, parent_phone, parent_phone_2, work_phone, national_id, nationality, roster_order)
-          values (${staff.school_id}, ${cls.id}, ${name}, ${englishName(name)}, ${phone}, ${phone2}, ${work}, ${nationalId}, ${nationality}, ${fileOrder})
+          insert into students (school_id, class_id, name, name_en, parent_phone, parent_phone_2, work_phone, national_id, nationality, roster_order, roster_status)
+          values (${staff.school_id}, ${cls.id}, ${name}, ${englishName(name)}, ${phone}, ${phone2}, ${work}, ${nationalId}, ${nationality}, ${fileOrder}, 'active')
           returning id
         `)[0];
+			seen.add(created.id);
 			if (roster) roster.push({
 				id: created.id,
 				name,
@@ -2304,11 +2312,26 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 		await repairClassStructure(sql, staff.school_id);
 		if (data.replaceEmpty !== false) pruned = await pruneEmptyDivisions(sql, staff.school_id, usedClassIds);
 	}
+	let detached = 0;
+	if (seen.size) {
+		const seenIds = [...seen];
+		const heldIds = held.size ? [...held] : [0];
+		const moved = await sql.query(`
+      update students set roster_status = 'unlinked'
+      where school_id = $1
+        and coalesce(roster_status, 'active') <> 'unlinked'
+        and not (id = any($2::int[]))
+        and not (id = any($3::int[]))
+      returning id
+    `, [staff.school_id, seenIds, heldIds]);
+		detached = moved.length;
+	}
 	return {
 		inserted,
 		updated,
 		skipped,
 		ambiguous,
+		detached,
 		removedClasses: pruned.removedClasses,
 		removedStages: pruned.removedStages
 	};
@@ -3976,7 +3999,7 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 	await ensureStudentProfile(sql);
 	const day = data.day?.trim() || todayISODate();
 	const params = [staff.school_id];
-	let where = `s.school_id = $1`;
+	let where = `s.school_id = $1 and coalesce(s.roster_status, 'active') <> 'unlinked'`;
 	if (data.classIds && data.classIds.length === 0) return {
 		day,
 		students: []
@@ -4569,6 +4592,7 @@ export const listRoster = createServerFn({ method: "GET" }).middleware([authMidd
       from classes c
       join stages st on st.id = c.stage_id
       left join students s on s.class_id = c.id and s.school_id = c.school_id
+        and coalesce(s.roster_status, 'active') <> 'unlinked'
       where c.school_id = ${staff.school_id}
       order by st.sort_order, c.sort_order, s.name
     `;
@@ -4630,8 +4654,42 @@ export const listRoster = createServerFn({ method: "GET" }).middleware([authMidd
 			classes: st.classes
 		})),
 		studentCount: classes.reduce((n, c) => n + c.students.length, 0),
-		classCount: classes.length
+		classCount: classes.length,
+		unlinked: (await sql`
+      select s.id, s.name, s.class_id,
+             coalesce(s.national_id, '') as national_id,
+             coalesce(s.roster_note, '') as roster_note,
+             coalesce(c.name, '') as class_name,
+             coalesce(st.short_name, '') as short_name
+      from students s
+      left join classes c on c.id = s.class_id
+      left join stages st on st.id = c.stage_id
+      where s.school_id = ${staff.school_id} and s.roster_status = 'unlinked'
+      order by s.name
+    `).map((student) => ({
+			id: student.id,
+			name: student.name,
+			classId: student.class_id,
+			nationalId: student.national_id,
+			note: student.roster_note,
+			classLabel: student.class_name ? classLabel(student.short_name, student.class_name) : ""
+		}))
 	};
+});
+export const setStudentRosterNote = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
+	studentId: number(),
+	note: string().max(200)
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireAdmin(context.userId);
+	await ensureStudentProfile(sql);
+	const note = data.note.trim().slice(0, 200);
+	const row = (await sql`
+    update students set roster_note = ${note}
+    where id = ${data.studentId} and school_id = ${staff.school_id} and roster_status = 'unlinked'
+    returning id
+  `)[0];
+	if (!row) throw new Error("الطالب غير موجود في غير المرتبطين");
+	return { ok: true };
 });
 export const updateNote = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	noteId: number(),
@@ -5495,7 +5553,7 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 	const { sql, staff, school } = await requireApproved(context.userId);
 	await ensureStudentProfile(sql);
 	const params = [staff.school_id];
-	let where = "s.school_id = $1";
+	let where = "s.school_id = $1 and coalesce(s.roster_status, 'active') <> 'unlinked'";
 	if (data.classId) {
 		params.push(data.classId);
 		where += ` and s.class_id = $${params.length}`;
@@ -5539,7 +5597,7 @@ export const listMessageRecipients = createServerFn({ method: "POST" }).middlewa
 	if (!mappedPerms(staff, school).sendMessages) throw new Error("إرسال الرسائل غير مفعّل لحسابك");
 	const day = data.day?.trim() || todayISODate();
 	const params = [staff.school_id];
-	let where = "s.school_id = $1";
+	let where = "s.school_id = $1 and coalesce(s.roster_status, 'active') <> 'unlinked'";
 	if (data.scope === "class") {
 		if (!data.classId) throw new Error("حدد الفصل");
 		params.push(data.classId);
@@ -6007,6 +6065,8 @@ async function ensureStudentProfile(sql) {
 	await sql`alter table students add column if not exists work_phone text not null default ''`;
 	await sql`alter table students add column if not exists nationality text not null default ''`;
 	await sql`alter table students add column if not exists roster_order integer`;
+	await sql`alter table students add column if not exists roster_status text not null default 'active'`;
+	await sql`alter table students add column if not exists roster_note text not null default ''`;
 }
 async function ensureTeacherEval(sql) {
 	await ensureStudentProfile(sql);
@@ -6350,6 +6410,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     from students s
     left join daily_attendance a on a.student_id = s.id and a.school_id = s.school_id and a.day = current_date
     where s.class_id = ${cls.id} and s.school_id = ${staff.school_id}
+      and coalesce(s.roster_status, 'active') <> 'unlinked'
     order by s.roster_order nulls last, s.id
   `;
 	let attendanceRows = [];
@@ -7521,6 +7582,7 @@ export const getStageYearSheet = createServerFn({ method: "POST" }).middleware([
     join classes c on c.id = s.class_id
     join stages st on st.id = c.stage_id
     where s.school_id = ${staff.school_id} and c.stage_id = ${data.stageId}
+      and coalesce(s.roster_status, 'active') <> 'unlinked'
     order by c.sort_order, s.roster_order nulls last, s.id
   `;
 	const marks = period ? await sql`
@@ -7531,6 +7593,7 @@ export const getStageYearSheet = createServerFn({ method: "POST" }).middleware([
       and student_id in (
         select s.id from students s join classes c on c.id = s.class_id
         where s.school_id = ${staff.school_id} and c.stage_id = ${data.stageId}
+          and coalesce(s.roster_status, 'active') <> 'unlinked'
       )
   ` : [];
 	const markOf = new Map(marks.map((row) => [row.student_id, row]));
@@ -7575,6 +7638,7 @@ export const saveStageYearMarks = createServerFn({ method: "POST" }).middleware(
     from students s
     join classes c on c.id = s.class_id
     where s.school_id = ${staff.school_id} and c.stage_id = ${data.stageId}
+      and coalesce(s.roster_status, 'active') <> 'unlinked'
       and (${data.studentId ?? 0} = 0 or s.id = ${data.studentId ?? 0})
   `;
 	if (!students.length) throw new Error("لا يوجد طلاب في هذه المرحلة");
