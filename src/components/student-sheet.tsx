@@ -432,6 +432,8 @@ function StudentBehaviorReport({
     </section>
   );
 }
+
+export function StudentSheet({
   studentId,
   open,
   onOpenChange,
