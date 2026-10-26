@@ -1563,6 +1563,41 @@ export function ClassRecords({
     });
     return next;
   }
+  function takeLayout(layout?: SheetLayout) {
+    if (!layout) return;
+    const row = Number(layout.recordRow);
+    if (row >= 4) setRecordRow(Math.min(16, row));
+    const blank = Number(layout.gradeRow);
+    if (blank >= 4) setGradeRow(Math.min(16, blank));
+    const seq = Number(layout.seq);
+    if (seq >= 6) {
+      const next = Math.min(30, seq);
+      setSeqMm(next);
+      localStorage.setItem(`grade-seq:${classId}`, String(next));
+    }
+    const name = Number(layout.name);
+    if (name >= 24) {
+      const next = Math.min(80, name);
+      setNameMm(next);
+      localStorage.setItem(`grade-name:${classId}`, String(next));
+    }
+    const col = Number(layout.col);
+    if (col >= 8) setColMm(Math.min(40, col));
+    const font = Number(layout.font);
+    if (font >= 10) setNameFont(Math.min(22, font));
+    if (layout.margins) {
+      setSheetMargins(layout.margins);
+      localStorage.setItem(`grade-margins:${classId}:${subject}`, JSON.stringify(layout.margins));
+    }
+    if (typeof layout.teacherSign === "boolean") {
+      setShowTeacherSign(layout.teacherSign);
+      localStorage.setItem(`grade-sign-teacher:${classId}`, layout.teacherSign ? "1" : "0");
+    }
+    if (typeof layout.principalSign === "boolean") {
+      setShowPrincipalSign(layout.principalSign);
+      localStorage.setItem(`grade-sign-principal:${classId}`, layout.principalSign ? "1" : "0");
+    }
+  }
   const periodReady = useRef(false);
   useEffect(() => {
     if (periodReady.current || !data?.openPeriod) return;
@@ -1584,12 +1619,14 @@ export function ClassRecords({
     const sheet = item.payload.sheet === "blank" ? "blank" : "record";
     setGradeShape(sheet);
     if (sheet === "blank" && item.payload.gradeCols?.length) setGradeCols(item.payload.gradeCols.map((col) => ({ ...col })));
+    takeLayout(item.payload.layout);
   }, [yearPack?.activeFormatId]);
   useEffect(() => {
     if (!data?.class) return;
-    const year = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date());
     const saved = localStorage.getItem(`grade-title:${classId}:${subject}`);
-    setSheetTitle(saved || `كشف أعمال السنة لمادة ${data.subject || "…"} للفصل ${data.class.label} الفصل الدراسي الأول للعام ${year}`);
+    setSheetTitle(saved || "كشف أعمال السنة");
+    const activeLayout = (yearPack?.formats ?? []).find((row) => row.id === yearPack?.activeFormatId)?.payload?.layout;
+    if (!activeLayout) {
     const raw = localStorage.getItem(`grade-margins:${classId}:${subject}`);
     if (raw) {
       try { setSheetMargins(JSON.parse(raw)); } catch { /* keep school margins */ }
@@ -1598,6 +1635,7 @@ export function ClassRecords({
     const savedName = Number(localStorage.getItem(`grade-name:${classId}`));
     if (savedSeq) setSeqMm(Math.min(30, Math.max(6, savedSeq)));
     if (savedName) setNameMm(Math.min(80, Math.max(24, savedName)));
+    }
     try {
       const layout = JSON.parse(localStorage.getItem(`grade-final-layout:${subject}`) || "");
       if (layout && typeof layout === "object") {
@@ -1636,7 +1674,8 @@ export function ClassRecords({
     } catch { /* keep defaults */ }
     setShowTeacherSign(localStorage.getItem(`grade-sign-teacher:${classId}`) !== "0");
     setShowPrincipalSign(localStorage.getItem(`grade-sign-principal:${classId}`) !== "0");
-  }, [classId, subject, data?.class?.label, data?.subject, sheetIds.join(",")]);
+    if (activeLayout) takeLayout(activeLayout);
+  }, [classId, subject, data?.class?.label, data?.subject, sheetIds.join(","), yearPack?.activeFormatId]);
   const colsReady = useRef(false);
   useEffect(() => {
     if (!colsReady.current) {
@@ -1901,6 +1940,17 @@ export function ClassRecords({
       finalColumns: ((data as { finalColumns?: { id: string; title: string; max: number }[] }).finalColumns ?? []).map((column) => ({ ...column })),
       cards: [],
       gradeCols: gradeCols.map((col) => ({ ...col })),
+      layout: {
+        recordRow,
+        gradeRow,
+        seq: seqMm,
+        name: nameMm,
+        col: colMm,
+        font: nameFont,
+        margins: sheetMargins,
+        teacherSign: showTeacherSign,
+        principalSign: showPrincipalSign,
+      },
       periods: periods.map((period) => ({
         title: period.title,
         tasksMax: period.tasksMax,
@@ -2281,6 +2331,7 @@ export function ClassRecords({
             void applyGradeFormat({ data: { formatId: item.id, subject: subject || undefined, periodNo: 0, payload } }).then(() => {
               setGradeShape(payload.sheet === "blank" ? "blank" : "record");
               setRecordCols(null);
+              takeLayout(item.payload.layout);
               if (payload.sheet === "blank" && payload.gradeCols?.length) setGradeCols(payload.gradeCols.map((col) => ({ ...col })));
               toast.success(tr("طُبّق القالب"));
               setFormatOpen(false);
@@ -2310,7 +2361,7 @@ export function ClassRecords({
             return (
               <div className="basis-full rounded-[var(--radius-md)] border border-border bg-white p-2">
                 <p className="text-sm font-semibold">{applied ? tr("القالب الحالي") : tr("معاينة قبل التطبيق")}: {item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</p>
-                <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")}</p>
+                <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")} {item.payload.layout ? `${tr("ارتفاع الصف")} ${item.payload.layout.recordRow || item.payload.layout.gradeRow || "—"} · ${tr("عرض اسم الطالب")} ${item.payload.layout.name || "—"}` : ""}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {cols.map((col) => <span key={col.id || col.title} className="rounded border border-border px-2 py-0.5 text-xs">{col.title || tr("عمود")}{col.calc === "sum" ? ` (${tr("جمع")})` : col.calc === "avg" ? ` (${tr("متوسط")})` : ""}</span>)}
                 </div>
@@ -2667,14 +2718,29 @@ export function ClassRecords({
       >
         <OfficialLetterhead school={school} />
         {view === "year" ? (
-          <input
-            className="year-title mb-2 w-full border-0 bg-transparent text-center text-[15px] font-semibold outline-none"
-            value={sheetTitle}
-            onChange={(event) => {
-              setSheetTitle(event.target.value);
-              localStorage.setItem(`grade-title:${classId}:${subject}`, event.target.value);
-            }}
-          />
+          <div className="year-banner mb-3 overflow-hidden rounded-md border-2 border-[#1f4d45]">
+            <input
+              className="year-title w-full border-0 bg-transparent px-3 py-1.5 text-center text-base font-bold text-[#1f4d45] outline-none"
+              value={sheetTitle}
+              onChange={(event) => {
+                setSheetTitle(event.target.value);
+                localStorage.setItem(`grade-title:${classId}:${subject}`, event.target.value);
+              }}
+            />
+            <div className="grid grid-cols-2 text-center text-[12px] sm:grid-cols-4">
+              {[
+                [tr("المادة"), data.subject || "—"],
+                [tr("الفصل"), data.class.label],
+                [tr("عدد الطلاب"), String(data.students.length)],
+                [tr("الكشف"), sheetMode === "exam" ? tr("اختبار نهاية السنة") : sheetMode === "final" ? tr("النتيجة النهائية") : (selected?.title || tr("الفترة"))],
+              ].map(([label, value]) => (
+                <div key={label} className="border-t-2 border-[#1f4d45] px-2 py-1">
+                  <p className="text-[10px] text-[#1f4d45]">{label}</p>
+                  <p className="font-bold">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
         {view === "analysis" || view === "attendance" || view === "summary" || view === "year" || view === "roster" ? null : (
         <h3 className="mb-2 text-center text-lg font-semibold">
@@ -2684,11 +2750,6 @@ export function ClassRecords({
           {view === "year" ? ` — ${data.combine === "avg" ? tr("متوسط الفترات") : tr("جمع الفترات")}` : ""}
         </h3>
         )}
-        {view === "year" ? (
-          <p className="mb-2 text-center text-base font-bold">
-            {sheetMode === "exam" ? tr("اختبار نهاية السنة") : sheetMode === "final" ? tr("النتيجة النهائية") : (selected?.title || tr("الفترة"))}
-          </p>
-        ) : null}
         {view === "year" && gradeShape !== "blank" && selected && sheetMode === "period" ? (
           <div className="grade-scroll">
           <table className="grade-equal grade-sheet w-full border-collapse text-sm" style={{ ["--row-h" as string]: `${recordRow}mm`, ["--name-font" as string]: `${nameFont}px` }}>
@@ -3224,7 +3285,18 @@ type FormatColumn = { id?: string; title: string; group: "tasks" | "exam" | "eva
 type FinalColumn = { id: string; title: string; max: number };
 type FormatPeriod = { title: string; tasksMax: number; examMax: number; columns: FormatColumn[] };
 type FormatCard = { label: string; points: number; bucket: "tasks" | "quizzes"; enabled: boolean; columnRef: string };
-type FormatPayload = { combine: "sum" | "avg"; periods: FormatPeriod[]; cards: FormatCard[]; finalExamMax: number; finalColumns: FinalColumn[]; sheet?: "record" | "blank"; gradeCols?: ExtraCol[] };
+type FormatPayload = { combine: "sum" | "avg"; periods: FormatPeriod[]; cards: FormatCard[]; finalExamMax: number; finalColumns: FinalColumn[]; sheet?: "record" | "blank"; gradeCols?: ExtraCol[]; layout?: SheetLayout };
+type SheetLayout = {
+  recordRow?: number;
+  gradeRow?: number;
+  seq?: number;
+  name?: number;
+  col?: number;
+  font?: number;
+  margins?: { top: number; right: number; bottom: number; left: number };
+  teacherSign?: boolean;
+  principalSign?: boolean;
+};
 
 function columnRef(column: FormatColumn) {
   return `${column.group}:${column.title}`;

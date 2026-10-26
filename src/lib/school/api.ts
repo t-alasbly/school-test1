@@ -6972,7 +6972,23 @@ var gradeFormatPayload = object({
 		bucket: _enum(["tasks", "quizzes"]),
 		enabled: boolean().optional(),
 		columnRef: string().max(80).optional()
-	})).max(40).optional()
+	})).max(40).optional(),
+	layout: object({
+		recordRow: number().min(4).max(18).optional(),
+		gradeRow: number().min(4).max(18).optional(),
+		seq: number().min(6).max(30).optional(),
+		name: number().min(24).max(90).optional(),
+		col: number().min(8).max(40).optional(),
+		font: number().min(10).max(22).optional(),
+		margins: object({
+			top: number().min(0).max(40),
+			right: number().min(0).max(40),
+			bottom: number().min(0).max(40),
+			left: number().min(0).max(40)
+		}).optional(),
+		teacherSign: boolean().optional(),
+		principalSign: boolean().optional()
+	}).optional()
 });
 function cleanFormat(data) {
 	const periods = (Array.isArray(data?.periods) ? data.periods : []).slice(0, 4);
@@ -7018,7 +7034,33 @@ function cleanFormat(data) {
 			max: Math.min(100, Math.max(0, Number(column?.max) || 0)),
 			calc: column?.calc === "sum" || column?.calc === "avg" || column?.calc === "cards" ? column.calc : "",
 			sources: Array.isArray(column?.sources) ? column.sources.map((id) => String(id).slice(0, 40)).slice(0, 20) : []
-		}))
+		})),
+		layout: cleanSheetLayout(data?.layout)
+	};
+}
+function cleanSheetLayout(layout) {
+	if (!layout || typeof layout !== "object") return undefined;
+	const num = (value, min, max) => {
+		const n = Number(value);
+		if (!Number.isFinite(n)) return undefined;
+		return Math.min(max, Math.max(min, Math.round(n)));
+	};
+	const margins = layout.margins && typeof layout.margins === "object" ? {
+		top: num(layout.margins.top, 0, 40) ?? 10,
+		right: num(layout.margins.right, 0, 40) ?? 10,
+		bottom: num(layout.margins.bottom, 0, 40) ?? 12,
+		left: num(layout.margins.left, 0, 40) ?? 8
+	} : undefined;
+	return {
+		recordRow: num(layout.recordRow, 4, 18),
+		gradeRow: num(layout.gradeRow, 4, 18),
+		seq: num(layout.seq, 6, 30),
+		name: num(layout.name, 24, 90),
+		col: num(layout.col, 8, 40),
+		font: num(layout.font, 10, 22),
+		margins,
+		teacherSign: typeof layout.teacherSign === "boolean" ? layout.teacherSign : undefined,
+		principalSign: typeof layout.principalSign === "boolean" ? layout.principalSign : undefined
 	};
 }
 function designOf(payload) {

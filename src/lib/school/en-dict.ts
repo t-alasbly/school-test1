@@ -1868,6 +1868,8 @@ export const EN_UI: Record<string, string> = {
   "الفشل الكلوي": "Kidney failure",
   "فرط الحركة وتشتت الانتباه": "ADHD",
   "صعوبات التعلم": "Learning difficulties",
+  "الكشف": "Sheet",
+  "العام الدراسي": "School year",
   "السادسة": "6",
   "السابعة": "7",
   "الأحد": "Sunday",
