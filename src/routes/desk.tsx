@@ -85,13 +85,13 @@ function DeskFrame() {
     return () => window.removeEventListener(DESK_AS_EVENT, onDesk);
   }, [canOpen]);
   const desk = useQuery({ queryKey: ["home-desk", asId], queryFn: () => getHomeDesk() });
-  const ownerInfo = owner.data as { role?: string; subject?: string; displayName?: string; showLedger?: boolean } | undefined;
+  const ownerInfo = owner.data as { role?: string; subject?: string; displayName?: string; showLedger?: boolean; showFollow?: boolean; showYear?: boolean } | undefined;
   const hasSubjects = asId
     ? !owner.isPending && parseSubjects(ownerInfo?.subject || "").length > 0
     : parseSubjects(staff.subject).length > 0;
-  const classFollow = staffCan(staff, "viewClassFollow");
-  const yearSheet = staffCan(staff, "viewYearSheet");
-  const ledgerOn = (asId ? Boolean(ownerInfo?.showLedger) : staffCan(staff, "viewLedger")) && classFollow;
+  const classFollow = asId ? Boolean(ownerInfo?.showFollow) : staffCan(staff, "viewClassFollow");
+  const yearSheet = asId ? Boolean(ownerInfo?.showYear) : staffCan(staff, "viewYearSheet");
+  const ledgerOn = asId ? Boolean(ownerInfo?.showLedger) : staffCan(staff, "viewLedger") && classFollow;
   const visibleTabs = TABS.filter((tab) => {
     if (tab.id === "format") return hasSubjects && (classFollow || yearSheet);
     if (tab.id === "ledger") return ledgerOn;

@@ -22,7 +22,7 @@ import {
   useGroupPick,
 } from "@/lib/school/group-pick";
 import { studentLabel, tr, useLocale } from "@/lib/school/i18n";
-import { staffCan } from "@/lib/school/permissions";
+import { staffCan, canSeeParentPhone } from "@/lib/school/permissions";
 import type { StudentRow } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -61,20 +61,23 @@ function ClassBody() {
   const fromDesk = from === "desk";
   const id = Number(classId);
   const { stages, classes, staff } = useWorkspace();
-  const classFollow = staffCan(staff, "viewClassFollow");
-  const yearSheet = staffCan(staff, "viewYearSheet");
+  const tableQuery = useQuery({ queryKey: ["my-timetable"], queryFn: () => getMyTimetable() });
+  const owner = tableQuery.data as { role?: string; showFollow?: boolean; showYear?: boolean } | undefined;
+  const asTeacher = fromDesk && owner?.role === "teacher";
+  const classFollow = asTeacher ? Boolean(owner?.showFollow) : staffCan(staff, "viewClassFollow");
+  const yearSheet = asTeacher ? Boolean(owner?.showYear) : staffCan(staff, "viewYearSheet");
+  const showPhones = asTeacher ? false : canSeeParentPhone(staff);
   const { locale } = useLocale();
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
   const [groupOpen, setGroupOpen] = useState(false);
-  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? (classFollow ? "one" : yearSheet ? "year" : "behavior"));
+  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? (fromDesk || lessonFromTable ? "behavior" : classFollow ? "one" : yearSheet ? "year" : "behavior"));
   const [printTick, setPrintTick] = useState(0);
   const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { targets } = useGroupPick();
   const queryClient = useQueryClient();
-  const tableQuery = useQuery({ queryKey: ["my-timetable"], queryFn: () => getMyTimetable() });
   const taughtIds = new Set((tableQuery.data?.cells ?? []).map((cell) => cell.classId).filter((value): value is number => value != null));
   const onTable = taughtIds.size === 0 || taughtIds.has(id);
   const allowFollow = classFollow && onTable;
@@ -302,7 +305,7 @@ function ClassBody() {
                             {mark.total > 0 ? "+" : ""}{mark.total}
                           </span>
                         )) : null}
-                        {phones.length ? <span className="text-xs text-fg-muted" dir="ltr">{phones.join(" · ")}</span> : null}
+                        {showPhones && phones.length ? <span className="text-xs text-fg-muted" dir="ltr">{phones.join(" · ")}</span> : null}
                       </span>
                     </button>
                     {open ? (

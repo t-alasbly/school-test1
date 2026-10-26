@@ -332,7 +332,7 @@ export function defaultPermissions(
   if (role === "teacher") {
     return {
       editStudents: false,
-      sendMessages: school ? school.teachersCanMessage !== false : true,
+      sendMessages: school?.teachersCanMessage === true,
       viewAllViolations: Boolean(school?.teachersCanViewAll),
       editStaff: false,
       takeActions: false,

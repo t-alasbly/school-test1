@@ -53,7 +53,7 @@ function mapSchool(school) {
 		schedules: parseSchedules(school.schedules),
 		messageTemplates: parseMessageTemplates(school.message_templates),
 		customMessages: parseCustomMessages(school.custom_messages),
-		teachersCanMessage: school.teachers_can_message !== false,
+		teachersCanMessage: school.teachers_can_message === true,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
 		appearance: parseAppearance(school.appearance),
 		statCounters: parseStatCounters(school.stat_counters ?? school.statCounters),
@@ -135,12 +135,21 @@ async function loadSchool(sql, schoolId) {
            coalesce(technical_vp_name, '') as technical_vp_name,
            coalesce(logo_url, '') as logo_url,
            coalesce(message_templates::text, '{}') as message_templates,
-           coalesce(teachers_can_message, true) as teachers_can_message,
+           coalesce(teachers_can_message, false) as teachers_can_message,
            coalesce(teachers_can_view_all, false) as teachers_can_view_all,
            coalesce(appearance::text, '{}') as appearance
     from schools where id = ${schoolId}
   `)[0] ?? null;
 	if (!row) return null;
+	try {
+		await sql`alter table schools add column if not exists teacher_defaults_locked boolean not null default false`;
+		const flipped = await sql`
+      update schools set teachers_can_message = false, teacher_defaults_locked = true
+      where id = ${schoolId} and teacher_defaults_locked = false
+      returning id
+    `;
+		if (flipped[0]) row.teachers_can_message = false;
+	} catch {}
 	let tagline = "";
 	let print_margins = DEFAULT_PRINT_MARGINS;
 	let extra_logo_url = "";
@@ -1023,7 +1032,9 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
 	period: string().max(20).optional()
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
-	const teacherId = (await requireDesk(context.userId)).staff.user_id;
+	const desk = await requireDesk(context.userId);
+	const phoneStaff = desk.staff;
+	const teacherId = phoneStaff.user_id;
 	await ensureNoteThread(sql);
 	await ensureStudentProfile(sql);
 	const row = (await sql`
@@ -1140,9 +1151,9 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
 		id: s.id,
 		name: s.name,
 		nameEn: s.name_en ?? "",
-		parentPhone: revealPhone(staff, school, s.parent_phone),
-		parentPhone2: revealPhone(staff, school, s.parent_phone_2),
-		workPhone: revealPhone(staff, school, s.work_phone),
+		parentPhone: revealPhone(phoneStaff, school, s.parent_phone),
+		parentPhone2: revealPhone(phoneStaff, school, s.parent_phone_2),
+		workPhone: revealPhone(phoneStaff, school, s.work_phone),
 		classId: row.id,
 		healthNote: s.health_note ?? "",
 		dailyKind: s.daily_kind ?? null,
@@ -8003,7 +8014,9 @@ export const getMyTimetable = createServerFn({ method: "GET" }).middleware([auth
 		subject: staff.subject || "",
 		role: staff.role,
 		displayName: staff.display_name || "",
-		showLedger: staff.role === "admin" || Boolean(perms.viewLedger)
+		showFollow: staff.role !== "admin" && Boolean(perms.viewClassFollow),
+		showYear: staff.role !== "admin" && Boolean(perms.viewYearSheet),
+		showLedger: staff.role !== "admin" && Boolean(perms.viewLedger) && Boolean(perms.viewClassFollow)
 	};
 });
 export const saveMyTimetable = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ cells: array(object({
