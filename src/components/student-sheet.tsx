@@ -246,7 +246,192 @@ function TeacherReport({ studentId }: { studentId: number }) {
   );
 }
 
-export function StudentSheet({
+function hijriParts(iso: string) {
+  const date = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { day: "numeric", month: "long", year: "numeric" }).formatToParts(date);
+  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return { day: pick("day"), month: pick("month"), year: pick("year") };
+}
+
+function compactDates(dates: string[], suffix?: Map<string, string>) {
+  const years = new Map<string, Map<string, string[]>>();
+  for (const iso of [...new Set(dates.filter(Boolean))].sort()) {
+    const part = hijriParts(iso);
+    if (!part?.day) continue;
+    const months = years.get(part.year) ?? new Map<string, string[]>();
+    const days = months.get(part.month) ?? [];
+    const label = suffix?.get(iso) ? `${part.day} (${suffix.get(iso)})` : part.day;
+    if (!days.includes(label)) days.push(label);
+    months.set(part.month, days);
+    years.set(part.year, months);
+  }
+  return [...years.entries()].map(([year, months]) => ({
+    year,
+    line: [...months.entries()].map(([month, days]) => `${days.join("، ")} ${month}`).join(" · "),
+  }));
+}
+
+function dateKey(value: string | null | undefined) {
+  if (!value) return "";
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function StudentBehaviorReport({
+  student,
+  notes,
+  days,
+}: {
+  student: { name: string; classLabel: string; stageName?: string };
+  notes: {
+    type: string;
+    details: string;
+    behaviorTypeName?: string;
+    behaviorDegree?: number | null;
+    teacherName?: string;
+    teacherSubject?: string;
+    actionTaken?: string;
+    occurredAt?: string;
+    createdAt?: string;
+  }[];
+  days: { day: string; kind: string; arrivedAt?: string | null }[];
+}) {
+  const { school } = useWorkspace();
+  const printRef = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  const [detailed, setDetailed] = useState(false);
+  const behavior = notes.filter((note) => note.type === "behavior");
+  const absenceDays = [...new Set([
+    ...days.filter((row) => row.kind === "absence").map((row) => row.day),
+    ...notes.filter((note) => note.type === "absence").map((note) => dateKey(note.occurredAt || note.createdAt)),
+  ].filter(Boolean))].sort();
+  const lateDays = [...new Set([
+    ...days.filter((row) => row.kind === "late").map((row) => row.day),
+    ...notes.filter((note) => note.type === "late").map((note) => dateKey(note.occurredAt || note.createdAt)),
+  ].filter(Boolean))].sort();
+  const lateTime = new Map(days.filter((row) => row.kind === "late" && row.arrivedAt).map((row) => [row.day, String(row.arrivedAt).slice(11, 16)]));
+  const degrees = [1, 2, 3, 4, 5].map((degree) => ({
+    degree,
+    count: behavior.filter((note) => Number(note.behaviorDegree) === degree).length,
+  })).filter((item) => item.degree <= 3 || item.count > 0);
+  const frequent = [...behavior.reduce((map, note) => {
+    const name = (note.behaviorTypeName || note.details || "مخالفة").trim();
+    map.set(name, (map.get(name) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const issued = `${hijriDate()} — ${new Intl.DateTimeFormat("ar-SA", { hour: "numeric", minute: "2-digit" }).format(new Date())}`;
+  const statRow = (label: string, value: string | number) => (
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 flex-1 rounded-lg border border-[#d7e3dc] bg-[#f7fbf8] px-2 py-1 text-xs">{label}</span>
+      <span className="w-14 rounded-lg border border-[#d7e3dc] bg-white px-2 py-1 text-center text-sm">{value}</span>
+    </div>
+  );
+  const dateBlock = (title: string, dates: string[], suffix?: Map<string, string>) => {
+    const groups = compactDates(dates, suffix);
+    return (
+      <section className="space-y-1">
+        <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">{title} ({dates.length})</h3>
+        {groups.length === 0 ? <p className="text-center text-xs">لا يوجد</p> : groups.map((group) => (
+          <p key={`${title}-${group.year}`} className="text-xs leading-6">
+            <span className="font-semibold">{group.year}: </span>{group.line}
+          </p>
+        ))}
+      </section>
+    );
+  };
+  return (
+    <section className="space-y-2 rounded-[var(--radius-md)] border border-border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">{tr("تقرير الطالب")}</h2>
+        <Button type="button" size="sm" variant="secondary" onClick={() => setShown(true)}>{tr("عرض التقرير")}</Button>
+        <Button type="button" size="sm" variant={detailed ? "default" : "secondary"} onClick={() => { setShown(true); setDetailed((open) => !open); }}>{tr("تقرير مفصل")}</Button>
+        <Button type="button" size="sm" variant="secondary" disabled={!shown} onClick={() => printRef.current && printElement(printRef.current)}>{tr("طباعة")}</Button>
+      </div>
+      {shown ? (
+        <div ref={printRef} className="space-y-3 rounded-[var(--radius-md)] bg-white p-3 text-sm text-black">
+          <OfficialLetterhead school={school} />
+          <div className="mx-auto max-w-xl border border-[#1f8a4c] px-3 py-2 text-center text-sm font-semibold">
+            تقرير الطالب/ة [{student.name}]
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {[
+              ["اسم الطالب/ة", student.name],
+              ["المرحلة الدراسية / الصف", `${student.stageName || "—"} - ${student.classLabel}`],
+              ["تاريخ الإصدار", issued],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-[#1f8a4c] px-2 py-2 text-center">
+                <p className="text-[11px] text-[#1f8a4c]">{label}</p>
+                <p className="text-xs font-semibold">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <section className="space-y-2 rounded-xl border border-[#d7e3dc] p-2">
+              <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">الإحصائيات العامة</h3>
+              {statRow("عدد أيام التأخر", lateDays.length)}
+              {statRow("عدد أيام الغياب", absenceDays.length)}
+              {degrees.map((item) => statRow(degreeLabel(item.degree), item.count))}
+            </section>
+            <section className="space-y-2 rounded-xl border border-[#d7e3dc] p-2">
+              <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">ملخص الأداء</h3>
+              <p className="rounded-lg bg-[#4b5563] px-2 py-2 text-center text-xs text-white">أكثر المخالفات تكرارًا</p>
+              {frequent.length === 0 ? <p className="text-center text-xs">لا توجد مخالفات سلوكية</p> : (
+                <ol className="space-y-1 text-xs">
+                  {frequent.map(([name, count], index) => (
+                    <li key={name} className="flex items-center justify-between gap-2 rounded border border-[#d7e3dc] px-2 py-1">
+                      <span>{index + 1}. {name}</span>
+                      <span className="font-semibold">{count}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          </div>
+          {detailed ? (
+            <div className="space-y-3 border-t border-[#d7e3dc] pt-3" style={{ breakBefore: "page" }}>
+              <h3 className="text-center text-sm font-semibold">التقرير المفصل</h3>
+              {dateBlock("الغياب", absenceDays)}
+              {dateBlock("التأخر", lateDays, lateTime)}
+              <section className="space-y-2">
+                <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">المخالفات ({behavior.length})</h3>
+                {behavior.length === 0 ? <p className="text-center text-xs">لا توجد مخالفات</p> : behavior.map((note, index) => (
+                  <article key={`${note.createdAt}-${index}`} className="overflow-hidden rounded-md border border-[#d7e3dc]">
+                    <p className="px-2 py-2 text-sm font-semibold leading-6">
+                      {note.behaviorTypeName || "مخالفة"}
+                      {note.details ? ` — ${note.details}` : ""}
+                    </p>
+                    <p className="border-t border-[#d7e3dc] px-2 py-1 text-[11px] text-[#374151]">
+                      {[
+                        note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "",
+                        formatStamp(note.occurredAt || note.createdAt || ""),
+                        note.teacherSubject || "",
+                        note.teacherName || "",
+                        note.actionTaken ? `الإجراء: ${note.actionTaken}` : "",
+                      ].filter(Boolean).join(" · ")}
+                    </p>
+                  </article>
+                ))}
+              </section>
+            </div>
+          ) : null}
+          <div className="mt-6 grid grid-cols-2 gap-4 text-center text-sm">
+            <div>
+              <p className="font-semibold">وكيل شؤون الطلاب</p>
+              <p className="mt-1">………………</p>
+            </div>
+            <div>
+              <p className="font-semibold">مدير/ة المدرسة</p>
+              <p className="mt-1">{school.principalName || "………………"}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
   studentId,
   open,
   onOpenChange,
@@ -401,6 +586,13 @@ export function StudentSheet({
           ) : (
             <div className="space-y-6">
               {studentId && classFollow ? <TeacherReport studentId={studentId} /> : null}
+              {student ? (
+                <StudentBehaviorReport
+                  student={{ name: shown || student.name, classLabel: student.classLabel, stageName: student.stageName }}
+                  notes={notes}
+                  days={attendance.data?.days ?? []}
+                />
+              ) : null}
               <section className="space-y-2">
                 <h2 className="text-sm font-semibold">{tr("الغياب والتأخر والانصراف")}</h2>
                 <div className="flex flex-wrap gap-2 text-xs">
