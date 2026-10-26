@@ -2477,53 +2477,64 @@ export function ClassRecords({
               {tr("اسم المدير")}
             </label>
           </div>
-          <ul className="basis-full space-y-2">
-            {liveColumns.map((col, index) => (
-              <li key={col.id} className="space-y-1 rounded border border-border p-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
-                  <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) || 0 } : item))} />
-                  <Select className="h-9 w-auto" value={col.group || "tasks"} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, group: event.target.value === "exam" || event.target.value === "eval" ? event.target.value : "tasks" } : item))}>
-                    <option value="tasks">{tr("أعمال السنة")}</option>
-                    <option value="exam">{tr("اختبار الفترة")}</option>
-                    <option value="eval">{tr("تقويم")}</option>
-                  </Select>
-                  <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "" } : item))}>
-                    <option value="">{tr("إدخال يدوي")}</option>
-                    <option value="sum">{tr("جمع أعمدة")}</option>
-                    <option value="avg">{tr("متوسط أعمدة")}</option>
-                    <option value="cards">{tr("المتابعة الصفية")}</option>
-                  </Select>
-                  <button type="button" className="text-xs" disabled={index === 0} onClick={() => {
-                    const next = [...liveColumns];
-                    const [item] = next.splice(index, 1);
-                    next.splice(index - 1, 0, item);
-                    setRecordCols(next);
-                  }}>{tr("تقديم")}</button>
-                  <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setRecordCols(liveColumns.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
-                </div>
-                {col.calc === "sum" || col.calc === "avg" ? (
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="basis-full text-fg-muted">{col.calc === "avg" ? tr("المتوسط يحسب هذه الأعمدة") : tr("الجمع يجمع هذه الأعمدة")}</span>
-                    {liveColumns.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg").map((item) => (
-                      <label key={item.id} className="inline-flex items-center gap-1">
-                        <input type="checkbox" checked={col.sources?.includes(item.id) || false} onChange={(event) => {
-                          const sources = new Set(col.sources ?? []);
-                          if (event.target.checked) sources.add(item.id); else sources.delete(item.id);
-                          setRecordCols(liveColumns.map((entry) => entry.id === col.id ? { ...entry, sources: [...sources] } : entry));
-                        }} />
-                        {item.title || tr("عمود")}
-                      </label>
-                    ))}
+          <ul className="basis-full space-y-3">
+            {([
+              ["tasks", tr("المشاركة")],
+              ["exam", tr("اختبار الفترة")],
+              ["eval", tr("تقويم")],
+            ] as const).map(([group, label]) => {
+              const cols = liveColumns.filter((column) => (group === "tasks" ? (column.group ?? "eval") === "tasks" : column.group === group));
+              return (
+                <li key={group} className="space-y-2 rounded border border-border p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">{label}</span>
+                    <button type="button" className="text-sm font-medium text-primary" onClick={() => setRecordCols([...liveColumns, { id: `c${Date.now()}`.slice(0, 20), title: tr("قسم"), group, max: 5 }])}>{tr("إضافة عمود فرعي")}</button>
                   </div>
-                ) : null}
-                {col.calc === "cards" ? (
-                  <p className="text-xs text-fg-muted">{tr("تُجلب درجة المتابعة الصفية كاملة إلى هذه الخانة، دون تحديد كل أداة.")}</p>
-                ) : null}
-              </li>
-            ))}
+                  {cols.length === 0 ? <p className="text-xs text-fg-muted">{tr("عمود واحد للقسم. أضف أعمدة فرعية إن أردت: عمودًا أو عمودين أو أكثر.")}</p> : null}
+                  {cols.map((col) => {
+                    const index = liveColumns.findIndex((item) => item.id === col.id);
+                    return (
+                      <div key={col.id} className="space-y-1 rounded border border-dashed border-border p-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input className="max-w-40" value={col.title} maxLength={40} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, title: event.target.value } : item))} />
+                          <Input className="w-16" inputMode="decimal" value={col.max ?? ""} placeholder={tr("الحد")} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, max: Number(event.target.value) || 0 } : item))} />
+                          <Select className="h-9 w-auto" value={col.calc || ""} onChange={(event) => setRecordCols(liveColumns.map((item) => item.id === col.id ? { ...item, calc: event.target.value === "sum" || event.target.value === "avg" || event.target.value === "cards" ? event.target.value : "" } : item))}>
+                            <option value="">{tr("إدخال يدوي")}</option>
+                            <option value="sum">{tr("جمع أعمدة")}</option>
+                            <option value="avg">{tr("متوسط أعمدة")}</option>
+                            <option value="cards">{tr("المتابعة الصفية")}</option>
+                          </Select>
+                          <button type="button" className="text-xs" disabled={index <= 0} onClick={() => {
+                            const next = [...liveColumns];
+                            const [item] = next.splice(index, 1);
+                            next.splice(index - 1, 0, item);
+                            setRecordCols(next);
+                          }}>{tr("تقديم")}</button>
+                          <button type="button" className="text-xs text-danger" onClick={() => { if (window.confirm(tr("حذف هذا العمود؟"))) setRecordCols(liveColumns.filter((item) => item.id !== col.id)); }}>{tr("حذف")}</button>
+                        </div>
+                        {col.calc === "sum" || col.calc === "avg" ? (
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="basis-full text-fg-muted">{col.calc === "avg" ? tr("المتوسط يحسب هذه الأعمدة") : tr("الجمع يجمع هذه الأعمدة")}</span>
+                            {cols.filter((item) => item.id !== col.id && item.calc !== "sum" && item.calc !== "avg").map((item) => (
+                              <label key={item.id} className="inline-flex items-center gap-1">
+                                <input type="checkbox" checked={col.sources?.includes(item.id) || false} onChange={(event) => {
+                                  const sources = new Set(col.sources ?? []);
+                                  if (event.target.checked) sources.add(item.id); else sources.delete(item.id);
+                                  setRecordCols(liveColumns.map((entry) => entry.id === col.id ? { ...entry, sources: [...sources] } : entry));
+                                }} />
+                                {item.title || tr("عمود")}
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                        {col.calc === "cards" ? <p className="text-xs text-fg-muted">{tr("تُجلب درجة المتابعة الصفية كاملة إلى هذه الخانة، دون تحديد كل أداة.")}</p> : null}
+                      </div>
+                    );
+                  })}
+                </li>
+              );
+            })}
           </ul>
-          <button type="button" className="text-sm font-medium text-primary" onClick={() => setRecordCols([...liveColumns, { id: `c${Date.now()}`.slice(0, 20), title: "عمود", group: "tasks", max: 10 }])}>{tr("إضافة عمود")}</button>
           <Button type="button" size="sm" onClick={() => {
             if (selected) {
               const columns = liveColumns;
@@ -2813,34 +2824,33 @@ export function ClassRecords({
               {Array.from({ length: gradeSlots }).map((_, index) => <col key={index} style={{ width: colPct(colMm) }} />)}
             </colgroup>
             <thead>
+              {taskColumns.length || examColumns.length || evalColumns.length ? (
+                <>
+                  <tr>
+                    <th rowSpan={2} className="border border-black px-2 py-1">{tr("م")}</th>
+                    <th rowSpan={2} className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
+                    {taskColumns.length ? <th colSpan={taskColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("المشاركة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(selected.tasksMax)})</th>}
+                    {taskColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع المشاركة")} ({formatPoints(selected.tasksMax)})</th> : null}
+                    {examColumns.length ? <th colSpan={examColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("اختبار الفترة")}</th> : <th rowSpan={2} className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>}
+                    {examColumns.length ? <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الاختبار")} ({formatPoints(selected.examMax)})</th> : null}
+                    {evalColumns.length ? <th colSpan={evalColumns.length} className="border border-black bg-[#e5e7eb] px-2 py-1">{tr("تقويم")}</th> : null}
+                    <th rowSpan={2} className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(selected.tasksMax + selected.examMax)})</th>
+                  </tr>
+                  <tr>
+                    {taskColumns.map((column) => <th key={column.id} className="border border-black px-1 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>)}
+                    {examColumns.map((column) => <th key={column.id} className="border border-black px-1 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>)}
+                    {evalColumns.map((column) => <th key={column.id} className="border border-black px-1 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>)}
+                  </tr>
+                </>
+              ) : (
               <tr>
                 <th className="border border-black px-2 py-1">{tr("م")}</th>
                 <th className="grade-name border border-black px-2 py-1">{tr("اسم الطالب")}</th>
-                {liveColumns.some((column) => (column.group ?? "eval") === "tasks") ? (
-                  <>
-                    {liveColumns.filter((column) => (column.group ?? "eval") === "tasks").map((column) => (
-                      <th key={column.id} className="border border-black px-2 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>
-                    ))}
-                    <th className="border border-black px-2 py-1">{tr("مجموع المشاركة")} ({formatPoints(selected.tasksMax)})</th>
-                  </>
-                ) : (
-                  <th className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(selected.tasksMax)})</th>
-                )}
-                {liveColumns.some((column) => column.group === "exam") ? (
-                  <>
-                    {liveColumns.filter((column) => column.group === "exam").map((column) => (
-                      <th key={column.id} className="border border-black px-2 py-1">{column.title}{column.max ? ` (${formatPoints(column.max)})` : ""}</th>
-                    ))}
-                    <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
-                  </>
-                ) : (
-                  <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
-                )}
-                {evalColumns.map((column) => (
-                  <th key={column.id} className="border border-black px-2 py-1">{column.title}</th>
-                ))}
+                <th className="border border-black px-2 py-1">{tr("أعمال السنة")} ({formatPoints(selected.tasksMax)})</th>
+                <th className="border border-black px-2 py-1">{tr("اختبار الفترة")} ({formatPoints(selected.examMax)})</th>
                 <th className="border border-black px-2 py-1">{tr("مجموع الفترة")} ({formatPoints(selected.tasksMax + selected.examMax)})</th>
               </tr>
+              )}
             </thead>
             <tbody>
               {data.students.map((student, index) => {
