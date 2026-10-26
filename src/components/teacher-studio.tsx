@@ -2023,17 +2023,17 @@ export function ClassRecords({
       void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
     }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
   }
-  function splitSection(group: "tasks" | "exam" | "eval") {
+  function buildParts(group: "tasks" | "exam" | "eval") {
     const count = Math.min(8, Math.max(1, Number(splitInto[group]) || 1));
     const ceiling = group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : group === "exam" ? (ceilDraft.exam ?? selected?.examMax ?? 0) : 0;
     if (group !== "eval" && ceiling <= 0) {
       toast.error(tr("حدّد درجة القسم أولًا"));
-      return;
+      return null;
     }
     const share = ceiling > 0 ? Math.floor((ceiling * 10) / count) / 10 : 5;
     let leftover = ceiling > 0 ? Math.round((ceiling - share * count) * 10) / 10 : 0;
     const name = group === "tasks" ? "مشاركة" : group === "exam" ? "اختبار" : "تقويم";
-    const fresh = Array.from({ length: count }, (_, index) => {
+    return Array.from({ length: count }, (_, index) => {
       let max = share || 5;
       if (leftover >= 0.1) {
         max = Math.round((max + 0.1) * 10) / 10;
@@ -2041,11 +2041,56 @@ export function ClassRecords({
       }
       return { id: `c${group[0]}${index + 1}${String(Date.now()).slice(-4)}`.slice(0, 20), title: `${name} ${index + 1}`, group, max };
     });
-    const tasks = group === "tasks" ? fresh : liveColumns.filter((column) => (column.group ?? "eval") === "tasks");
-    const exams = group === "exam" ? fresh : liveColumns.filter((column) => column.group === "exam");
-    const evals = group === "eval" ? fresh : liveColumns.filter((column) => column.group === "eval");
-    setRecordCols([...tasks, ...exams, ...evals]);
+  }
+  function replaceGroup(columns: NonNullable<PeriodPlan["columns"]>, group: "tasks" | "exam" | "eval", fresh: NonNullable<PeriodPlan["columns"]>) {
+    const tasks = group === "tasks" ? fresh : columns.filter((column) => (column.group ?? "eval") === "tasks");
+    const exams = group === "exam" ? fresh : columns.filter((column) => column.group === "exam");
+    const evals = group === "eval" ? fresh : columns.filter((column) => column.group === "eval");
+    return [...tasks, ...exams, ...evals].slice(0, 9);
+  }
+  function splitSection(group: "tasks" | "exam" | "eval") {
+    const fresh = buildParts(group);
+    if (!fresh) return;
+    setRecordCols(replaceGroup(liveColumns, group, fresh));
+    const ceiling = group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : group === "exam" ? (ceilDraft.exam ?? selected?.examMax ?? 0) : 0;
     toast.success(ceiling > 0 ? `${fresh.map((column) => column.max).join(" + ")} = ${ceiling}` : tr("أُضيفت الخانات"));
+  }
+  async function applySplitToTemplates(group: "tasks" | "exam" | "eval") {
+    const fresh = buildParts(group);
+    if (!fresh) return;
+    const formats = (yearPack?.formats ?? []).filter((row) => row.mine && !row.locked && row.payload?.periods?.length);
+    if (!formats.length) {
+      toast.error(tr("لا يوجد قالب يمكنك تعديله"));
+      return;
+    }
+    if (!window.confirm(tr("تطبيق هذا التقسيم على كل قوالبك؟ القوالب المستخدمة من معلم آخر تُترك كما هي."))) return;
+    setRecordCols(replaceGroup(liveColumns, group, fresh));
+    let done = 0;
+    try {
+      for (const row of formats) {
+        const payload = row.payload;
+        if (!payload?.periods?.length) continue;
+        const periods = payload.periods.map((period) => ({
+          title: period.title || "فترة",
+          tasksMax: Math.min(100, group === "tasks" ? (ceilDraft.tasks ?? Number(period.tasksMax) || 0) : Number(period.tasksMax) || 0),
+          examMax: Math.min(100, group === "exam" ? (ceilDraft.exam ?? Number(period.examMax) || 0) : Number(period.examMax) || 0),
+          columns: replaceGroup((period.columns ?? []).map((column) => ({
+            id: column.id || "",
+            title: column.title,
+            group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
+            max: Number(column.max) || 0,
+            calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "" as const,
+            sources: column.sources ?? [],
+          })), group, fresh),
+        }));
+        await saveGradeFormat({ data: { name: row.name, id: row.id, payload: { ...payload, periods } } });
+        done += 1;
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب"));
+    }
+    void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
+    if (done) toast.success(`${tr("طُبّق التقسيم على")} ${done}`);
   }
   async function exportGrades(kind: "xlsx" | "pdf", withId = exportId) {
     const { heads, rows } = sheetMatrix(withId);
@@ -2525,6 +2570,7 @@ export function ClassRecords({
                       ) : null}
                       <Input className="h-8 w-14" type="number" min={1} max={8} value={splitInto[group]} onChange={(event) => setSplitInto((prev) => ({ ...prev, [group]: event.target.value }))} />
                       <button type="button" className="font-medium text-primary" onClick={() => splitSection(group)}>{tr("خانات متساوية")}</button>
+                      <button type="button" className="font-medium text-primary" onClick={() => void applySplitToTemplates(group)}>{tr("كل القوالب")}</button>
                     </span>
                   </div>
                   {cols.length === 0 ? <p className="text-xs text-fg-muted">{tr("درجة واحدة للقسم. مثال: 20 مشاركة يمكن تقسيمها إلى 5 + 5 + 5 + 5.")}</p> : <p className="text-xs text-fg-muted">{cols.filter((column) => column.calc !== "sum" && column.calc !== "avg").map((column) => column.max || 0).join(" + ")}{group !== "eval" ? ` = ${group === "tasks" ? (ceilDraft.tasks ?? selected?.tasksMax ?? 0) : (ceilDraft.exam ?? selected?.examMax ?? 0)}` : ""}</p>}
@@ -3479,6 +3525,7 @@ export function GradeFormatStudio() {
   const [cardLabel, setCardLabel] = useState("");
   const [cardPoints, setCardPoints] = useState("1");
   const [cardColumn, setCardColumn] = useState("");
+  const [equalCount, setEqualCount] = useState({ tasks: "4", exam: "2", final: "2" });
   const [designAt, setDesignAt] = useState(0);
   const [savedMark, setSavedMark] = useState("");
   const [askSave, setAskSave] = useState(false);
@@ -3567,6 +3614,73 @@ export function GradeFormatStudio() {
       cards: [...draft.cards, { label, points, bucket: points < 0 ? "quizzes" : "tasks", enabled: true, columnRef: cardColumn }],
     });
     setCardLabel("");
+  }
+  function equalParts(total: number, count: number, name: string) {
+    const share = total > 0 ? Math.floor((total * 10) / count) / 10 : 5;
+    let leftover = total > 0 ? Math.round((total - share * count) * 10) / 10 : 0;
+    return Array.from({ length: count }, (_, index) => {
+      let max = share || 5;
+      if (leftover >= 0.1) {
+        max = Math.round((max + 0.1) * 10) / 10;
+        leftover = Math.round((leftover - 0.1) * 10) / 10;
+      }
+      return { title: `${name} ${index + 1}`, max };
+    });
+  }
+  function equalizeGroup(group: "tasks" | "exam") {
+    const count = Math.min(8, Math.max(1, Number(equalCount[group]) || 1));
+    const total = group === "tasks" ? design.tasksMax : design.examMax;
+    if (total <= 0) { toast.error(tr("حدّد درجة القسم أولًا")); return; }
+    const fresh = equalParts(total, count, group === "tasks" ? "مشاركة" : "اختبار").map((part, index) => ({ id: `c${group[0]}${index + 1}`.slice(0, 20), title: part.title, group, max: part.max }));
+    const targets = periodNo === 0 ? draft.periods.map((_, index) => index) : [designAt];
+    setDraft({
+      ...draft,
+      periods: draft.periods.map((period, index) => {
+        if (!targets.includes(index)) return period;
+        const kept = period.columns.filter((column) => column.group !== group);
+        return { ...period, columns: [...fresh, ...kept].slice(0, 9) };
+      }),
+    });
+    toast.success(fresh.map((part) => part.max).join(" + ") + ` = ${total}`);
+  }
+  async function pushGroupToTemplates(group: "tasks" | "exam") {
+    const count = Math.min(8, Math.max(1, Number(equalCount[group]) || 1));
+    const total = group === "tasks" ? design.tasksMax : design.examMax;
+    if (total <= 0) { toast.error(tr("حدّد درجة القسم أولًا")); return; }
+    const formats = (data?.formats ?? []).filter((item) => item.mine && !item.locked && item.payload?.periods?.length);
+    if (!formats.length) { toast.error(tr("لا يوجد قالب يمكنك تعديله")); return; }
+    if (!window.confirm(tr("تطبيق هذا التقسيم على كل قوالبك؟ القوالب المستخدمة من معلم آخر تُترك كما هي."))) return;
+    const fresh = equalParts(total, count, group === "tasks" ? "مشاركة" : "اختبار");
+    equalizeGroup(group);
+    let done = 0;
+    try {
+      for (const row of formats) {
+        const payload = row.payload;
+        const periods = (payload.periods ?? []).map((period) => {
+          const kept = (period.columns ?? []).filter((column) => column.group !== group).map((column) => ({
+            id: column.id,
+            title: column.title,
+            group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
+            max: Number(column.max) || 0,
+            calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "" as const,
+            sources: column.sources ?? [],
+          }));
+          const parts = fresh.map((part, index) => ({ id: `c${group[0]}${index + 1}`.slice(0, 20), title: part.title, group, max: part.max }));
+          return {
+            title: period.title || "فترة",
+            tasksMax: Math.min(100, group === "tasks" ? total : Number(period.tasksMax) || 0),
+            examMax: Math.min(100, group === "exam" ? total : Number(period.examMax) || 0),
+            columns: [...parts, ...kept].slice(0, 9),
+          };
+        });
+        await saveGradeFormat({ data: { name: row.name, id: row.id, payload: { ...payload, periods } } });
+        done += 1;
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب"));
+    }
+    refresh();
+    if (done) toast.success(`${tr("طُبّق التقسيم على")} ${done}`);
   }
   return (
     <section className="space-y-4">
@@ -3684,6 +3798,11 @@ export function GradeFormatStudio() {
                 <Input inputMode="decimal" value={String(total)} onChange={(event) => patchDesign(group === "tasks" ? { tasksMax: Number(event.target.value) || 0 } : { examMax: Number(event.target.value) || 0 })} />
               </label>
               <p className={cn("text-xs", used === total ? "text-fg-muted" : "text-danger")}>{tr("التوزيع")}: {formatPoints(used)} / {formatPoints(total)}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input className="h-9 w-16" type="number" min={1} max={8} value={equalCount[group]} onChange={(event) => setEqualCount((prev) => ({ ...prev, [group]: event.target.value }))} />
+                <Button type="button" size="sm" variant="secondary" onClick={() => equalizeGroup(group)}>{tr("خانات متساوية")}</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => void pushGroupToTemplates(group)}>{tr("كل القوالب")}</Button>
+              </div>
               {parts.map((column) => {
                 const index = design.columns.indexOf(column);
                 return (
