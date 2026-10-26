@@ -86,7 +86,7 @@ function TeacherReport({ studentId }: { studentId: number }) {
       if (!data) throw new Error("افتح التقرير أولاً");
       const lines = [
         `تقرير لإرساله لولي الأمر عبر واتساب`,
-        `المعلم ${data.teacher} — ${data.student.name} — ${data.student.classLabel}`,
+        `${data.student.name} — ${data.student.classLabel}${data.subject ? ` — ${data.subject}` : ""}`,
         ...data.grades.map((grade) => `${grade.subject}: ${grade.combine === "avg" ? "متوسط" : "مجموع"} ${grade.total} (${grade.periods.map((period) => `${period.title} ${period.total}`).join("، ")})`),
         ...data.notes.map((item) => `${NOTE_META[item.type as keyof typeof NOTE_META]?.label || item.type}${item.subject ? ` · ${item.subject}` : ""}: ${item.details || "—"}`),
         note.trim() ? `ملاحظة المعلم: ${note.trim()}` : "",
@@ -230,7 +230,7 @@ function TeacherReport({ studentId }: { studentId: number }) {
             <div className="mt-6 grid grid-cols-2 gap-4 text-center text-sm">
               <div>
                 <p className="font-semibold">معلم/ة المادة</p>
-                <p className="mt-1">{data.teacher || "………………"}</p>
+                <p className="mt-1">{data.subject || data.grades[0]?.subject || "………………"}</p>
               </div>
               <div>
                 <p className="font-semibold">مدير/ة المدرسة</p>
@@ -295,6 +295,7 @@ function StudentBehaviorReport({
   student,
   notes,
   days,
+  parent,
 }: {
   student: { name: string; classLabel: string; stageName?: string };
   notes: {
@@ -302,7 +303,6 @@ function StudentBehaviorReport({
     details: string;
     behaviorTypeName?: string;
     behaviorDegree?: number | null;
-    teacherName?: string;
     teacherSubject?: string;
     actionTaken?: string;
     occurrence?: number | null;
@@ -310,8 +310,9 @@ function StudentBehaviorReport({
     createdAt?: string;
   }[];
   days: { day: string; kind: string; arrivedAt?: string | null }[];
+  parent: { studentId: number; phone: string; className: string; shortName: string };
 }) {
-  const { school } = useWorkspace();
+  const { school, staff } = useWorkspace();
   const printRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   const [detailed, setDetailed] = useState(false);
@@ -336,6 +337,45 @@ function StudentBehaviorReport({
     return map;
   }, new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   const issued = `${hijriDate()} — ${new Intl.DateTimeFormat("ar-SA", { hour: "numeric", minute: "2-digit" }).format(new Date())}`;
+  const canSendParent = ["admin", "principal", "school_vp", "teachers_vp"].includes(staff.role);
+  const summaryText = [
+    `السلام عليكم ولي أمر الطالب ${student.name}`,
+    school.name,
+    `الصف: ${student.classLabel}`,
+    "",
+    "تقرير عن الطالب",
+    `عدد أيام التأخر: ${lateDays.length}`,
+    `عدد أيام الغياب: ${absenceDays.length}`,
+    ...degrees.map((item) => `${degreeLabel(item.degree)}: ${item.count}`),
+    `درجات السلوك المخصومة: ${deducted}`,
+    `المتبقي من 100: ${Math.max(0, 100 - deducted)}`,
+    "",
+    "أكثر المخالفات تكرارًا:",
+    ...(frequent.length ? frequent.map(([name, count], index) => `${index + 1}. ${name} (${count})`) : ["لا توجد مخالفات سلوكية"]),
+  ].join("\n");
+  const detailedText = [
+    summaryText,
+    "",
+    "التقرير المفصل",
+    `الغياب (${absenceDays.length})`,
+    compactDates(absenceDays).map((group) => `${group.year}: ${group.line}`).join("\n") || "لا يوجد",
+    `التأخر (${lateDays.length})`,
+    compactDates(lateDays, lateTime).map((group) => `${group.year}: ${group.line}`).join("\n") || "لا يوجد",
+    `المخالفات (${behavior.length})`,
+    behavior.length
+      ? behavior.map((note) => {
+          const title = `${note.behaviorTypeName || "مخالفة"}${note.details ? ` — ${note.details}` : ""}`;
+          const meta = [
+            note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "",
+            behaviorDeduct(note) ? `حسم ${behaviorDeduct(note)}` : "",
+            formatStamp(note.occurredAt || note.createdAt || ""),
+            note.teacherSubject || "",
+            note.actionTaken ? `الإجراء: ${note.actionTaken}` : "",
+          ].filter(Boolean).join(" · ");
+          return `- ${title}\n  ${meta}`;
+        }).join("\n")
+      : "لا توجد مخالفات",
+  ].join("\n");
   const statRow = (label: string, value: string | number) => (
     <div className="flex items-center justify-between gap-2">
       <span className="min-w-0 flex-1 rounded-lg border border-[#d7e3dc] bg-[#f7fbf8] px-2 py-1 text-xs">{label}</span>
@@ -362,6 +402,30 @@ function StudentBehaviorReport({
         <Button type="button" size="sm" variant="secondary" onClick={() => setShown(true)}>{tr("عرض التقرير")}</Button>
         <Button type="button" size="sm" variant={detailed ? "default" : "secondary"} onClick={() => { setShown(true); setDetailed((open) => !open); }}>{tr("تقرير مفصل")}</Button>
         <Button type="button" size="sm" variant="secondary" disabled={!shown} onClick={() => printRef.current && printElement(printRef.current)}>{tr("طباعة")}</Button>
+        {canSendParent ? (
+          <>
+            <WhatsAppDialog
+              studentId={parent.studentId}
+              studentName={student.name}
+              parentPhone={parent.phone}
+              className={parent.className}
+              shortName={parent.shortName}
+              defaultType="behavior"
+              label={tr("إرسال التقرير لولي الأمر")}
+              initialDraft={summaryText}
+            />
+            <WhatsAppDialog
+              studentId={parent.studentId}
+              studentName={student.name}
+              parentPhone={parent.phone}
+              className={parent.className}
+              shortName={parent.shortName}
+              defaultType="behavior"
+              label={tr("إرسال المفصل لولي الأمر")}
+              initialDraft={detailedText}
+            />
+          </>
+        ) : null}
       </div>
       {shown ? (
         <div ref={printRef} className="space-y-3 rounded-[var(--radius-md)] bg-white p-3 text-sm text-black">
@@ -424,7 +488,6 @@ function StudentBehaviorReport({
                         behaviorDeduct(note) ? `حسم ${behaviorDeduct(note)}` : "",
                         formatStamp(note.occurredAt || note.createdAt || ""),
                         note.teacherSubject || "",
-                        note.teacherName || "",
                         note.actionTaken ? `الإجراء: ${note.actionTaken}` : "",
                       ].filter(Boolean).join(" · ")}
                     </p>
@@ -609,6 +672,12 @@ export function StudentSheet({
                   student={{ name: shown || student.name, classLabel: student.classLabel, stageName: student.stageName }}
                   notes={notes}
                   days={attendance.data?.days ?? []}
+                  parent={{
+                    studentId: student.id,
+                    phone: student.parentPhone || "",
+                    className: student.className,
+                    shortName: student.shortName,
+                  }}
                 />
               ) : null}
               <section className="space-y-2">
@@ -670,8 +739,7 @@ export function StudentSheet({
                       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 border-b border-black/10 px-2 py-1 text-[11px] sm:grid-cols-4">
                         <p><span className="text-[#0f4f4a]">{tr("التاريخ")}: </span>{formatStamp(note.occurredAt || note.createdAt)}</p>
                         <p><span className="text-[#0f4f4a]">{tr("الحصة / المادة")}: </span>{note.teacherSubject || "—"}</p>
-                        <p><span className="text-[#0f4f4a]">{tr("النوع")}: </span>{tr(NOTE_META[note.type].label)}{note.behaviorDegree ? ` · ${degreeLabel(note.behaviorDegree)}` : ""}</p>
-                        <p><span className="text-[#0f4f4a]">{tr("المعلم")}: </span>{note.teacherName}{note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}</p>
+                        <p><span className="text-[#0f4f4a]">{tr("النوع")}: </span>{tr(NOTE_META[note.type].label)}{note.behaviorDegree ? ` · ${degreeLabel(note.behaviorDegree)}` : ""}{note.occurrence > 1 ? ` · ${occurrenceLabel(note.occurrence)}` : ""}</p>
                       </div>
                       <p className="px-2 py-2 text-base font-semibold leading-7">
                         {note.behaviorTypeName ? tr(note.behaviorTypeName) : ""}
