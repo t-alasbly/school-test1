@@ -46,7 +46,9 @@ export function SignedOut({ children }: { children: ReactNode }) {
  * render this.
  */
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
-  return <Navigate to={to} />;
+  const next = typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}`;
+  const safe = next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/login") ? next : undefined;
+  return <Navigate to={to} search={safe ? { next: safe } : {}} />;
 }
 
 export function SignInGate({

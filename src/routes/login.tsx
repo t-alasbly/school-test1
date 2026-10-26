@@ -11,18 +11,30 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { ensureAppReady, reportLoginHelp } from "@/lib/school/api";
 import { APP_NAME, DEFAULT_APP_PHRASE, phoneToLoginEmail, schoolLogoSrc } from "@/lib/school/constants";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    next: typeof search.next === "string" && search.next.startsWith("/") && !search.next.startsWith("//") && !search.next.startsWith("/login") ? search.next : "",
+  }),
+  component: Login,
+});
 
 function Login() {
+  const { next } = Route.useSearch();
   const { user, isPending } = useCurrentUserState();
   if (isPending) {
     return <div className="min-h-dvh bg-bg" />;
   }
-  if (user) return <Navigate to="/desk" />;
-  return <LoginForm />;
+  if (user) {
+    if (next && typeof window !== "undefined") {
+      window.location.replace(next);
+      return <div className="min-h-dvh bg-bg" />;
+    }
+    return <Navigate to="/desk" />;
+  }
+  return <LoginForm next={next} />;
 }
 
-function LoginForm() {
+function LoginForm({ next }: { next: string }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,9 +76,13 @@ function LoginForm() {
       const res = await authClient.signIn.email({
         email: identifier,
         password,
-        callbackURL: "/desk",
+        callbackURL: next || "/desk",
       });
       if (res.error) throw new Error(res.error.message || tr("بيانات الدخول غير صحيحة"));
+      if (next) {
+        window.location.replace(next);
+        return;
+      }
       await navigate({ to: "/desk" });
     } catch (err) {
       setError(err instanceof Error ? tr(err.message) : tr("حدث خطأ غير متوقع"));

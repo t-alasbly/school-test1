@@ -74,7 +74,7 @@ function ClassBody() {
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
   const [groupOpen, setGroupOpen] = useState(false);
-  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? (fromDesk || lessonFromTable ? "behavior" : classFollow ? "one" : yearSheet ? "year" : "behavior"));
+  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? "behavior");
   const [printTick, setPrintTick] = useState(0);
   const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { targets } = useGroupPick();

@@ -31,13 +31,14 @@ import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
 
-type Search = { stage?: number; sort?: ClassSort };
+type Search = { stage?: number; sort?: ClassSort; pane?: "year" | "behavior" };
 
 export const Route = createFileRoute("/classes")({
   validateSearch: (search: Record<string, unknown>): Search => {
     const next: Search = {};
     if (Number(search.stage) > 0) next.stage = Number(search.stage);
     if (search.sort === "alpha") next.sort = "alpha";
+    if (search.pane === "year" || search.pane === "behavior") next.pane = search.pane;
     return next;
   },
   component: ClassesPage,
@@ -77,7 +78,7 @@ function ClassesBody() {
   const [q, setQ] = useState("");
   const [activeStudent, setActiveStudent] = useState<number | null>(null);
   const [groupOpen, setGroupOpen] = useState(false);
-  const [pane, setPane] = useState<"year" | "behavior">("year");
+  const [pane, setPane] = useState<"year" | "behavior">(search.pane === "year" ? "year" : "behavior");
   const [printTick, setPrintTick] = useState(0);
   const subjects = parseSubjects(staff.subject);
   const [sheetSubject, setSheetSubject] = useState(subjects[0] ?? "");
@@ -87,6 +88,9 @@ function ClassesBody() {
     if (search.stage && search.stage !== stageId) setStageId(search.stage);
     else if (stageId == null && stages[0]) setStageId(stages[0].id);
   }, [search.stage, stages, stageId]);
+  useEffect(() => {
+    setPane(search.pane === "year" ? "year" : "behavior");
+  }, [search.pane]);
 
   const roster = useQuery({
     queryKey: ["stage-students", stageId, classId],
@@ -142,7 +146,7 @@ function ClassesBody() {
           setSort(next);
           void navigate({
             to: "/classes",
-            search: { stage: stageId ?? undefined, sort: next === "alpha" ? "alpha" : undefined },
+            search: { stage: stageId ?? undefined, sort: next === "alpha" ? "alpha" : undefined, pane: pane === "year" ? "year" : undefined },
           });
         }}
         onChange={(nextStage, nextClass) => {
@@ -150,19 +154,19 @@ function ClassesBody() {
           setClassId(nextClass);
           setQ("");
           if (nextClass) {
-            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) }, search: { subject: sheetSubject || undefined } });
+            void navigate({ to: "/class/$classId", params: { classId: String(nextClass) }, search: { subject: sheetSubject || undefined, pane: "behavior" } });
             return;
           }
           void navigate({
             to: "/classes",
-            search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined },
+            search: { stage: nextStage, sort: sort === "alpha" ? "alpha" : undefined, pane: pane === "year" ? "year" : undefined },
           });
         }}
       />
       {yearSheet && teachesStage && classId == null && stageId ? (
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" onClick={() => setPane("year")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "year" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("أعمال السنة")}</button>
-          <button type="button" onClick={() => setPane("behavior")} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "behavior" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("المخالفات السلوكية")}</button>
+          <button type="button" onClick={() => { setPane("year"); void navigate({ to: "/classes", search: { stage: stageId ?? undefined, sort: sort === "alpha" ? "alpha" : undefined, pane: "year" }, replace: true }); }} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "year" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("أعمال السنة")}</button>
+          <button type="button" onClick={() => { setPane("behavior"); void navigate({ to: "/classes", search: { stage: stageId ?? undefined, sort: sort === "alpha" ? "alpha" : undefined }, replace: true }); }} className={cn("min-h-8 rounded-full border px-3 py-1 text-sm font-semibold", pane === "behavior" ? "border-primary bg-primary/10 text-primary" : "border-border bg-card")}>{tr("المخالفات السلوكية")}</button>
           <button
             type="button"
             onClick={() => {
