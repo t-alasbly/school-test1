@@ -841,7 +841,7 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 	const school = await loadSchool(sql, staff.school_id);
 	if (!school) throw new Error("المدرسة غير موجودة");
 	const pending = staff.role === "pending";
-	const hideOthers = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
+	const hideOthers = cannotViewAll(staff, school);
 	const stages = pending ? [] : (await listStageSummaries(sql, school.id, hideOthers ? staff.user_id : void 0)).filter((s) => s.studentCount > 0);
 	const classes = pending ? [] : await listClassOptions(sql, school.id);
 	if (!pending) {
@@ -913,8 +913,8 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 	};
 });
 export const getStagePage = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ stageId: number() })).handler(async ({ context, data }) => {
-	const { sql, staff, school } = await requireApproved(context.userId);
-	const hideOthers = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
+	const { sql, staff, school } = await requireDesk(context.userId);
+	const hideOthers = cannotViewAll(staff, school);
 	const stage = (await sql`
       select id, name, short_name from stages
       where id = ${data.stageId} and school_id = ${staff.school_id}
@@ -1083,6 +1083,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
       where s.class_id = ${row.id}
         and n.school_id = ${staff.school_id}
         and n.created_at >= current_date
+        and (${!cannotViewAll(phoneStaff, school)} or n.teacher_id = ${teacherId})
     `;
 	const byStudent = /* @__PURE__ */ new Map();
 	for (const n of notes) {
@@ -1615,7 +1616,8 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	};
 });
 export const getStudentNotes = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ studentId: number() })).handler(async ({ context, data }) => {
-	const { sql, staff, school } = await requireApproved(context.userId);
+	const desk = await requireDesk(context.userId);
+	const { sql, staff, school } = desk;
 	await ensureNoteThread(sql);
 	await ensureStudentProfile(sql);
 	const student = (await sql`
@@ -1631,28 +1633,14 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
       where s.id = ${data.studentId} and s.school_id = ${staff.school_id}
     `)[0];
 	if (!student) throw new Error("الطالب غير موجود");
-	const notes = await sql`
-      select n.id, n.teacher_id, n.type, n.details, n.status, n.action_taken,
-             n.created_at::text as created_at,
-             coalesce(n.occurred_at, n.created_at)::text as occurred_at,
-             coalesce(n.refer_counselor, false) as refer_counselor,
-             coalesce(n.dest, 'vp') as dest,
-             coalesce(n.suggested_action, '') as suggested_action,
-             coalesce(n.compensation, '') as compensation,
-             coalesce(sf.display_name, 'معلم') as teacher_name,
-             coalesce(nullif(n.subject, ''), sf.subject, '') as teacher_subject,
-             coalesce(actor.display_name, '') as entered_by_name,
-             n.behavior_type_id,
-             bt.name as behavior_type_name,
-             bt.degree as behavior_degree,
-             coalesce(n.period_key, '') as period_key
-      from notes n
-      left join staff sf on sf.user_id = n.teacher_id
-      left join staff actor on actor.user_id = n.entered_by
-      left join behavior_types bt on bt.id = n.behavior_type_id
-      where n.student_id = ${student.id} and n.school_id = ${staff.school_id}
-      order by n.created_at desc
-    `;
+	const ownOnly = cannotViewAll(staff, school);
+	const notes = await fetchNotes(sql, staff.school_id, {
+		studentId: student.id,
+		teacherId: ownOnly ? staff.user_id : void 0,
+		limit: 500,
+		staff,
+		school
+	});
 	return {
 		student: {
 			id: student.id,
@@ -1668,28 +1656,29 @@ export const getStudentNotes = createServerFn({ method: "POST" }).middleware([au
 			classLabel: classLabel(student.short_name, student.class_name),
 			healthNote: student.health_note ?? ""
 		},
-		notes: withOccurrence(notes.map((n) => ({
+		notes: notes.map((n) => ({
 			id: n.id,
 			type: n.type,
 			details: n.details,
 			status: n.status,
-			actionTaken: n.action_taken,
-			createdAt: n.created_at,
-			occurredAt: n.occurred_at || n.created_at,
-			teacherId: n.teacher_id,
-			teacherName: n.teacher_name,
-			teacherSubject: n.teacher_subject,
-			enteredByName: n.entered_by_name || "",
-			behaviorTypeId: n.behavior_type_id,
-			behaviorTypeName: n.behavior_type_name,
-			behaviorDegree: n.behavior_degree,
-			periodKey: n.period_key,
-			referCounselor: Boolean(n.refer_counselor),
-			dest: n.dest === "health" || n.dest === "counselor" ? n.dest : n.refer_counselor ? "counselor" : "vp",
-			suggestedAction: n.suggested_action ?? "",
-			compensation: n.compensation ?? ""
-		}))),
-		scopedToTeacher: false
+			actionTaken: n.actionTaken,
+			createdAt: n.createdAt,
+			occurredAt: n.occurredAt,
+			teacherId: n.teacherId,
+			teacherName: n.teacherName,
+			teacherSubject: n.teacherSubject,
+			enteredByName: n.enteredByName || "",
+			behaviorTypeId: n.behaviorTypeId,
+			behaviorTypeName: n.behaviorTypeName,
+			behaviorDegree: n.behaviorDegree,
+			periodKey: n.periodKey,
+			referCounselor: Boolean(n.referCounselor),
+			dest: n.dest,
+			suggestedAction: n.suggestedAction ?? "",
+			compensation: n.compensation ?? "",
+			occurrence: n.occurrence || 1
+		})),
+		scopedToTeacher: ownOnly
 	};
 });
 export const getAdminDashboard = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {
@@ -1858,7 +1847,7 @@ export const getReport = createServerFn({ method: "POST" }).middleware([authMidd
 	const desk = await requireDesk(context.userId);
 	const { sql, staff, school } = desk;
 	const mapped = mapSchool(school);
-	const teacherOnly = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
+	const teacherOnly = cannotViewAll(staff, school);
 	const notes = await fetchNotes(sql, staff.school_id, {
 		...data,
 		teacherId: teacherOnly ? staff.user_id : void 0,
@@ -3696,10 +3685,7 @@ export const listParentMessages = createServerFn({ method: "POST" }).middleware(
 	from: string().optional(),
 	to: string().optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff, school } = await requireApproved(context.userId);
-	try {
-		await sql.query(`alter table parent_messages add column if not exists note_id integer`);
-	} catch {}
+	const { sql, staff, school } = await requireDesk(context.userId);
 	const params = [staff.school_id];
 	let where = "m.school_id = $1";
 	if (data.studentId) {
@@ -3722,7 +3708,7 @@ export const listParentMessages = createServerFn({ method: "POST" }).middleware(
 		params.push(data.to);
 		where += ` and m.created_at < ($${params.length}::date + interval '1 day')`;
 	}
-	if (staff.role === "teacher" && !mappedPerms(staff, school).editRecords) {
+	if (cannotViewAll(staff, school)) {
 		params.push(staff.user_id);
 		where += ` and m.staff_id = $${params.length}`;
 	}
@@ -3795,8 +3781,8 @@ export const listImprovements = createServerFn({ method: "POST" }).middleware([a
 	studentId: number().optional(),
 	openOnly: boolean().optional()
 })).handler(async ({ context, data }) => {
-	const { sql, staff, school } = await requireApproved(context.userId);
-	const hideOthers = cannotViewAll(staff, school) && !mappedPerms(staff, school).editRecords;
+	const { sql, staff, school } = await requireDesk(context.userId);
+	const hideOthers = cannotViewAll(staff, school);
 	return listImprovementRows(sql, staff.school_id, {
 		studentId: data.studentId,
 		teacherId: hideOthers ? staff.user_id : void 0,
@@ -5226,6 +5212,7 @@ export const listAttendanceRoster = createServerFn({ method: "POST" }).middlewar
 		data.from,
 		data.to
 	]);
+	const ownNotes = cannotViewAll(staff, school) ? staff.user_id : "";
 	const notes = data.kind === "leave" ? [] : await sql.query(`select n.created_at::date::text as day, s.id as student_id, s.name as student_name,
             c.name as class_name, st.short_name,
             false as excused,
@@ -5237,11 +5224,13 @@ export const listAttendanceRoster = createServerFn({ method: "POST" }).middlewar
      join stages st on st.id = c.stage_id
      where n.school_id = $1 and n.type = $2
        and n.created_at >= $3::date and n.created_at < ($4::date + interval '1 day')
+       and ($5 = '' or n.teacher_id = $5)
      order by n.created_at desc`, [
 		staff.school_id,
 		data.kind,
 		data.from,
-		data.to
+		data.to,
+		ownNotes
 	]);
 	return { rows: [...daily.map((r) => ({
 		day: r.day,
@@ -5319,10 +5308,12 @@ export const listFollowupNotes = createServerFn({ method: "POST" }).middleware([
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
 	if (!canAccessFollowup(staff, school)) throw new Error("ليست لديك صلاحية الإحصاء");
+	const ownOnly = cannotViewAll(staff, school);
 	return fetchNotes(sql, staff.school_id, {
 		type: data.type,
 		from: data.from,
 		to: data.to,
+		teacherId: ownOnly ? staff.user_id : void 0,
 		limit: 400,
 		staff,
 		school
@@ -7706,7 +7697,7 @@ export const saveStageYearMarks = createServerFn({ method: "POST" }).middleware(
 	return { count: students.length, participation: stored };
 });
 export const getTeacherStudentReport = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ studentId: number() })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireApproved(context.userId);
+	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	const student = (await sql`
     select s.id, s.name, s.class_id, c.name as class_name, st.short_name, st.name as stage_name
@@ -7875,7 +7866,8 @@ export const getTeacherStudentReport = createServerFn({ method: "POST" }).middle
 	};
 });
 export const getStudentDossier = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ studentId: number() })).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireApproved(context.userId);
+	const desk = await requireDesk(context.userId);
+	const { sql, staff, school } = desk;
 	await ensureAttendanceStamp(sql);
 	await ensureExitPermits(sql);
 	await ensureTeacherEval(sql);
@@ -7914,6 +7906,7 @@ export const getStudentDossier = createServerFn({ method: "POST" }).middleware([
     left join staff stf on stf.user_id = n.teacher_id and stf.school_id = n.school_id
     left join behavior_types bt on bt.id = n.behavior_type_id
     where n.school_id = ${staff.school_id} and n.student_id = ${student.id}
+      and (${!cannotViewAll(staff, school)} or n.teacher_id = ${staff.user_id})
     order by n.created_at desc
     limit 80
   `;
