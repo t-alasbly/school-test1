@@ -272,6 +272,17 @@ function compactDates(dates: string[], suffix?: Map<string, string>) {
   }));
 }
 
+function behaviorDeduct(note: { behaviorDegree?: number | null; occurrence?: number | null }) {
+  const degree = Number(note.behaviorDegree) || 0;
+  const times = Number(note.occurrence) || 1;
+  if (degree === 1) return times >= 3 ? 1 : 0;
+  if (degree === 2) return 2;
+  if (degree === 3) return 3;
+  if (degree === 4) return 10;
+  if (degree === 5) return 15;
+  return 0;
+}
+
 function dateKey(value: string | null | undefined) {
   if (!value) return "";
   const raw = String(value);
@@ -294,6 +305,7 @@ function StudentBehaviorReport({
     teacherName?: string;
     teacherSubject?: string;
     actionTaken?: string;
+    occurrence?: number | null;
     occurredAt?: string;
     createdAt?: string;
   }[];
@@ -317,6 +329,7 @@ function StudentBehaviorReport({
     degree,
     count: behavior.filter((note) => Number(note.behaviorDegree) === degree).length,
   })).filter((item) => item.degree <= 3 || item.count > 0);
+  const deducted = behavior.reduce((sum, note) => sum + behaviorDeduct(note), 0);
   const frequent = [...behavior.reduce((map, note) => {
     const name = (note.behaviorTypeName || note.details || "مخالفة").trim();
     map.set(name, (map.get(name) ?? 0) + 1);
@@ -374,6 +387,8 @@ function StudentBehaviorReport({
               {statRow("عدد أيام التأخر", lateDays.length)}
               {statRow("عدد أيام الغياب", absenceDays.length)}
               {degrees.map((item) => statRow(degreeLabel(item.degree), item.count))}
+              {statRow("درجات السلوك المخصومة", deducted)}
+              {statRow("المتبقي من 100", Math.max(0, 100 - deducted))}
             </section>
             <section className="space-y-2 rounded-xl border border-[#d7e3dc] p-2">
               <h3 className="text-center text-sm font-semibold text-[#1f8a4c]">ملخص الأداء</h3>
@@ -406,6 +421,7 @@ function StudentBehaviorReport({
                     <p className="border-t border-[#d7e3dc] px-2 py-1 text-[11px] text-[#374151]">
                       {[
                         note.behaviorDegree ? degreeLabel(note.behaviorDegree) : "",
+                        behaviorDeduct(note) ? `حسم ${behaviorDeduct(note)}` : "",
                         formatStamp(note.occurredAt || note.createdAt || ""),
                         note.teacherSubject || "",
                         note.teacherName || "",
