@@ -9,6 +9,7 @@ import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
 import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
 import { CallParent } from "@/components/call-parent";
+import { StudentQuickActions } from "@/components/student-quick-actions";
 import { StudentSheet } from "@/components/student-sheet";
 import { ExitPermitBadge } from "@/components/exit-permit";
 import { DayName } from "@/components/day-name";

@@ -9,6 +9,7 @@ import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { AddStudentButton } from "@/components/student-editor";
 import { StudentSheet } from "@/components/student-sheet";
 import { CallParent } from "@/components/call-parent";
+import { StudentQuickActions } from "@/components/student-quick-actions";
 import { ClassBoard, ClassRecords } from "@/components/teacher-studio";
 import { NoteComposer } from "@/components/note-actions";
 import { ExitPermitBadge } from "@/components/exit-permit";
