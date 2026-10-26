@@ -157,8 +157,10 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
-export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
+export function renderWebManifest(hostHeader, site = {}) {
+  const fromHost = appNameFromHost(hostHeader);
+  const fromSite = String(site.pwaName ?? "").trim();
+  const name = fromHost !== DEFAULT_APP_NAME ? fromHost : fromSite || fromHost;
   return JSON.stringify(
     {
       name,
