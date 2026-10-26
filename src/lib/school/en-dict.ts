@@ -1704,6 +1704,8 @@ export const EN_UI: Record<string, string> = {
   "طُبّق التنسيق": "Layout applied",
   "القالب مستخدم، وحُفظ باسم جديد": "The template is in use, so it was saved under a new name",
   "حُفظ القالب وطُبّق": "The template was saved and applied",
+  "حُفظ تعديل القالب": "The template changes were saved",
+  "حفظ التعديل على القالب": "Save template changes",
   "تنسيق الدرجات": "Grade layout",
   "اختر قالب أعمال السنة ثم طبّقه. يظهر جدول واحد عند الدخول على أعمال السنة.": "Choose a year-work template and apply it. One table appears when you open year work.",
   "التنسيق وأين يُطبَّق": "The layout and where it applies",

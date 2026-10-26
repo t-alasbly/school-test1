@@ -1523,7 +1523,7 @@ export function ClassRecords({
     queryFn: () => getGradeStudio(),
     enabled: view === "year",
   });
-  const yearPack = formatsQuery.data as { activeFormatId?: number | null; formats?: { id: number; name: string; ownerName?: string; payload?: FormatPayload }[] } | undefined;
+  const yearPack = formatsQuery.data as { activeFormatId?: number | null; formats?: { id: number; name: string; ownerName?: string; mine?: boolean; locked?: boolean; payload?: FormatPayload }[] } | undefined;
   const [gradeRow, setGradeRow] = useState(8);
   const sheetIds = mergeClassIds?.length ? mergeClassIds : [classId];
   const sheetQueries = useQueries({
@@ -1952,13 +1952,16 @@ export function ClassRecords({
     return { heads, rows };
   }
   function currentFormatPayload(): FormatPayload {
+    const formats = yearPack?.formats ?? [];
+    const selected = formats.find((row) => String(row.id) === yearFormatId) ?? formats.find((row) => row.id === yearPack?.activeFormatId);
+    const keptCards = selected?.payload?.cards ?? [];
     return {
       sheet: gradeShape,
       combine: data.combine === "avg" ? "avg" : "sum",
-      finalExamMax: Number((data.scale as { finalExamMax?: number }).finalExamMax) || 40,
-      finalColumns: ((data as { finalColumns?: { id: string; title: string; max: number }[] }).finalColumns ?? []).map((column) => ({ ...column })),
-      cards: [],
-      gradeCols: gradeCols.map((col) => ({ ...col })),
+      finalExamMax: Number((data.scale as { finalExamMax?: number }).finalExamMax) || selected?.payload?.finalExamMax || 40,
+      finalColumns: ((data as { finalColumns?: { id: string; title: string; max: number }[] }).finalColumns ?? selected?.payload?.finalColumns ?? []).map((column) => ({ ...column })),
+      cards: keptCards.map((card) => ({ ...card })),
+      gradeCols: gradeCols.map((col) => ({ ...col, id: String(col.id || "").slice(0, 20) })),
       layout: {
         recordRow,
         gradeRow,
@@ -1978,16 +1981,45 @@ export function ClassRecords({
         title: period.title,
         tasksMax: period.tasksMax,
         examMax: period.examMax,
-        columns: liveColumns.map((column) => ({
-          id: column.id,
+        columns: (recordCols ?? period.columns ?? liveColumns).map((column) => ({
+          id: String(column.id || "").slice(0, 20),
           title: column.title,
           group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const,
           max: Number(column.max) || 0,
           calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : undefined,
-          sources: column.sources,
+          sources: (column.sources ?? []).slice(0, 20),
         })),
       })),
     };
+  }
+  function saveSheetTemplate(asNew: boolean) {
+    const formats = yearPack?.formats ?? [];
+    const selected = formats.find((row) => String(row.id) === yearFormatId) ?? formats.find((row) => row.id === yearPack?.activeFormatId);
+    const typed = newFormatName.trim();
+    const owned = Boolean(selected?.mine && !selected?.locked);
+    if (!asNew && selected && !owned && typed.length < 2) {
+      toast.error(tr("هذا القالب مستخدم من معلم آخر. احفظه باسم جديد"));
+      return;
+    }
+    const name = asNew ? typed : (typed && typed !== selected?.name ? typed : selected?.name || typed);
+    if (name.length < 2) {
+      toast.error(tr("اكتب اسم القالب"));
+      return;
+    }
+    const updateId = !asNew && owned && name === selected?.name ? selected?.id : undefined;
+    const payload = currentFormatPayload();
+    void saveGradeFormat({ data: { name, payload, id: updateId } }).then(async (saved) => {
+      const id = Number(saved?.id) || updateId;
+      if (id) {
+        setYearFormatId(String(id));
+        await applyGradeFormat({ data: { formatId: id, subject: subject || undefined, periodNo: 0, payload } });
+      }
+      toast.success(updateId ? tr("حُفظ تعديل القالب") : tr("حُفظ القالب باسم جديد"));
+      setNewFormatName("");
+      setFormatOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
+      void queryClient.invalidateQueries({ queryKey: ["class-eval", classId] });
+    }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
   }
   async function exportGrades(kind: "xlsx" | "pdf", withId = exportId) {
     const { heads, rows } = sheetMatrix(withId);
@@ -2363,19 +2395,7 @@ export function ClassRecords({
             }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر التطبيق")));
           }}>{tr("تطبيق")}</Button>
           <Input className="h-9 w-40" value={newFormatName} maxLength={60} placeholder={tr("اسم القالب الجديد")} onChange={(event) => setNewFormatName(event.target.value)} />
-          <Button type="button" size="sm" variant="secondary" onClick={() => {
-            const name = newFormatName.trim();
-            if (name.length < 2) {
-              toast.error(tr("اكتب اسم القالب"));
-              return;
-            }
-            void saveGradeFormat({ data: { name, payload: currentFormatPayload() } }).then(() => {
-              toast.success(tr("حُفظ القالب باسم جديد"));
-              setNewFormatName("");
-              setFormatOpen(false);
-              void queryClient.invalidateQueries({ queryKey: ["grade-studio"] });
-            }).catch((err) => toast.error(err instanceof Error ? err.message : tr("تعذر حفظ القالب")));
-          }}>{tr("حفظ باسم جديد")}</Button>
+          <Button type="button" size="sm" variant="secondary" onClick={() => saveSheetTemplate(true)}>{tr("حفظ باسم جديد")}</Button>
           {(() => {
             const item = (yearPack?.formats ?? []).find((row) => String(row.id) === yearFormatId);
             if (!item?.payload) return null;
@@ -2526,8 +2546,8 @@ export function ClassRecords({
                 }) } }).then(() => queryClient.invalidateQueries({ queryKey: ["class-eval"] }));
               }
             }
-            setFormatOpen(false);
-          }}>{tr("حفظ")}</Button>
+            saveSheetTemplate(false);
+          }}>{tr("حفظ التعديل على القالب")}</Button>
         </div>
       ) : null}
       {view === "year" && formatOpen && sheetMode === "period" && gradeShape === "blank" ? (
@@ -2618,8 +2638,8 @@ export function ClassRecords({
               </li>
             ))}
           </ul>
-          <button type="button" className="text-sm font-medium text-primary" onClick={() => setGradeCols([...gradeCols, { id: `c${Date.now()}`, title: "", width: 18 }])}>{tr("إضافة عمود")}</button>
-          <Button type="button" size="sm" onClick={() => setFormatOpen(false)}>{tr("حفظ")}</Button>
+          <button type="button" className="text-sm font-medium text-primary" onClick={() => setGradeCols([...gradeCols, { id: `c${Date.now()}`.slice(0, 20), title: "", width: 18 }])}>{tr("إضافة عمود")}</button>
+          <Button type="button" size="sm" onClick={() => saveSheetTemplate(false)}>{tr("حفظ التعديل على القالب")}</Button>
         </div>
       ) : null}
       {view === "year" && sheetMode === "period" && selected?.closed ? (
@@ -3450,8 +3470,9 @@ export function GradeFormatStudio() {
       const pickedRow = (data?.formats ?? []).find((item) => String(item.id) === picked);
       const locked = Boolean(pickedRow?.locked);
       if (locked && name.trim() === pickedRow?.name) throw new Error("هذا القالب مستخدم من معلم آخر. احفظه باسم جديد");
-      const saved = await saveGradeFormat({ data: { name: name.trim(), payload: draft, id: pickedRow && pickedRow.mine && !locked ? pickedRow.id : undefined } });
-      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, formatId: saved.id, payload: draft } });
+      const payload = { ...draft, layout: draft.layout ?? pickedRow?.payload?.layout };
+      const saved = await saveGradeFormat({ data: { name: name.trim(), payload, id: pickedRow && pickedRow.mine && !locked ? pickedRow.id : undefined } });
+      await applyGradeFormat({ data: { subject: subject || undefined, periodNo, formatId: saved.id, payload } });
       return saved;
     },
     onSuccess: (saved) => {
@@ -3512,13 +3533,14 @@ export function GradeFormatStudio() {
               title: period.title || "فترة",
               tasksMax: Number(period.tasksMax) || 0,
               examMax: Number(period.examMax) || 0,
-              columns: (period.columns ?? []).map((column) => ({ title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0, calc: (column as { calc?: string }).calc === "sum" || (column as { calc?: string }).calc === "avg" || (column as { calc?: string }).calc === "cards" ? (column as { calc?: "" | "sum" | "avg" | "cards" }).calc : "", sources: (column as { sources?: string[] }).sources ?? [] })),
+              columns: (period.columns ?? []).map((column) => ({ id: column.id, title: column.title, group: column.group === "exam" || column.group === "tasks" ? column.group : "eval" as const, max: Number((column as { max?: number }).max) || 0, calc: (column as { calc?: string }).calc === "sum" || (column as { calc?: string }).calc === "avg" || (column as { calc?: string }).calc === "cards" ? (column as { calc?: "" | "sum" | "avg" | "cards" }).calc : "", sources: (column as { sources?: string[] }).sources ?? [] })),
             })),
             cards: (item.payload.cards ?? []).map((card) => ({ label: card.label, points: Number(card.points) || 0, bucket: card.bucket === "quizzes" ? "quizzes" : "tasks", enabled: card.enabled !== false, columnRef: card.columnRef || "" })),
             finalExamMax: Number(item.payload.finalExamMax) || 40,
             finalColumns: (item.payload.finalColumns ?? []).map((column, index) => ({ id: column.id || `f${index + 1}`, title: column.title, max: Number(column.max) || 0 })),
             sheet: item.payload.sheet === "blank" ? "blank" : "record",
-            gradeCols: (item.payload.gradeCols ?? []).map((column) => ({ id: column.id, title: column.title, width: Number(column.width) || 18, max: Number(column.max) || 0 })),
+            gradeCols: (item.payload.gradeCols ?? []).map((column) => ({ id: column.id, title: column.title, width: Number(column.width) || 18, max: Number(column.max) || 0, calc: column.calc === "sum" || column.calc === "avg" || column.calc === "cards" ? column.calc : "", sources: column.sources ?? [] })),
+            layout: item.payload.layout,
           };
           const at = designSlot(next);
           setDesignAt(at);
