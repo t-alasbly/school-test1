@@ -8,7 +8,7 @@ import { ClassSwitcher } from "@/components/class-switcher";
 import { StageClassBar, type ClassSort } from "@/components/stage-class-bar";
 import { AddStudentButton } from "@/components/student-editor";
 import { StudentSheet } from "@/components/student-sheet";
-import { StudentQuickActions } from "@/components/student-quick-actions";
+import { CallParent } from "@/components/call-parent";
 import { ClassBoard, ClassRecords } from "@/components/teacher-studio";
 import { NoteComposer } from "@/components/note-actions";
 import { ExitPermitBadge } from "@/components/exit-permit";
@@ -314,6 +314,7 @@ function ClassBody() {
                     {followMode === "one" && allowFollow ? (
                       <Button type="button" size="sm" variant="secondary" onClick={() => setActiveStudent(student.id)}>{tr("السجل")}</Button>
                     ) : null}
+                    <CallParent phones={[student.parentPhone, student.parentPhone2, student.workPhone]} />
                     <StudentQuickActions
                       studentId={student.id}
                       studentName={label}

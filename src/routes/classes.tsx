@@ -8,7 +8,7 @@ import { AppGate } from "@/components/app-gate";
 import { GroupViolationBar, PickMark } from "@/components/group-violation-bar";
 import { NoteComposer } from "@/components/note-actions";
 import { StageClassBar, sortedStudents, type ClassSort } from "@/components/stage-class-bar";
-import { StudentQuickActions } from "@/components/student-quick-actions";
+import { CallParent } from "@/components/call-parent";
 import { StudentSheet } from "@/components/student-sheet";
 import { ExitPermitBadge } from "@/components/exit-permit";
 import { DayName } from "@/components/day-name";
@@ -265,6 +265,7 @@ function ClassesBody() {
               </span>
               <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>
             </button>
+            <CallParent phones={[student.parentPhone]} />
             <StudentQuickActions
               studentId={student.id}
               studentName={student.name}

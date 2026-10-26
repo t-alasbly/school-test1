@@ -395,6 +395,14 @@ export function canSeeParentPhone(staff: Pick<Staff, "role" | "permissions">) {
   return staffCan(staff, "sendMessages") || staffCan(staff, "editStudents");
 }
 
+const CALL_ROLES = new Set(["admin", "principal", "counselor", "student_counselor", "school_vp", "teachers_vp"]);
+
+export function canCallParent(staff: Pick<Staff, "role" | "permissions">) {
+  if (staff.role === "teacher") return false;
+  if (CALL_ROLES.has(staff.role)) return true;
+  return staffCan(staff, "sendMessages") && staffCan(staff, "takeActions");
+}
+
 export function canFollowup(staff: Pick<Staff, "role" | "permissions">) {
   return (
     staffCan(staff, "takeActions") ||

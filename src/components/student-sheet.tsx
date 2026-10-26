@@ -5,7 +5,7 @@ import { ImproveDialog } from "@/components/improve-dialog";
 import { NoteSession } from "@/components/note-session";
 import { NoteActions } from "@/components/note-actions";
 import { ExitPermitBadge } from "@/components/exit-permit";
-import { DayName } from "@/components/day-name";
+import { CallParent } from "@/components/call-parent";
 import { StaffMailDialog } from "@/components/staff-mail-dialog";
 import { StaffMailInbox } from "@/components/staff-mail-inbox";
 import { OfficialLetterhead, PrintFormsButton } from "@/components/print-forms";
@@ -580,6 +580,7 @@ export function StudentSheet({
             <span className="flex min-w-0 items-center gap-1.5">
               {student ? <ExitPermitBadge studentId={student.id} /> : null}
               {student ? <DayName studentId={student.id}>{shown || tr("سجل الطالب")}</DayName> : <span className="min-w-0">{tr("سجل الطالب")}</span>}
+              {student ? <CallParent phones={[student.parentPhone, student.parentPhone2, student.workPhone]} /> : null}
             </span>
             {student ? (
               <StaffMailDialog studentId={student.id} studentName={student.name} compact />
