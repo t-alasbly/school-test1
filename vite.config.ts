@@ -186,6 +186,10 @@ export default defineConfig(({ command, isPreview }) => ({
                   for (const name of ["pglite.data", "pglite.wasm", "initdb.wasm"]) {
                     copyFileSync(join(srcDir, name), join(destDir, name));
                   }
+                  copyFileSync(
+                    join(nitro.options.rootDir, "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"),
+                    join(destDir, "pdf.worker.mjs"),
+                  );
                 });
               },
             ],
