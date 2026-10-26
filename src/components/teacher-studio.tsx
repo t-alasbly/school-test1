@@ -2072,8 +2072,8 @@ export function ClassRecords({
         if (!payload?.periods?.length) continue;
         const periods = payload.periods.map((period) => ({
           title: period.title || "فترة",
-          tasksMax: Math.min(100, group === "tasks" ? (ceilDraft.tasks ?? Number(period.tasksMax) || 0) : Number(period.tasksMax) || 0),
-          examMax: Math.min(100, group === "exam" ? (ceilDraft.exam ?? Number(period.examMax) || 0) : Number(period.examMax) || 0),
+          tasksMax: Math.min(100, group === "tasks" ? (ceilDraft.tasks ?? (Number(period.tasksMax) || 0)) : (Number(period.tasksMax) || 0)),
+          examMax: Math.min(100, group === "exam" ? (ceilDraft.exam ?? (Number(period.examMax) || 0)) : (Number(period.examMax) || 0)),
           columns: replaceGroup((period.columns ?? []).map((column) => ({
             id: column.id || "",
             title: column.title,
