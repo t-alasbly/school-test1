@@ -63,13 +63,13 @@ function BehaviorPicker({
   onPick,
   onClose,
 }: {
-  items: { id: number; name: string; degree?: number; procedures?: string[][] }[];
+  items: { id: number; name: string; degree?: number; procedures?: string[][]; branches?: string[] }[];
   audience: "students" | "staff";
   degree: number;
   currentId: number | null;
   onAudience: (next: "students" | "staff") => void;
   onDegree: (degree: number) => void;
-  onPick: (id: number) => void;
+  onPick: (id: number, branch?: string) => void;
   onClose: () => void;
 }) {
   const pool = items.filter((item) => isStaffViolation(item) === (audience === "staff") && item.name !== "أخرى");
@@ -79,9 +79,12 @@ function BehaviorPicker({
   const list = pool.filter((item) => (item.degree ?? 1) === active);
   const deduct: Record<number, string> = { 1: tr("حسم 1"), 2: tr("حسم 2"), 3: tr("حسم 3"), 4: tr("حسم 10"), 5: tr("حسم 15") };
   const [draft, setDraft] = useState<number | null>(currentId);
+  const [branch, setBranch] = useState("");
   const [ask, setAsk] = useState(false);
   const [help, setHelp] = useState<number | null>(null);
   const helpLadder = help == null ? [] : procedureLadder(help);
+  const picked = [...list, other].find((item) => item?.id === draft);
+  const branches = picked?.branches ?? [];
   return (
     <>
     <Dialog open onOpenChange={(next) => { if (!next) setAsk(true); }}>
@@ -154,18 +157,32 @@ function BehaviorPicker({
             </section>
           ) : null}
           {list.map((bt) => (
-            <button
+            <div
               key={bt.id}
-              type="button"
-              onClick={() => setDraft(bt.id)}
               className={cn(
                 "min-h-10 w-full rounded-2xl border-2 px-3 py-3 text-right",
                 degreeTone(bt.degree ?? 1),
                 draft === bt.id ? "ring-2 ring-offset-1 ring-current" : "",
               )}
             >
-              <p className="text-base font-semibold leading-7">{tr(bt.name)}</p>
-            </button>
+              <button type="button" className="w-full text-right" onClick={() => { setDraft(bt.id); setBranch(""); }}>
+                <p className="text-base font-semibold leading-7">{tr(bt.name)}</p>
+              </button>
+              {draft === bt.id && bt.branches?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {bt.branches.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setBranch(option)}
+                      className={cn("rounded-full border px-3 py-1 text-sm font-semibold", branch === option ? "border-current bg-white" : "border-transparent bg-white/70")}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
           {audience === "students" && active === 1 && other ? (
             <button
@@ -178,7 +195,7 @@ function BehaviorPicker({
           ) : null}
           {list.length === 0 ? <p className="px-2 py-6 text-center text-sm text-fg-muted">{tr("لا مخالفات في هذه الدرجة.")}</p> : null}
         </div>
-        <Button type="button" className="shrink-0" disabled={draft == null} onClick={() => draft != null && onPick(draft)}>
+        <Button type="button" className="shrink-0" disabled={draft == null || (branches.length > 0 && !branch)} onClick={() => draft != null && onPick(draft, branch)}>
           {tr("اعتماد التعديل")}
         </Button>
       </DialogContent>
@@ -600,6 +617,7 @@ export function NoteComposer({
   const [type, setType] = useState<NoteType | null>(null);
   const [shortcut, setShortcut] = useState<NoteType | null>(null);
   const [behaviorTypeId, setBehaviorTypeId] = useState<number | null>(null);
+  const [behaviorBranch, setBehaviorBranch] = useState("");
   const [behaviorStep, setBehaviorStep] = useState<"choose" | "review">("choose");
   const [exitKind, setExitKind] = useState<ExitKind | null>(null);
   const grantExit = useGrantExitPermit();
@@ -706,6 +724,7 @@ export function NoteComposer({
 
   function composeDetails() {
     const extra = details.trim();
+    const branch = behaviorBranch.trim();
     const minutes = Number(lateMinutes);
     const late = shortcut === "late" && Number.isFinite(minutes) && minutes > 0 ? lateMinutesLine(minutes) : "";
     if (many && shared) {
@@ -713,12 +732,12 @@ export function NoteComposer({
       const text = late ? `${late}. ${base}` : base;
       return text.length > 500 ? text.slice(0, 500) : text;
     }
-    const text = [late, extra].filter(Boolean).join(". ");
+    const text = [late, branch && !extra.startsWith(branch) ? branch : "", extra].filter(Boolean).join(". ");
     return text.length > 500 ? text.slice(0, 500) : text;
   }
 
   function sharedDetails() {
-    const extra = details.trim();
+    const extra = [behaviorBranch.trim(), details.trim()].filter(Boolean).join(". ");
     const names = targets.map((item) => item.studentName);
     let shown = [...names];
     const build = (list: string[], more: number) => {
@@ -738,6 +757,9 @@ export function NoteComposer({
       if (!type) throw new Error(tr("اختر نوع الملاحظة"));
       if (targets.length === 0) throw new Error(tr("لم يُحدد طلاب"));
       if (type === "behavior" && !behaviorTypeId) throw new Error(tr("اختر نوع المخالفة السلوكية"));
+      if (type === "behavior" && (selectedBehavior?.branches?.length ?? 0) > 0 && !behaviorBranch.trim()) {
+        throw new Error(tr("اختر خيار الفرع"));
+      }
       if (otherBehavior && details.trim().length < 2) throw new Error(tr("صف المخالفة يدوياً"));
       if (shortcut === "late" && !(Number(lateMinutes) >= 1)) throw new Error(tr("أدخل دقائق التأخر عن بداية الحصة"));
       const noteDetails = composeDetails();
@@ -895,6 +917,7 @@ export function NoteComposer({
     setType(null);
     setShortcut(null);
     setBehaviorTypeId(null);
+    setBehaviorBranch("");
     setBehaviorStep("choose");
     setExitKind(null);
     setPicking(false);
@@ -937,6 +960,7 @@ export function NoteComposer({
     targets.length > 0 &&
     type != null &&
     (type !== "behavior" || behaviorTypeId != null) &&
+    (type !== "behavior" || !(selectedBehavior?.branches?.length) || Boolean(behaviorBranch.trim())) &&
     (!otherBehavior || details.trim().length >= 2) &&
     (shortcut !== "late" || Number(lateMinutes) >= 1) &&
     (shortcut !== "homework" || (studyId !== "" && (studyId !== "other" || details.trim().length >= 2) && (!studyNeedsDeduction || Number(deduction) > 0) && !studyPreview.isFetching)) &&
@@ -1238,6 +1262,7 @@ export function NoteComposer({
                 className={cn("w-full rounded-2xl border-2 px-3 py-3 text-right", degreeTone(selectedBehavior.degree ?? 1))}
               >
                 <p className="text-base font-semibold leading-7">{tr(selectedBehavior.name)}</p>
+                {behaviorBranch ? <p className="text-sm font-semibold">{behaviorBranch}</p> : null}
                 <p className="text-sm font-medium">
                   {degreeLabel(selectedBehavior.degree)}
                   {isStaffViolation(selectedBehavior) ? tr(" · تجاه المعلمين ومن في حكمهم") : ""}
@@ -1411,9 +1436,10 @@ export function NoteComposer({
             setDegreePick(next === "staff" ? 4 : 1);
           }}
           onDegree={setDegreePick}
-          onPick={(id) => {
+          onPick={(id, branch) => {
             setType("behavior");
             setBehaviorTypeId(id);
+            setBehaviorBranch(branch ?? "");
             setPicking(false);
             setBehaviorStep("review");
           }}

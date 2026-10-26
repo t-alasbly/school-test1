@@ -424,6 +424,9 @@ async function ensureCatalog(sql, schoolId, table, defaults) {
 	]);
 }
 async function ensureBehaviorTypes(sql, schoolId) {
+	try {
+		await sql.query(`alter table behavior_types add column if not exists branches jsonb not null default '[]'::jsonb`);
+	} catch {}
 	const existing = await sql.query(`select id, name, coalesce(degree, 1)::int as degree, procedures
      from behavior_types where school_id = $1`, [schoolId]);
 	const byName = new Map(existing.map((row) => [row.name, row]));
@@ -550,6 +553,17 @@ function mapCatalog(rows) {
 		degree: r.degree
 	}));
 }
+function parseBranches(raw) {
+	const value = typeof raw === "string" ? (() => {
+		try {
+			return JSON.parse(raw);
+		} catch {
+			return [];
+		}
+	})() : raw;
+	if (!Array.isArray(value)) return [];
+	return value.map((item) => String(item ?? "").trim()).filter(Boolean).slice(0, 12);
+}
 function mapBehaviorTypes(rows) {
 	return rows.map((r) => ({
 		id: r.id,
@@ -557,7 +571,8 @@ function mapBehaviorTypes(rows) {
 		sortOrder: r.sort_order,
 		active: r.active,
 		degree: r.degree,
-		procedures: parseProcedures(r.procedures, r.degree)
+		procedures: parseProcedures(r.procedures, r.degree),
+		branches: parseBranches(r.branches)
 	}));
 }
 async function listCatalogRows(sql, schoolId, table, activeOnly = false) {
@@ -568,10 +583,10 @@ async function listCatalogRows(sql, schoolId, table, activeOnly = false) {
 }
 async function listBehaviorTypeRows(sql, schoolId, activeOnly = false) {
 	const sqlText = activeOnly ? `select id, name, sort_order, active, coalesce(degree, 1)::int as degree,
-              procedures
+              procedures, branches
          from behavior_types
          where school_id = $1 and active = true order by sort_order, id` : `select id, name, sort_order, active, coalesce(degree, 1)::int as degree,
-              procedures
+              procedures, branches
          from behavior_types
          where school_id = $1 order by sort_order, id`;
 	return mapBehaviorTypes(await sql.query(sqlText, [schoolId]));
@@ -3033,13 +3048,22 @@ export const updateBehaviorType = createServerFn({ method: "POST" }).middleware(
 	name: string().min(2).max(300).optional(),
 	active: boolean().optional(),
 	degree: number().int().min(1).max(5).optional(),
-	procedures: array(array(string().max(220)).max(20)).max(8).optional()
-}).refine((d) => d.name !== void 0 || d.active !== void 0 || d.degree !== void 0 || d.procedures !== void 0, { message: "لا يوجد تعديل" })).handler(async ({ context, data }) => {
+	procedures: array(array(string().max(220)).max(20)).max(8).optional(),
+	branches: array(string().max(80)).max(12).optional()
+}).refine((d) => d.name !== void 0 || d.active !== void 0 || d.degree !== void 0 || d.procedures !== void 0 || d.branches !== void 0, { message: "لا يوجد تعديل" })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	if (data.procedures) {
 		const cleaned = data.procedures.map((stage) => stage.map((item) => item.trim()).filter(Boolean)).filter((stage) => stage.length);
 		if (cleaned.length) await sql.query(`update behavior_types set procedures = $1::jsonb where id = $2 and school_id = $3`, [
 			JSON.stringify(cleaned),
+			data.id,
+			staff.school_id
+		]);
+	}
+	if (data.branches !== void 0) {
+		const branches = [...new Set(data.branches.map((item) => item.trim()).filter(Boolean))].slice(0, 12);
+		await sql.query(`update behavior_types set branches = $1::jsonb where id = $2 and school_id = $3`, [
+			JSON.stringify(branches),
 			data.id,
 			staff.school_id
 		]);

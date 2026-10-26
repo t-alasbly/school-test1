@@ -116,6 +116,7 @@ export type CatalogItem = {
   active: boolean;
   degree?: number;
   procedures?: string[][];
+  branches?: string[];
 };
 
 export type BehaviorType = CatalogItem & { procedures: string[][] };

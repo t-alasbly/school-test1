@@ -294,6 +294,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
 
   const selected = behaviorTypes.find((b) => b.id === Number(behaviorTypeId));
   const other = Boolean(selected && isOtherChoice(selected.name));
+  const needsBranch = Boolean(selected?.branches?.length) && !selected!.branches!.some((option) => details.includes(option));
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -336,6 +337,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
 
   const ready =
     (type !== "behavior" || behaviorTypeId !== "") &&
+    !needsBranch &&
     (!other || details.trim().length >= 2);
 
   return (
@@ -359,6 +361,7 @@ function EditNoteButton({ note }: { note: EditableNote }) {
                 onAudience={(next) => { setAudience(next); setDegree(next === "staff" ? 4 : 1); }}
                 onDegree={setDegree}
                 onSelect={(id) => setBehaviorTypeId(id)}
+                onBranch={(text) => setDetails((current) => current.includes(text) ? current : text)}
               />
             ) : (
             <div className="space-y-1.5">
@@ -478,14 +481,16 @@ function BehaviorEditCatalog({
   onAudience,
   onDegree,
   onSelect,
+  onBranch,
 }: {
-  items: { id: number; name: string; degree?: number; procedures?: string[][] }[];
+  items: { id: number; name: string; degree?: number; procedures?: string[][]; branches?: string[] }[];
   audience: "students" | "staff";
   degree: number;
   selectedId: number | null;
   onAudience: (next: "students" | "staff") => void;
   onDegree: (degree: number) => void;
   onSelect: (id: number) => void;
+  onBranch: (text: string) => void;
 }) {
   const pool = items.filter((item) => isStaffViolation(item) === (audience === "staff") && item.name !== "أخرى");
   const other = items.find((item) => item.name === "أخرى");
@@ -524,9 +529,20 @@ function BehaviorEditCatalog({
         </section>
       ) : null}
       {list.map((item) => (
-        <button key={item.id} type="button" onClick={() => onSelect(item.id)} className={cn("min-h-10 w-full rounded-2xl border-2 px-3 py-2 text-right", degreeTone(item.degree ?? 1), selectedId === item.id && "ring-2 ring-offset-1 ring-current")}>
-          <p className="text-sm font-semibold">{item.name}</p>
-        </button>
+        <div key={item.id} className={cn("min-h-10 w-full rounded-2xl border-2 px-3 py-2 text-right", degreeTone(item.degree ?? 1), selectedId === item.id && "ring-2 ring-offset-1 ring-current")}>
+          <button type="button" className="w-full text-right" onClick={() => onSelect(item.id)}>
+            <p className="text-sm font-semibold">{item.name}</p>
+          </button>
+          {selectedId === item.id && item.branches?.length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {item.branches.map((option) => (
+                <button key={option} type="button" onClick={() => onBranch(option)} className="rounded-full border bg-white px-3 py-1 text-xs font-semibold">
+                  {option}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       ))}
       {audience === "students" && active === 1 && other ? (
         <button type="button" onClick={() => onSelect(other.id)} className={cn("min-h-10 w-full rounded-2xl border-2 border-border bg-card px-3 text-right", selectedId === other.id && "ring-2 ring-primary")}>

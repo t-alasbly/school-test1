@@ -173,6 +173,8 @@ function ViolationCard({
   const [stages, setStages] = useState<string[][]>(
     item.procedures?.length ? item.procedures.map((s) => [...s]) : procedureLadder(item.degree),
   );
+  const [branches, setBranches] = useState<string[]>(item.branches ?? []);
+  const [branchDraft, setBranchDraft] = useState("");
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -182,6 +184,7 @@ function ViolationCard({
           name,
           degree: Number(degree),
           procedures: stages,
+          branches,
         },
       }),
     onSuccess: () => {
@@ -207,11 +210,12 @@ function ViolationCard({
           <span className="block font-medium">{tr(item.name)}</span>
           <span className="text-xs text-fg-muted">
             {(item.procedures?.length || procedureLadder(item.degree).length)} إجراءات متدرجة
+            {item.branches?.length ? ` · ${item.branches.length} ${tr("خيارات في الفرع")}` : ""}
           </span>
         </button>
         <Badge tone={item.active ? "ok" : "default"}>{item.active ? tr("نشط") : tr("موقوف")}</Badge>
         <Button size="sm" variant="secondary" onClick={onToggle}>
-          {open ? tr("إخفاء") : tr("الإجراءات")}
+          {open ? tr("إخفاء") : tr("تعديل")}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => toggle.mutate()}>
           {item.active ? tr("إيقاف") : tr("تفعيل")}
@@ -228,6 +232,44 @@ function ViolationCard({
               <option value="4">{tr("الرابعة")}</option>
               <option value="5">{tr("الخامسة")}</option>
             </Select>
+          </div>
+          <div className="space-y-2 rounded-[var(--radius-md)] border border-border bg-bg p-3">
+            <p className="text-sm font-semibold">{tr("الفرع الثانوي")}</p>
+            <p className="text-xs leading-5 text-fg-muted">{tr("الخيارات تابعة لهذه المخالفة. عند التسجيل يختار المعلم خيارًا واحدًا، وتبقى الدرجة والإجراءات كما هي.")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={branchDraft}
+                onChange={(e) => setBranchDraft(e.target.value)}
+                placeholder={tr("خيار الفرع… مثل: داخل الفصل")}
+                className="min-w-48 flex-1"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={branchDraft.trim().length < 2 || branches.length >= 12}
+                onClick={() => {
+                  const next = branchDraft.trim();
+                  if (!next || branches.includes(next)) return;
+                  setBranches([...branches, next]);
+                  setBranchDraft("");
+                }}
+              >
+                {tr("إضافة خيار")}
+              </Button>
+            </div>
+            {branches.length ? (
+              <ul className="space-y-1">
+                {branches.map((option) => (
+                  <li key={option} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 text-sm">{option}</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setBranches(branches.filter((item) => item !== option))}>{tr("حذف")}</Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-fg-muted">{tr("لا يوجد فرع ثانوي. المخالفة تُسجَّل باسمها كما هي.")}</p>
+            )}
           </div>
           <div className="space-y-3">
             {stages.map((stage, i) => (
