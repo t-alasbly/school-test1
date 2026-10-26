@@ -126,7 +126,7 @@ function HealthPage() {
                     on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg-elevated text-fg-muted",
                   )}
                 >
-                  {item.name}
+                  {tr(item.name)}
                 </button>
               );
             })}

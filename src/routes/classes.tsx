@@ -257,7 +257,7 @@ function ClassesBody() {
                 {student.healthNote ? (
                   <span className="inline-flex max-w-full items-center gap-1.5">
                     <Badge tone="warn" className="shrink-0">{tr("ملاحظة صحية")}</Badge>
-                    <span className="text-xs font-medium leading-5 text-warn">{student.healthNote}</span>
+                    <span className="text-xs font-medium leading-5 text-warn">{tr(student.healthNote)}</span>
                   </span>
                 ) : null}
                 <DayName studentId={student.id} className="min-w-0 text-base font-semibold">{studentLabel(locale, student.name)}</DayName>

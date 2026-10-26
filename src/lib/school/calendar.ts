@@ -1,4 +1,11 @@
+import { activeLocale } from "./i18n-core";
+
 export type CalendarKind = "hijri" | "gregorian";
+
+function dateLocale(calendar: CalendarKind) {
+  if (activeLocale === "en") return calendar === "hijri" ? "en-GB-u-ca-islamic-umalqura" : "en-GB";
+  return calendar === "hijri" ? "ar-SA-u-ca-islamic-umalqura" : "ar-EG-u-ca-gregory";
+}
 
 export function parseCalendar(value: unknown): CalendarKind {
   return value === "gregorian" ? "gregorian" : "hijri";
@@ -23,7 +30,7 @@ export function shiftIso(day: string, delta: number): string {
 
 export function weekdayAr(iso: string): string {
   const d = dateFromIso(iso);
-  return new Intl.DateTimeFormat("ar-EG", { weekday: "long" }).format(d);
+  return new Intl.DateTimeFormat(activeLocale === "en" ? "en-GB" : "ar-EG", { weekday: "long" }).format(d);
 }
 
 function cleanPart(value: string): string {
@@ -35,7 +42,7 @@ function cleanPart(value: string): string {
 }
 
 function formatCalendar(d: Date, calendar: CalendarKind, compact: boolean): string {
-  const locale = calendar === "hijri" ? "ar-SA-u-ca-islamic-umalqura" : "ar-EG-u-ca-gregory";
+  const locale = dateLocale(calendar);
   const parts = new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: compact ? "numeric" : "long",
@@ -49,19 +56,19 @@ function formatCalendar(d: Date, calendar: CalendarKind, compact: boolean): stri
 
 export function dateParts(iso: string, calendar: CalendarKind): { day: string; month: string; year: string; era: string } {
   const d = dateFromIso(iso);
-  const locale = calendar === "hijri" ? "ar-SA-u-ca-islamic-umalqura" : "ar-EG-u-ca-gregory";
+  const locale = dateLocale(calendar);
   const parts = new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric" }).formatToParts(d);
   return {
     day: cleanPart(parts.find((p) => p.type === "day")?.value ?? ""),
     month: cleanPart(parts.find((p) => p.type === "month")?.value ?? ""),
     year: cleanPart(parts.find((p) => p.type === "year")?.value ?? ""),
-    era: calendar === "hijri" ? "هـ" : "م",
+    era: calendar === "hijri" ? (activeLocale === "en" ? "AH" : "هـ") : (activeLocale === "en" ? "CE" : "م"),
   };
 }
 
 export function formatPrimaryDate(iso: string, calendar: CalendarKind, compact = false): string {
   const d = dateFromIso(iso);
-  const era = calendar === "hijri" ? "هـ" : "م";
+  const era = calendar === "hijri" ? (activeLocale === "en" ? "AH" : "هـ") : (activeLocale === "en" ? "CE" : "م");
   return `${formatCalendar(d, calendar, compact)} ${era}`;
 }
 
@@ -77,7 +84,7 @@ export function formatToday(calendar: CalendarKind): string {
 export function formatStampCalendar(iso: string, calendar: CalendarKind): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const time = new Intl.DateTimeFormat("ar-EG", {
+  const time = new Intl.DateTimeFormat(activeLocale === "en" ? "en-GB" : "ar-EG", {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);

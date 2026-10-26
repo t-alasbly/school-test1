@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tr } from "@/lib/school/i18n";
+import { activeLocale } from "@/lib/school/i18n-core";
 import { grantExitPermit, listActiveExitPermits } from "@/lib/school/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ export type ExitPermitRow = { studentId: number; studentName?: string; kind: str
 export function permitClock(iso: string) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("ar-SA", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Riyadh" }).format(date);
+  return new Intl.DateTimeFormat(activeLocale === "en" ? "en-GB" : "ar-SA", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Riyadh" }).format(date);
 }
 
 export function activeExitPermits(rows: ExitPermitRow[] | undefined) {

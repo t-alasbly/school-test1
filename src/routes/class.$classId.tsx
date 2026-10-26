@@ -200,7 +200,7 @@ function ClassBody() {
       </div>
       {lessonFromTable ? (
         <p className="rounded-[var(--radius-md)] bg-primary/10 px-3 py-2 text-sm font-semibold">
-          {tr("مادة هذه الحصة")}: {lessonFromTable}
+          {tr("مادة هذه الحصة")}: {tr(lessonFromTable)}
         </p>
       ) : null}
       <div className="flex flex-wrap gap-1.5">
@@ -293,7 +293,7 @@ function ClassBody() {
                         <ExitPermitBadge studentId={student.id} />
                       </span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                        {student.healthNote ? <span className="rounded bg-fuchsia-200 px-1.5 py-0.5 text-[11px] font-bold text-fuchsia-900">{student.healthNote}</span> : null}
+                        {student.healthNote ? <span className="rounded bg-fuchsia-200 px-1.5 py-0.5 text-[11px] font-bold text-fuchsia-900">{tr(student.healthNote)}</span> : null}
                         {allowFollow ? chips.map((tap) => (
                           <span key={tap.label} className={cn("rounded px-1.5 py-0.5 text-[11px] font-bold", tap.points < 0 ? "bg-orange-500 text-white" : "bg-emerald-600 text-white")}>
                             {tap.label} {tap.points > 0 ? "+" : ""}{tap.points}
@@ -301,7 +301,7 @@ function ClassBody() {
                         )) : null}
                         {allowFollow ? marks.map((mark) => (
                           <span key={mark.subject || "total"} className={cn("text-sm font-bold tabular-nums", mark.total < 0 ? "text-orange-700" : "text-emerald-700")}>
-                            {marks.length > 1 && mark.subject ? `${mark.subject} ` : `${tr("المجموع")} `}
+                            {marks.length > 1 && mark.subject ? `${tr(mark.subject)} ` : `${tr("المجموع")} `}
                             {mark.total > 0 ? "+" : ""}{mark.total}
                           </span>
                         )) : null}

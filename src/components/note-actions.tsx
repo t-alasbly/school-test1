@@ -1020,7 +1020,7 @@ export function NoteComposer({
           <DialogDescription>
             {many
               ? namePreview
-              : `${showName(targets[0]?.studentName ?? "")}${staff.subject ? ` · ${staff.subject}` : ""}`}
+              : `${showName(targets[0]?.studentName ?? "")}${staff.subject ? ` · ${tr(staff.subject)}` : ""}`}
           </DialogDescription>
           {many ? (
             <p className="-mt-1 mb-2 text-xs text-fg-muted">
@@ -1106,7 +1106,7 @@ export function NoteComposer({
 
         {lockedSubject && !pickSubject ? (
           <div className="mb-2 flex items-center justify-between gap-2 rounded-[var(--radius-md)] bg-primary/10 px-3 py-2">
-            <p className="text-sm font-semibold">{tr("المادة")}: {lockedSubject}</p>
+            <p className="text-sm font-semibold">{tr("المادة")}: {tr(lockedSubject)}</p>
             {subjects.length > 1 ? (
               <button type="button" className="text-xs font-medium text-primary" onClick={() => setPickSubject(true)}>
                 {tr("تغيير المادة")}
@@ -1114,7 +1114,7 @@ export function NoteComposer({
             ) : null}
           </div>
         ) : subjects.length === 1 ? (
-          <p className="mb-2 text-sm font-semibold">{tr("المادة")}: {subjects[0]}</p>
+          <p className="mb-2 text-sm font-semibold">{tr("المادة")}: {tr(subjects[0])}</p>
         ) : subjects.length > 1 ? (
           <div className="mb-2 space-y-1">
             <p className="text-xs text-fg-muted">{tr("اختر المادة. لا تُحدَّد واحدة مسبقاً.")}</p>
@@ -1129,7 +1129,7 @@ export function NoteComposer({
                     lessonSubject === name ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg",
                   )}
                 >
-                  {name}
+                  {tr(name)}
                 </button>
               ))}
             </div>
