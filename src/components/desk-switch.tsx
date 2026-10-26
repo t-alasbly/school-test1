@@ -51,7 +51,7 @@ export function DeskSwitch() {
         <option value="">{actor.role === "admin" ? tr("المستخدم الرئيسي") : tr("مكتبي")}</option>
         {list.map((person) => (
           <option key={person.userId} value={person.userId}>
-            {person.displayName} · {ROLE_LABEL[person.role as keyof typeof ROLE_LABEL] || person.role}
+            {person.displayName} · {tr(ROLE_LABEL[person.role as keyof typeof ROLE_LABEL] || person.role)}
           </option>
         ))}
       </select>

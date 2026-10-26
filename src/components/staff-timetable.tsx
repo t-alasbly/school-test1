@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getMyTimetable, getTeacherPins, saveMyTimetable } from "@/lib/school/api";
 import { parseSubjects, scheduleFor } from "@/lib/school/constants";
-import { tr } from "@/lib/school/i18n";
+import { placeLabel, tr } from "@/lib/school/i18n";
 import type { PeriodSlot } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
 import { cn } from "@/lib/utils";
@@ -39,10 +39,14 @@ function cellKey(day: number, periodKey: string) {
   return `${day}:${periodKey}`;
 }
 
+function periodWord(label: string) {
+  return tr(label.replace(/^الحصة\s+/, ""));
+}
+
 function reminderText(kind: "now" | "next", slot: PeriodSlot, cell: Cell) {
-  const bits = [cell.classLabel, cell.place ? `في ${cell.place}` : ""].filter(Boolean).join(" ");
-  const when = `${slot.label} (${slot.from}–${slot.to})`;
-  const lead = kind === "now" ? "لديك حصة" : "الحصة القادمة: لديك حصة";
+  const bits = [placeLabel(cell.classLabel), cell.place].filter(Boolean).join(" ");
+  const when = `${tr(slot.label)} (${slot.from}–${slot.to})`;
+  const lead = kind === "now" ? tr("لديك حصة") : tr("الحصة القادمة: لديك حصة");
   return bits ? `${lead} ${bits} — ${when}` : "";
 }
 
@@ -282,7 +286,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             {subjects.length > 1
               ? subjects.map((name) => (
                   <span key={name} className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                    {name} {cells.filter((cell) => cell.classId && cell.subject === name).length}
+                    {tr(name)} {cells.filter((cell) => cell.classId && cell.subject === name).length}
                   </span>
                 ))
               : null}
@@ -305,7 +309,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         live ? "bg-danger-soft text-danger" : "bg-muted",
                       )}
                     >
-                      <span className="block text-xs">{slot.label.replace("الحصة ", "")}</span>
+                      <span className="block text-xs">{periodWord(slot.label)}</span>
                       <span className="block text-[10px] font-normal" dir="ltr">
                         {slot.from}–{slot.to}
                       </span>
@@ -323,7 +327,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                       item.id === schoolToday ? "bg-ok-soft" : "bg-card",
                     )}
                   >
-                    {item.name}
+                    {tr(item.name)}
                   </th>
                   {slots.map((slot) => {
                     const cell = cellAt(item.id, slot.key);
@@ -339,10 +343,10 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                             cell?.classLabel ? "bg-primary/10 font-semibold text-primary" : "text-fg-muted",
                           )}
                         >
-                          <span>{cell?.classLabel || (editing ? tr("اختر") : "—")}</span>
+                          <span>{cell?.classLabel ? placeLabel(cell.classLabel) : (editing ? tr("اختر") : "—")}</span>
                           {cell?.classLabel ? (
                             <span className={cn("mt-0.5 font-normal", cell.subject ? "text-fg" : "text-warn")}>
-                              {cell.subject || (subjects.length === 1 ? subjects[0] : editing ? tr("اختر المادة") : "")}
+                              {cell.subject ? tr(cell.subject) : (subjects.length === 1 ? tr(subjects[0]) : editing ? tr("اختر المادة") : "")}
                             </span>
                           ) : null}
                           {cell?.place ? <span className="mt-0.5 font-normal text-fg-muted">{cell.place}</span> : null}
@@ -364,7 +368,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             ) : (
               <div className="flex" dir="rtl">
                 <div className="sticky right-0 z-10 flex w-16 shrink-0 items-center justify-center border-l border-border bg-ok-soft px-1 text-center text-sm font-semibold">
-                  {todayName}
+                  {tr(todayName)}
                 </div>
                 <div className="flex min-w-0 flex-1 snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-2 py-3">
                   {mineToday.length === 0 ? (
@@ -388,14 +392,14 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         )}
                       >
                         <span className="text-[10px] font-medium">
-                          {slot.label.replace("الحصة ", "")}
+                          {periodWord(slot.label)}
                           {live ? ` · ${tr("الآن")}` : focused && upcomingSlot?.key === slot.key ? ` · ${tr("القادمة")}` : ""}
                         </span>
                         <span className="text-[10px]" dir="ltr">{slot.from}–{slot.to}</span>
-                        <span className="mt-1 text-sm font-semibold leading-tight">{cell?.classLabel || "—"}</span>
+                        <span className="mt-1 text-sm font-semibold leading-tight">{cell?.classLabel ? placeLabel(cell.classLabel) : "—"}</span>
                         {cell?.subject || subjects.length === 1 ? (
                           <span className={cn("text-[10px] font-medium", live ? "text-danger" : "text-fg-muted")}>
-                            {cell?.subject || subjects[0]}
+                            {tr(cell?.subject || subjects[0])}
                           </span>
                         ) : null}
                         {cell?.place ? <span className={cn("mt-0.5 text-[10px]", live ? "text-danger/80" : "text-fg-muted")}>{cell.place}</span> : null}
@@ -408,7 +412,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             <div className="space-y-0 border-t border-border">
               {DAYS.filter((item) => item.id !== schoolToday).map((item) => (
                 <div key={item.id} className="flex items-center gap-2 border-b border-border px-3 py-1 last:border-b-0">
-                  <span className="w-14 shrink-0 text-[11px] font-medium text-fg-muted">{item.name}</span>
+                  <span className="w-14 shrink-0 text-[11px] font-medium text-fg-muted">{tr(item.name)}</span>
                   <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
                     {slots.map((slot) => {
                       const cell = cellAt(item.id, slot.key);
@@ -420,8 +424,8 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                           onClick={() => openClass(cell.classId, cell.subject, slot.key)}
                           className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted"
                         >
-                          {slot.label.replace("الحصة ", "")} {cell.classLabel}
-                          {cell.subject || subjects.length === 1 ? ` · ${cell.subject || subjects[0]}` : ""}
+                          {periodWord(slot.label)} {placeLabel(cell.classLabel)}
+                          {cell.subject || subjects.length === 1 ? ` · ${tr(cell.subject || subjects[0])}` : ""}
                         </button>
                       );
                     })}
@@ -434,7 +438,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
         {editing && picked && activeDay && activeSlot ? (
           <div className="space-y-3 border-t border-border px-3 py-3">
             <p className="text-sm font-medium">
-              {tr("تعديل")} — {activeDay.name} — {activeSlot.label}
+              {tr("تعديل")} — {tr(activeDay.name)} — {tr(activeSlot.label)}
               <span className="mr-2 text-xs font-normal text-fg-muted" dir="ltr">
                 {activeSlot.from}–{activeSlot.to}
               </span>
@@ -458,7 +462,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                       on ? "border-primary bg-primary text-primary-fg" : "border-border bg-bg",
                     )}
                   >
-                    {item.label}
+                    {placeLabel(item.label)}
                   </button>
                 );
               })}

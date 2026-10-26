@@ -308,7 +308,7 @@ function LiveClassesOption({ on }: { on: boolean }) {
           {days.map(([id, name]) => <option key={id} value={id}>{t(name)}</option>)}
         </Select>
         <Select className="h-8 min-w-0 flex-1" value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>
-          {slots.map((slot) => <option key={slot.key} value={slot.key}>{slot.label.replace("الحصة ", "")}</option>)}
+          {slots.map((slot) => <option key={slot.key} value={slot.key}>{t(slot.label.replace(/^الحصة\s+/, ""))}</option>)}
         </Select>
         <button
           type="button"
@@ -327,12 +327,12 @@ function LiveClassesOption({ on }: { on: boolean }) {
             .sort((a, b) => Number(sectionNo(a.classLabel)) - Number(sectionNo(b.classLabel)));
           return (
             <div key={stage.id} className={cn("rounded-xl border px-2 py-1.5", tone.box)}>
-              <p className={cn("mb-1 text-xs font-semibold", tone.title)}>{stageTitle(stage.name)}</p>
+              <p className={cn("mb-1 text-xs font-semibold", tone.title)}>{t(stageTitle(stage.name))}</p>
               {items.length === 0 ? <p className="text-[11px] text-fg-subtle">{t("لا حصص")}</p> : (
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {items.map((item) => (
                     <div key={`${item.classLabel}-${item.teacher}`} className="rounded-xl border border-white/80 bg-white/80 px-2 py-1.5">
-                      <p className="text-xs font-bold">{sectionNo(item.classLabel)} · {item.subject || "—"}</p>
+                      <p className="text-xs font-bold">{sectionNo(item.classLabel)} · {item.subject ? t(item.subject) : "—"}</p>
                       <p className="truncate text-[11px] text-fg-muted">{shortTeacher(item.teacher)}</p>
                     </div>
                   ))}
