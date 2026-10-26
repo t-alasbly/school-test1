@@ -6987,7 +6987,21 @@ var gradeFormatPayload = object({
 			left: number().min(0).max(40)
 		}).optional(),
 		teacherSign: boolean().optional(),
-		principalSign: boolean().optional()
+		principalSign: boolean().optional(),
+		title: string().max(160).optional(),
+		schoolYear: string().max(40).optional(),
+		exam: object({
+			row: number().min(4).max(18).optional(),
+			seq: number().min(6).max(30).optional(),
+			name: number().min(24).max(90).optional(),
+			col: number().min(8).max(40).optional()
+		}).optional(),
+		final: object({
+			row: number().min(4).max(18).optional(),
+			seq: number().min(6).max(30).optional(),
+			name: number().min(24).max(90).optional(),
+			col: number().min(8).max(40).optional()
+		}).optional()
 	}).optional()
 });
 function cleanFormat(data) {
@@ -7051,6 +7065,12 @@ function cleanSheetLayout(layout) {
 		bottom: num(layout.margins.bottom, 0, 40) ?? 12,
 		left: num(layout.margins.left, 0, 40) ?? 8
 	} : undefined;
+	const page = (value) => value && typeof value === "object" ? {
+		row: num(value.row, 4, 18),
+		seq: num(value.seq, 6, 30),
+		name: num(value.name, 24, 90),
+		col: num(value.col, 8, 40)
+	} : undefined;
 	return {
 		recordRow: num(layout.recordRow, 4, 18),
 		gradeRow: num(layout.gradeRow, 4, 18),
@@ -7060,7 +7080,11 @@ function cleanSheetLayout(layout) {
 		font: num(layout.font, 10, 22),
 		margins,
 		teacherSign: typeof layout.teacherSign === "boolean" ? layout.teacherSign : undefined,
-		principalSign: typeof layout.principalSign === "boolean" ? layout.principalSign : undefined
+		principalSign: typeof layout.principalSign === "boolean" ? layout.principalSign : undefined,
+		title: String(layout.title || "").trim().slice(0, 160) || undefined,
+		schoolYear: String(layout.schoolYear || "").trim().slice(0, 40) || undefined,
+		exam: page(layout.exam),
+		final: page(layout.final)
 	};
 }
 function designOf(payload) {

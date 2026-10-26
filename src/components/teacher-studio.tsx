@@ -1512,6 +1512,7 @@ export function ClassRecords({
   const [showTeacherSign, setShowTeacherSign] = useState(true);
   const [showPrincipalSign, setShowPrincipalSign] = useState(true);
   const [sheetTitle, setSheetTitle] = useState("");
+  const [schoolYear, setSchoolYear] = useState(() => new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date()));
   const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
   const [recordCols, setRecordCols] = useState<NonNullable<PeriodPlan["columns"]> | null>(null);
@@ -1597,6 +1598,22 @@ export function ClassRecords({
       setShowPrincipalSign(layout.principalSign);
       localStorage.setItem(`grade-sign-principal:${classId}`, layout.principalSign ? "1" : "0");
     }
+    if (layout.title) {
+      setSheetTitle(layout.title);
+      localStorage.setItem(`grade-title:${classId}:${subject}`, layout.title);
+    }
+    if (layout.schoolYear) {
+      setSchoolYear(layout.schoolYear);
+      localStorage.setItem(`grade-year:${classId}:${subject}`, layout.schoolYear);
+    }
+    if (layout.exam?.row) {
+      setExamLayout(layout.exam);
+      localStorage.setItem(`grade-page:${subject}:exam`, JSON.stringify(layout.exam));
+    }
+    if (layout.final?.row) {
+      setFinalLayout(layout.final);
+      localStorage.setItem(`grade-page:${subject}:final`, JSON.stringify(layout.final));
+    }
   }
   const periodReady = useRef(false);
   useEffect(() => {
@@ -1625,6 +1642,8 @@ export function ClassRecords({
     if (!data?.class) return;
     const saved = localStorage.getItem(`grade-title:${classId}:${subject}`);
     setSheetTitle(saved || "كشف أعمال السنة");
+    const savedYear = localStorage.getItem(`grade-year:${classId}:${subject}`);
+    if (savedYear) setSchoolYear(savedYear);
     const activeLayout = (yearPack?.formats ?? []).find((row) => row.id === yearPack?.activeFormatId)?.payload?.layout;
     if (!activeLayout) {
     const raw = localStorage.getItem(`grade-margins:${classId}:${subject}`);
@@ -1950,6 +1969,10 @@ export function ClassRecords({
         margins: sheetMargins,
         teacherSign: showTeacherSign,
         principalSign: showPrincipalSign,
+        title: sheetTitle,
+        schoolYear,
+        exam: examLayout,
+        final: finalLayout,
       },
       periods: periods.map((period) => ({
         title: period.title,
@@ -2361,7 +2384,7 @@ export function ClassRecords({
             return (
               <div className="basis-full rounded-[var(--radius-md)] border border-border bg-white p-2">
                 <p className="text-sm font-semibold">{applied ? tr("القالب الحالي") : tr("معاينة قبل التطبيق")}: {item.name}{item.ownerName ? ` — ${item.ownerName}` : ""}</p>
-                <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")} {item.payload.layout ? `${tr("ارتفاع الصف")} ${item.payload.layout.recordRow || item.payload.layout.gradeRow || "—"} · ${tr("عرض اسم الطالب")} ${item.payload.layout.name || "—"}` : ""}</p>
+                <p className="text-xs text-fg-muted">{tr("الدرجات المدخلة في القوالب السابقة تبقى محفوظة.")} {item.payload.layout ? `${tr("ارتفاع الصف")} ${item.payload.layout.recordRow || item.payload.layout.gradeRow || "—"} · ${tr("عرض اسم الطالب")} ${item.payload.layout.name || "—"} · ${tr("العام الدراسي")} ${item.payload.layout.schoolYear || "—"}` : ""}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {cols.map((col) => <span key={col.id || col.title} className="rounded border border-border px-2 py-0.5 text-xs">{col.title || tr("عمود")}{col.calc === "sum" ? ` (${tr("جمع")})` : col.calc === "avg" ? ` (${tr("متوسط")})` : ""}</span>)}
                 </div>
@@ -2727,7 +2750,7 @@ export function ClassRecords({
                 localStorage.setItem(`grade-title:${classId}:${subject}`, event.target.value);
               }}
             />
-            <div className="grid grid-cols-2 text-center text-[12px] sm:grid-cols-4">
+            <div className="grid grid-cols-2 text-center text-[12px] sm:grid-cols-5">
               {[
                 [tr("المادة"), data.subject || "—"],
                 [tr("الفصل"), data.class.label],
@@ -2739,6 +2762,17 @@ export function ClassRecords({
                   <p className="font-bold">{value}</p>
                 </div>
               ))}
+              <div className="border-t-2 border-[#1f4d45] px-2 py-1">
+                <p className="text-[10px] text-[#1f4d45]">{tr("العام الدراسي")}</p>
+                <input
+                  className="w-full border-0 bg-transparent text-center font-bold outline-none"
+                  value={schoolYear}
+                  onChange={(event) => {
+                    setSchoolYear(event.target.value);
+                    localStorage.setItem(`grade-year:${classId}:${subject}`, event.target.value);
+                  }}
+                />
+              </div>
             </div>
           </div>
         ) : null}
@@ -3296,6 +3330,10 @@ type SheetLayout = {
   margins?: { top: number; right: number; bottom: number; left: number };
   teacherSign?: boolean;
   principalSign?: boolean;
+  title?: string;
+  schoolYear?: string;
+  exam?: { row: number; seq: number; name: number; col: number };
+  final?: { row: number; seq: number; name: number; col: number };
 };
 
 function columnRef(column: FormatColumn) {
