@@ -5590,7 +5590,9 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 		where += ` and c.stage_id = $${params.length}`;
 	}
 	return { students: (await sql.query(`select s.id, s.name, s.class_id,
-      coalesce(nullif(s.parent_phone, ''), nullif(s.parent_phone_2, ''), '') as parent_phone,
+      coalesce(s.parent_phone, '') as parent_phone,
+      coalesce(s.parent_phone_2, '') as parent_phone_2,
+      coalesce(s.work_phone, '') as work_phone,
       coalesce(s.health_note, '') as health_note, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
      from students s
      join classes c on c.id = s.class_id
@@ -5605,6 +5607,8 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 		stageName: s.stage_name,
 		shortName: s.short_name,
 		parentPhone: revealPhone(staff, school, s.parent_phone),
+		parentPhone2: revealPhone(staff, school, s.parent_phone_2),
+		workPhone: revealPhone(staff, school, s.work_phone),
 		healthNote: s.health_note ?? "",
 		label: classLabel(s.short_name, s.class_name)
 	})) };

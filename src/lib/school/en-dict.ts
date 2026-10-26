@@ -315,6 +315,7 @@ export const EN_UI: Record<string, string> = {
   "قائمة الفصول": "Class list",
   "سجل الطالب": "Student record",
   "اتصال بولي الأمر": "Call the parent",
+  "اختيار رقم للاتصال": "Choose a number to call",
   "شعار المدرسة": "School logo",
   "اكتب رداً على هذه المراسلة…": "Write a reply…",
   "تعذر إرسال الرد": "Could not send the reply",

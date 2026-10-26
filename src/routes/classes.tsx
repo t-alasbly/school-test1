@@ -61,6 +61,8 @@ type RosterStudent = {
   shortName: string;
   label: string;
   parentPhone?: string;
+  parentPhone2?: string;
+  workPhone?: string;
   healthNote?: string;
 };
 
@@ -266,7 +268,7 @@ function ClassesBody() {
               </span>
               <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>
             </button>
-            <CallParent phones={[student.parentPhone]} />
+            <CallParent phones={[student.parentPhone, student.parentPhone2, student.workPhone]} />
             <StudentQuickActions
               studentId={student.id}
               studentName={student.name}
