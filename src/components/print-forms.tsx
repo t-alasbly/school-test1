@@ -617,6 +617,19 @@ function actionDisplay(action) {
   const parsed = parseActionTaken(action);
   return parsed.steps.join(" — ") || parsed.note || "";
 }
+function briefActionText(text: string | null | undefined, max = 46) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return "—";
+  const first = raw.split(/[،,؛;]/)[0].trim();
+  return first.length > max ? first.slice(0, max - 1) + "…" : first;
+}
+function newStepsForOccurrence(steps: string[], degree: number | null | undefined, occurrence: number, ladder: string[][]) {
+  const current = steps.length ? steps : proceduresFor(degree, occurrence, ladder);
+  const prev = occurrence > 1 ? proceduresFor(degree, occurrence - 1, ladder) : [];
+  const prevSet = new Set(prev);
+  const news = current.filter((s) => s && !prevSet.has(s));
+  return news.length ? news : current.slice(0, 1);
+}
 function ActionNoteBox({ note }) {
   if (!note.trim()) return null;
   return (
@@ -789,15 +802,20 @@ function NamesTail({ note, children }) {
   );
 }
 function RepeatBox({ ctx }) {
+  const { behaviorTypes } = useWorkspace();
   if (ctx.occurrence <= 1 && ctx.previous.length === 0) return null;
+  const bt = behaviorTypes.find((b) => b.name === ctx.focus?.behaviorTypeName);
+  const ladder = procedureLadder(ctx.focus?.behaviorDegree, bt?.procedures);
+  const history = [...ctx.previous, ctx.focus].filter(Boolean);
+  const rows = (history.length > 4 ? history.slice(-4) : history);
   return (
-    <div className="official-tint my-2 rounded-sm border border-[#00857c] px-3 py-2 text-[12px] leading-6">
+    <div className="official-tint my-2 rounded-sm border border-[#00857c] px-2 py-1.5 text-[11px] leading-5">
       <p className="font-semibold text-[#00857c]">
         هذه {occurrenceLabel(ctx.occurrence)} لنفس المخالفة
         {ctx.focus?.behaviorTypeName ? ` (${tr(ctx.focus.behaviorTypeName)})` : ""}.
       </p>
-      {ctx.previous.length ? (
-        <table className="official-table mt-1">
+      {rows.length ? (
+        <table className="official-table mt-1 text-[10.5px]">
           <thead>
             <tr>
               {[
@@ -805,26 +823,32 @@ function RepeatBox({ ctx }) {
                 tr("اليوم والتاريخ"),
                 tr("الحصة"),
                 tr("المادة"),
-                tr("الإجراء السابق"),
+                tr("الإجراء المتخذ"),
               ].map((h) => (
-                <th>{h}</th>
+                <th className="!py-1">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {ctx.previous.slice(0, 4).map((n, i) => (
-              <tr>
-                <td>{occurrenceLabel(n.occurrence || i + 1)}</td>
-                <td>{formatStamp(n.createdAt)}</td>
-                <td>
-                  {n.periodKey
-                    ? periodShort(n.periodKey, ctx.season, ctx.schedules)
-                    : "—"}
-                </td>
-                <td>{n.teacherSubject || "—"}</td>
-                <td>{actionDisplay(n.actionTaken) || "—"}</td>
-              </tr>
-            ))}
+            {rows.map((n, i) => {
+              const occ = n.occurrence || i + 1;
+              const recorded = parseActionTaken(n.actionTaken).steps;
+              const news = newStepsForOccurrence(recorded, n.behaviorDegree ?? ctx.focus?.behaviorDegree, occ, ladder);
+              const brief = briefActionText(news[0]);
+              return (
+                <tr className={n.id === ctx.focus?.id ? "bg-[#f3faf9]" : undefined}>
+                  <td className="!py-1">{occurrenceLabel(occ)}</td>
+                  <td className="!py-1">{formatStamp(n.createdAt)}</td>
+                  <td className="!py-1">
+                    {n.periodKey
+                      ? periodShort(n.periodKey, ctx.season, ctx.schedules)
+                      : "—"}
+                  </td>
+                  <td className="!py-1">{n.teacherSubject || "—"}</td>
+                  <td className="!py-1 text-right">{brief}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       ) : null}
@@ -832,9 +856,13 @@ function RepeatBox({ ctx }) {
   );
 }
 function ProcedureList({ ctx }) {
-  const list = ctx.actionSteps.filter(
+  const { behaviorTypes } = useWorkspace();
+  const bt = behaviorTypes.find((b) => b.name === ctx.focus?.behaviorTypeName);
+  const ladder = procedureLadder(ctx.focus?.behaviorDegree, bt?.procedures);
+  const cleaned = ctx.actionSteps.filter(
     (s) => s.trim() && s.replace(/[.…\s]/g, "").length > 0,
   );
+  const list = newStepsForOccurrence(cleaned, ctx.focus?.behaviorDegree, ctx.occurrence, ladder);
   if (!list.length) return null;
   return (
     <div className="my-2 rounded-sm border border-black px-3 py-2">
