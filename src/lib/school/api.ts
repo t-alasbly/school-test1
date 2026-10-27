@@ -335,6 +335,7 @@ async function requirePerm(userId, perm) {
 async function requireApproved(userId) {
 	const sql = await getSql();
 	await ensureStudentEnglish(sql);
+	await ensureStudentProfile(sql);
 	const staff = await getStaff(sql, userId);
 	if (!staff || staff.role === "pending") throw new Error("لا تملك صلاحية الوصول بعد");
 	if (staff.active === false) throw new Error("تم إلغاء هذا الحساب. راجع مدير التطبيق.");
@@ -604,6 +605,7 @@ async function listActionTypeRows(sql, schoolId, activeOnly = false) {
 	return listCatalogRows(sql, schoolId, "action_types", activeOnly);
 }
 async function listClassOptions(sql, schoolId) {
+	await ensureStudentProfile(sql);
 	return (await sql`
     select c.id, c.stage_id, st.name as stage_name, c.name, st.short_name,
       (select count(*)::int from students s where s.class_id = c.id and coalesce(s.roster_status, 'active') <> 'unlinked') as student_count,
@@ -701,6 +703,7 @@ export const ensureAppReady = createServerFn({ method: "GET" }).handler(async ()
 	const sql = await getSql();
 	await ensureStaffRoleConstraint(sql);
 	await ensureSchoolAndAdmin(sql);
+	await ensureStudentProfile(sql);
 	let name = "";
 	let logoUrl = "";
 	let tagline = "";
@@ -809,6 +812,7 @@ export const getWorkspace = createServerFn({ method: "GET" }).middleware([authMi
 	const sql = await getSql();
 	await ensureStaffRoleConstraint(sql);
 	await ensureSchoolAndAdmin(sql);
+	await ensureStudentProfile(sql);
 	const userId = context.userId;
 	const users = await sql`
       select name, email from "user" where id = ${userId}
