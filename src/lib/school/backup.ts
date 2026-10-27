@@ -146,12 +146,11 @@ export const restoreSchoolBackup = createServerFn({ method: "POST" })
       try {
         await sql.query(`savepoint replica_try`);
         savepoint = true;
-        await sql.query(`set session_replication_role = replica`);
+        await sql.query(`set local session_replication_role = replica`);
         await sql.query(`release savepoint replica_try`);
-      } catch {
-        if (savepoint) {
-          try { await sql.query(`rollback to savepoint replica_try`); } catch { /* ignore */ }
-        }
+      } catch (err) {
+        if (!savepoint) throw err;
+        try { await sql.query(`rollback to savepoint replica_try`); } catch { throw err; }
       }
       const { tables, fks } = await schemaOf(sql);
       const present = Object.keys(data.backup.tables).filter((name) => tables.has(name) && !SKIP.has(name));
@@ -191,13 +190,13 @@ export const restoreSchoolBackup = createServerFn({ method: "POST" })
           [snapshot.user_id, snapshot.school_id, snapshot.display_name || "مدير التطبيق"],
         );
       }
-      await fixSequences(sql, tables);
-      try { await sql.query(`set session_replication_role = default`); } catch { /* ignore */ }
-      return {
-        students: data.backup.tables.students?.length ?? 0,
-        notes: data.backup.tables.notes?.length ?? 0,
-        staff: data.backup.tables.staff?.length ?? 0,
-      };
+      await fixSequences(sql, [...preferred]);
+      const students = await countSchool(sql, "students", staff.school_id);
+      const notes = await countSchool(sql, "notes", staff.school_id);
+      const people = await countSchool(sql, "staff", staff.school_id);
+      const expected = data.backup.tables.students?.length ?? 0;
+      if (expected > 0 && students === 0) throw new Error("لم تُحفظ بيانات الطلاب");
+      return { students, notes, staff: people };
     });
   });
 
@@ -225,19 +224,41 @@ async function insertRows(sql: Sql, table: string, cols: Col[], rows: Record<str
       return `(${slots.join(",")})`;
     });
     const names = usable.map((col) => quote(col.name)).join(",");
-    await sql.query(`insert into ${quote(table)} (${names}) values ${tuples.join(",")}${conflict}`, values);
+    try {
+      await sql.query(`insert into ${quote(table)} (${names}) values ${tuples.join(",")}${conflict}`, values);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "خطأ غير معروف";
+      throw new Error(`تعذر إدخال ${table}: ${message}`);
+    }
   }
 }
 
-async function fixSequences(sql: Sql, tables: Map<string, Col[]>) {
-  for (const [name, cols] of tables) {
-    if (!cols.some((col) => col.name === "id")) continue;
+async function countSchool(sql: Sql, table: string, schoolId: number) {
+  const rows = await sql.query<{ n: number }>(`select count(*)::int as n from ${quote(table)} where school_id = $1`, [schoolId]);
+  return Number(rows[0]?.n ?? 0);
+}
+
+async function fixSequences(sql: Sql, names: string[]) {
+  for (const name of names) {
+    if (name === "user" || name === "account" || name === "schools") continue;
+    await sql.query("savepoint seq_try");
     try {
-      await sql.query(
-        `select setval(pg_get_serial_sequence($1, 'id'), coalesce((select max(id) from ${quote(name)}), 1), true)`,
-        [name],
-      );
-    } catch { /* table has no serial id */ }
+      const found = await sql.query<{ seq: string | null }>(`select pg_get_serial_sequence($1, 'id') as seq`, [name]);
+      const seq = found[0]?.seq;
+      if (seq) {
+        await sql.query(
+          `select setval($1::regclass, greatest(coalesce((select max(id) from ${quote(name)}), 1), 1), true)`,
+          [seq],
+        );
+      }
+      await sql.query("release savepoint seq_try");
+    } catch (err) {
+      try {
+        await sql.query("rollback to savepoint seq_try");
+      } catch {
+        throw err;
+      }
+    }
   }
 }
 

@@ -40,6 +40,9 @@ function BackupSettings() {
   const restore = useMutation({
     mutationFn: () => {
       if (!backup) throw new Error("اختر ملف النسخة أولاً");
+      const students = backup.tables?.students?.length ?? 0;
+      const people = backup.tables?.staff?.length ?? 0;
+      if (!students && !people && !backup.tables?.classes?.length) throw new Error("الملف لا يحتوي بيانات للاستعادة");
       return restoreSchoolBackup({ data: { confirm: "استعادة", backup } });
     },
     onSuccess: (res) => {

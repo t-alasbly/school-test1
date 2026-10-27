@@ -210,6 +210,7 @@ export async function withDbTransaction<T>(fn: (sql: Sql) => Promise<T>): Promis
     try {
       await client.query("begin");
       const result = await fn(sql);
+      await client.query("select 1");
       await client.query("commit");
       return result;
     } catch (err) {
