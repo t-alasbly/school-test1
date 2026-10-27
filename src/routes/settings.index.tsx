@@ -4,6 +4,7 @@ import {
   Archive,
   Award,
   Gavel,
+  Database,
   HeartPulse,
   NotebookPen,
   Languages,
@@ -108,6 +109,13 @@ function SettingsHub() {
       body: tr("قوالب ألوان جاهزة، خطوط عربية، وتكبير أو تصغير حجم الخط."),
       icon: Palette,
       show: true,
+    },
+    {
+      to: "/settings/backup" as const,
+      title: tr("النسخة الاحتياطية"),
+      body: tr("تنزيل نسخة كاملة من البيانات، أو استعادتها، أو تصفية المخالفات والفصول والمعلمين في نهاية العام."),
+      icon: Database,
+      show: admin,
     },
     {
       to: "/settings/health" as const,

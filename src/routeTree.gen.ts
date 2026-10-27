@@ -50,6 +50,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as SettingsActionsRouteImport } from './routes/settings.actions'
 import { Route as SettingsAppRouteImport } from './routes/settings.app'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
+import { Route as SettingsBackupRouteImport } from './routes/settings.backup'
 import { Route as SettingsClassesRouteImport } from './routes/settings.classes'
 import { Route as SettingsCompensationRouteImport } from './routes/settings.compensation'
 import { Route as SettingsHealthRouteImport } from './routes/settings.health'
@@ -271,6 +272,11 @@ const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   path: '/appearance',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsBackupRoute = SettingsBackupRouteImport.update({
+  id: '/backup',
+  path: '/backup',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsClassesRoute = SettingsClassesRouteImport.update({
   id: '/classes',
   path: '/classes',
@@ -384,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
@@ -437,6 +444,7 @@ export interface FileRoutesByTo {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
@@ -496,6 +504,7 @@ export interface FileRoutesById {
   '/settings/actions': typeof SettingsActionsRoute
   '/settings/app': typeof SettingsAppRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/backup': typeof SettingsBackupRoute
   '/settings/classes': typeof SettingsClassesRoute
   '/settings/compensation': typeof SettingsCompensationRoute
   '/settings/health': typeof SettingsHealthRoute
@@ -556,6 +565,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/backup'
     | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
@@ -609,6 +619,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/backup'
     | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
@@ -667,6 +678,7 @@ export interface FileRouteTypes {
     | '/settings/actions'
     | '/settings/app'
     | '/settings/appearance'
+    | '/settings/backup'
     | '/settings/classes'
     | '/settings/compensation'
     | '/settings/health'
@@ -999,6 +1011,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAppearanceRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/backup': {
+      id: '/settings/backup'
+      path: '/backup'
+      fullPath: '/settings/backup'
+      preLoaderRoute: typeof SettingsBackupRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/classes': {
       id: '/settings/classes'
       path: '/classes'
@@ -1187,6 +1206,7 @@ interface SettingsRouteChildren {
   SettingsActionsRoute: typeof SettingsActionsRoute
   SettingsAppRoute: typeof SettingsAppRoute
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsBackupRoute: typeof SettingsBackupRoute
   SettingsClassesRoute: typeof SettingsClassesRoute
   SettingsCompensationRoute: typeof SettingsCompensationRoute
   SettingsHealthRoute: typeof SettingsHealthRoute
@@ -1207,6 +1227,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsActionsRoute: SettingsActionsRoute,
   SettingsAppRoute: SettingsAppRoute,
   SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsBackupRoute: SettingsBackupRoute,
   SettingsClassesRoute: SettingsClassesRoute,
   SettingsCompensationRoute: SettingsCompensationRoute,
   SettingsHealthRoute: SettingsHealthRoute,
