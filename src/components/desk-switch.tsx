@@ -43,7 +43,7 @@ export function DeskSwitch() {
     <label className="flex items-center gap-1">
       <span className="sr-only">{tr("مكتب المعلم")}</span>
       <select
-        className="h-9 max-w-44 rounded-full border border-border bg-bg px-2 text-xs font-semibold"
+        className="h-9 w-[6.75rem] min-w-0 max-w-[6.75rem] shrink-0 truncate rounded-full border border-border bg-bg px-2 text-xs font-semibold sm:w-44 sm:max-w-44"
         value={asId}
         onChange={(event) => void choose(event.target.value)}
         aria-label={tr("مكتب المعلم")}

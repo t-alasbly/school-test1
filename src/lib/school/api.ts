@@ -53,27 +53,11 @@ function mapSchool(school) {
 		schedules: parseSchedules(school.schedules),
 		messageTemplates: parseMessageTemplates(school.message_templates),
 		customMessages: parseCustomMessages(school.custom_messages),
-		messageDefaults: parseMessageDefaults(school.message_defaults),
 		teachersCanMessage: school.teachers_can_message === true,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
 		appearance: parseAppearance(school.appearance),
 		statCounters: parseStatCounters(school.stat_counters ?? school.statCounters),
 		statHidden: parseStatHidden(school.stat_hidden ?? school.statHidden)
-	};
-}
-
-const DEFAULT_MESSAGE_DEFAULTS = { sameRepeat: true, otherViolations: false, late: false, absence: false, counts: false };
-function parseMessageDefaults(raw) {
-	let value = raw;
-	if (typeof raw === "string") try { value = JSON.parse(raw); } catch { return { ...DEFAULT_MESSAGE_DEFAULTS }; }
-	if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_MESSAGE_DEFAULTS };
-	const rec = value as Record<string, unknown>;
-	return {
-		sameRepeat: rec.sameRepeat !== false,
-		otherViolations: rec.otherViolations === true,
-		late: rec.late === true,
-		absence: rec.absence === true,
-		counts: rec.counts === true,
 	};
 }
 function parseMessageTemplates(raw) {
@@ -211,11 +195,6 @@ async function loadSchool(sql, schoolId) {
 			}
 		}
 	}
-	let message_defaults = '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}';
-	try {
-		await sql`alter table schools add column if not exists message_defaults jsonb not null default '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}'::jsonb`;
-		message_defaults = (await sql`select coalesce(message_defaults::text, '{"sameRepeat":true}') as message_defaults from schools where id = ${schoolId}`)[0]?.message_defaults ?? message_defaults;
-	} catch {}
 	let stat_counters = "[]";
 	let stat_hidden = "[]";
 	try {
@@ -235,8 +214,7 @@ async function loadSchool(sql, schoolId) {
 		print_school_logo,
 		schedules,
 		stat_counters,
-		stat_hidden,
-		message_defaults
+		stat_hidden
 	};
 }
 async function getStaff(sql, userId) {
@@ -1398,19 +1376,6 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	const periodKey = data.periodKey?.trim() ?? "";
 	const occurredAt = data.occurredAt?.trim() ? new Date(data.occurredAt).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
 	if (Number.isNaN(Date.parse(occurredAt))) throw new Error("وقت المخالفة غير صالح");
-	let behaviorNameForCheck = "";
-	if (data.behaviorTypeId) {
-		const bt = (await sql`select name from behavior_types where id = ${data.behaviorTypeId} and school_id = ${staff.school_id}`)[0];
-		behaviorNameForCheck = bt?.name || "";
-	}
-	if (isAttendanceRelated(data.type, behaviorNameForCheck || data.details)) {
-		const absent = (await sql`
-      select 1 from daily_attendance
-      where school_id = ${staff.school_id} and student_id = ${student.id}
-        and day = (${occurredAt}::timestamptz)::date and kind = 'absence'
-    `)[0];
-		if (absent) throw new Error("الطالب غائب في هذا اليوم، ولا تُسجَّل عليه مخالفات الحضور أو التأخر أو ورود الأسرة");
-	}
 	const listed = parseSubjects(staff.subject);
 	let lessonSubject = (data.subject ?? "").trim().slice(0, 40);
 	if (listed.length === 1) lessonSubject = listed[0];
@@ -1753,7 +1718,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).middleware([a
 			improvementsOpen: improveRows[0]?.count ?? 0
 		},
 		feed: await fetchNotes(sql, staff.school_id, {
-			limit: 1000,
+			limit: 60,
 			staff,
 			school
 		}),
@@ -2981,18 +2946,6 @@ export const updateMessageTemplates = createServerFn({ method: "POST" }).middlew
 	}
 	return { ok: true };
 });
-export const updateMessageDefaults = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
-	sameRepeat: boolean(),
-	otherViolations: boolean(),
-	late: boolean(),
-	absence: boolean(),
-	counts: boolean(),
-})).handler(async ({ context, data }) => {
-	const { sql, staff } = await requireAdmin(context.userId);
-	await sql`alter table schools add column if not exists message_defaults jsonb not null default '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}'::jsonb`;
-	await sql.query(`update schools set message_defaults = $1::jsonb where id = $2`, [JSON.stringify(data), staff.school_id]);
-	return { ok: true };
-});
 export const updateSchoolName = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ name: string().min(3).max(120) })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	await sql`
@@ -4132,58 +4085,6 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 async function ensureAttendanceStamp(sql) {
 	await sql`alter table daily_attendance add column if not exists recorded_at timestamptz`;
 }
-
-const ATTENDANCE_NAME = /تأخر\s*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول/;
-
-function isAttendanceRelated(type: string, behaviorName?: string) {
-	if (type === "absence" || type === "late") return true;
-	return ATTENDANCE_NAME.test(String(behaviorName || ""));
-}
-
-async function clearAttendanceNotes(sql, schoolId: number, studentId: number, day: string) {
-	await sql`
-    delete from notifications
-    where school_id = ${schoolId}
-      and note_id in (
-        select n.id
-        from notes n
-        left join behavior_types bt on bt.id = n.behavior_type_id
-        where n.school_id = ${schoolId}
-          and n.student_id = ${studentId}
-          and coalesce(n.occurred_at, n.created_at)::date = ${day}::date
-          and (
-            n.type in ('absence', 'late')
-            or (
-              n.type = 'behavior'
-              and (
-                coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
-                or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
-              )
-            )
-          )
-      )
-  `;
-	await sql`
-    delete from notes
-    where school_id = ${schoolId}
-      and student_id = ${studentId}
-      and coalesce(occurred_at, created_at)::date = ${day}::date
-      and type in ('absence', 'late')
-  `;
-	await sql`
-    delete from notes n
-    using behavior_types bt
-    where n.school_id = ${schoolId}
-      and n.student_id = ${studentId}
-      and coalesce(n.occurred_at, n.created_at)::date = ${day}::date
-      and n.type = 'behavior'
-      and bt.id = n.behavior_type_id
-      and (
-        coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
-        or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
-      )
-  `;
-}
 export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	day: string().min(8).max(12),
 	entries: array(object({
@@ -4224,13 +4125,10 @@ export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware
           `;
 			continue;
 		}
-		if (entry.kind === "absence") {
-			await sql`
+		if (entry.kind === "absence") await sql`
           delete from daily_attendance
           where school_id = ${staff.school_id} and student_id = ${entry.studentId} and day = ${day}::date and kind in ('late', 'leave')
         `;
-			await clearAttendanceNotes(sql, staff.school_id, entry.studentId, day);
-		}
 		else await sql`
           delete from daily_attendance
           where school_id = ${staff.school_id} and student_id = ${entry.studentId} and day = ${day}::date and kind = 'absence'
@@ -4253,6 +4151,38 @@ export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware
 	await upsertAttendanceDigest(sql, staff, await loadSchool(sql, staff.school_id));
 	return {
 		ok: true,
+		day
+	};
+});
+export const markFullDayAbsence = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
+	studentIds: array(number()).min(1).max(80)
+})).handler(async ({ context, data }) => {
+	const { sql, staff, school } = await requireApproved(context.userId);
+	await ensureAttendanceStamp(sql);
+	const day = todayISODate();
+	let count = 0;
+	for (const studentId of data.studentIds) {
+		if (!(await sql`select id from students where id = ${studentId} and school_id = ${staff.school_id}`)[0]) continue;
+		await sql`
+      delete from daily_attendance
+      where school_id = ${staff.school_id} and student_id = ${studentId} and day = ${day}::date and kind in ('late', 'leave')
+    `;
+		await sql.query(`insert into daily_attendance (school_id, student_id, day, kind, excused, details, recorded_by, arrived_at, recorded_at)
+         values ($1, $2, $3::date, 'absence', false, $4, $5, null, now())
+         on conflict (school_id, student_id, day, kind)
+         do update set details = excluded.details, recorded_by = excluded.recorded_by, recorded_at = now()`, [
+			staff.school_id,
+			studentId,
+			day,
+			"غياب اليوم الكامل",
+			staff.user_id
+		]);
+		count += 1;
+	}
+	if (count > 0) await upsertAttendanceDigest(sql, staff, school);
+	return {
+		ok: true,
+		count,
 		day
 	};
 });
@@ -5420,7 +5350,7 @@ export const listFollowupNotes = createServerFn({ method: "POST" }).middleware([
 		from: data.from,
 		to: data.to,
 		teacherId: ownOnly ? staff.user_id : void 0,
-		limit: 2000,
+		limit: 400,
 		staff,
 		school
 	});

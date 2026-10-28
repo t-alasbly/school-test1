@@ -129,9 +129,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="min-h-dvh min-w-0 bg-bg text-fg">
-      <header className="app-header no-print sticky top-0 z-40 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
-        <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-3 px-4 py-2">
+    <div className="min-h-dvh w-full min-w-0 max-w-full overflow-x-clip bg-bg text-fg">
+      <header className="app-header no-print sticky top-0 z-40 overflow-x-clip border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
+        <div className="mx-auto flex min-h-14 min-w-0 max-w-6xl items-center gap-2 overflow-x-clip px-3 py-2 sm:gap-3 sm:px-4">
           <Link to="/desk" className="flex min-w-0 items-center gap-2">
             <SchoolMark size="sm" src={schoolLogo || undefined} />
             <span className="min-w-0">
@@ -165,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-          <div className="ms-auto flex items-center gap-1">
+          <div className="ms-auto flex min-w-0 shrink-0 items-center gap-1">
             <p className="hidden text-xs text-fg-muted lg:block">{formatToday(calendar)}</p>
             <NotificationBell />
             <DeskSwitch />
@@ -173,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-10 max-w-40 items-center gap-1 rounded-full px-2 text-sm font-medium hover:bg-muted sm:max-w-56"
+                  className="inline-flex h-10 max-w-24 min-w-0 items-center gap-1 overflow-hidden rounded-full px-2 text-sm font-medium hover:bg-muted sm:max-w-56"
                 >
                   <span className="min-w-0 truncate">{staff.displayName}</span>
                   <ChevronDown className="size-4 shrink-0 text-fg-muted" />
@@ -213,7 +213,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto min-w-0 max-w-6xl px-4 py-6 pb-24 md:pb-10">{children}</main>
+      <main className="mx-auto min-w-0 max-w-6xl overflow-x-clip px-4 py-6 pb-24 md:pb-10">{children}</main>
       <nav className="no-print fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg-elevated/95 backdrop-blur-sm md:hidden">
         <div className="flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
           {items.map((item) => {

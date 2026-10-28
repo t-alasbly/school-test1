@@ -130,7 +130,7 @@ function DeskFrame() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 max-w-full space-y-5 overflow-x-clip">
       <header className="no-print space-y-1">
         <h1 className="flex flex-wrap items-center gap-2 text-3xl font-semibold tracking-tight">
           {t("مكتبي")}

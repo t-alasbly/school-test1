@@ -134,7 +134,7 @@ function ClassesBody() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-clip">
       <StageClassBar
         stages={stages}
         classes={classes}

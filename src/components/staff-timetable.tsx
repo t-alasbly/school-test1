@@ -227,7 +227,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
   }
 
   return (
-    <section className="space-y-3">
+    <section className="min-w-0 max-w-full space-y-3 overflow-x-clip">
       {message ? (
         <div
           className={cn(
@@ -238,7 +238,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
           {message}
         </div>
       ) : null}
-      <div className="rounded-[var(--radius-lg)] border border-border bg-card">
+      <div className="min-w-0 max-w-full overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
         <div className="flex items-start justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1">
@@ -291,7 +291,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                 ))
               : null}
           </div>
-        <div className="overflow-x-auto border-t border-border">
+        <div className="min-w-0 max-w-full overflow-x-auto border-t border-border">
           <table className="w-full min-w-[40rem] border-collapse text-center text-sm" dir="rtl">
             <thead>
               <tr>
@@ -366,7 +366,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             {schoolToday == null ? (
               <p className="px-4 py-3 text-xs text-fg-muted">{tr("اليوم ليس يوم دراسة. اضغط تكبير لرؤية الأسبوع.")}</p>
             ) : (
-              <div className="flex" dir="rtl">
+              <div className="flex min-w-0 max-w-full" dir="rtl">
                 <div className="sticky right-0 z-10 flex w-16 shrink-0 items-center justify-center border-l border-border bg-ok-soft px-1 text-center text-sm font-semibold">
                   {tr(todayName)}
                 </div>

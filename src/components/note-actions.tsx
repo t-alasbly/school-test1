@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createNote, closeNote, getMyTimetable, previewBehaviorOccurrence, previewStudyOccurrence } from "@/lib/school/api";
+import { createNote, closeNote, getMyTimetable, markFullDayAbsence, previewBehaviorOccurrence, previewStudyOccurrence } from "@/lib/school/api";
 import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, STUDY_ACTIONS, STUDY_NOTES, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, parseSubjects, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, studyActionFor, toDatetimeLocalValue, toWhatsAppNumber } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
@@ -911,6 +911,23 @@ export function NoteComposer({
       toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تسجيل الملاحظة"));
     },
   });
+  const dayAbsence = useMutation({
+    mutationFn: () => markFullDayAbsence({ data: { studentIds: targets.map((item) => item.studentId) } }),
+    onSuccess: (result) => {
+      const count = result?.count ?? targets.length;
+      toast.success(count > 1 ? `${tr("سُجّل غياب اليوم الكامل")} — ${count}` : tr("سُجّل غياب اليوم الكامل"));
+      reset();
+      setInnerOpen(false);
+      onOpenChangeProp?.(false);
+      onSubmitted?.({ count, failedIds: [] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+      void queryClient.invalidateQueries({ queryKey: ["stage-students"] });
+      void queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      void queryClient.invalidateQueries({ queryKey: ["class"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تسجيل غياب اليوم")),
+  });
 
   function reset() {
     setDetails("");
@@ -974,9 +991,9 @@ export function NoteComposer({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         className={cn(
-          "flex max-w-[100vw] flex-col overflow-hidden p-4",
-          "!inset-0 !h-dvh !max-h-dvh !w-auto !max-w-[100vw] !translate-x-0 !translate-y-0 !rounded-none",
-          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!h-[92vh] sm:!max-h-[92vh] sm:!w-[min(48rem,calc(100vw-2rem))] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
+          "flex max-w-full flex-col overflow-hidden p-4",
+          "!inset-0 !left-0 !right-0 !h-dvh !max-h-dvh !w-full !max-w-full !translate-x-0 !translate-y-0 !rounded-none",
+          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!right-auto sm:!h-[92vh] sm:!max-h-[92vh] sm:!w-[min(48rem,calc(100%-2rem))] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
         )}
       >
         {follow ? (
@@ -1191,6 +1208,14 @@ export function NoteComposer({
               );
             })}
           </div>
+          <button
+            type="button"
+            disabled={targets.length === 0 || dayAbsence.isPending || mutation.isPending}
+            onClick={() => dayAbsence.mutate()}
+            className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-md)] bg-danger px-3 text-base font-bold text-white disabled:opacity-60"
+          >
+            {dayAbsence.isPending ? tr("جارٍ الحفظ…") : tr("غياب اليوم الكامل")}
+          </button>
           {!many ? (
             <div className="space-y-1.5">
               <Label>{tr("الاستئذان")}</Label>

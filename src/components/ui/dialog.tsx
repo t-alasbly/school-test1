@@ -35,7 +35,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-x-4 top-4 z-50 mx-auto max-h-[calc(100dvh-2rem)] w-auto max-w-lg overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-border bg-bg-elevated p-5 text-fg shadow-[var(--shadow-card)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          "fixed inset-x-4 top-4 z-50 mx-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100%-2rem))] max-w-lg overflow-y-auto overscroll-contain rounded-[var(--radius-lg)] border border-border bg-bg-elevated p-5 text-fg shadow-[var(--shadow-card)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
         dir="rtl"

@@ -62,15 +62,15 @@ export function StageClassBar({
   const presentToday = Math.max(0, classSize - absentToday - lateToday);
 
   return (
-    <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-2 border-b border-border bg-bg-elevated px-3 py-1 sm:px-4 sm:py-1.5">
-      <div className="mx-auto max-w-6xl">
+    <div className="no-print sticky top-[3.85rem] z-30 -mx-4 mb-2 min-w-0 overflow-x-clip border-b border-border bg-bg-elevated px-3 py-1 sm:px-4 sm:py-1.5">
+      <div className="mx-auto min-w-0 max-w-6xl">
         {stages.length === 0 ? (
           <p className="py-1 text-sm text-fg-muted">
             {tr("لا صفوف بعد. ارفع ملف الطلاب من الإعدادات ← الاستيراد.")}
           </p>
         ) : (
           <>
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             <div className="flex min-w-0 flex-1 flex-wrap gap-1">
             {stages.map((stage) => {
               const active = selectedStageId === stage.id;
