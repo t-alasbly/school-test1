@@ -120,6 +120,10 @@ function AdminBody() {
   const canImprove = staffCan(staff, "acceptImprovements");
   const allowed = canAct || canImprove;
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
+  const [nameQuery, setNameQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
+  const [degreeFilter, setDegreeFilter] = useState<number | 0>(0);
+  const [sortBy, setSortBy] = useState<"newest" | "most" | "name">("newest");
   const bounds = rangeFromPreset(rangeParam);
   const query = useQuery({
     queryKey: ["admin"],
@@ -185,6 +189,25 @@ function AdminBody() {
       .sort((a, b) => a.classLabel.localeCompare(b.classLabel, "ar") || a.studentName.localeCompare(b.studentName, "ar"));
   }, [feed, periodMode, school.season, school.schedules]);
 
+  const visibleFeed = useMemo(() => {
+    const q = nameQuery.trim();
+    let rows = (feed as NoteRecord[]).filter((note) => {
+      if (q && !note.studentName.includes(q) && !classLabel(note.shortName, note.className).includes(q)) return false;
+      if (statusFilter === "open" && note.status !== "open") return false;
+      if (statusFilter === "closed" && note.status !== "closed") return false;
+      if (degreeFilter && Number(note.behaviorDegree) !== degreeFilter) return false;
+      return true;
+    });
+    if (sortBy === "most") {
+      const counts = new Map<number, number>();
+      for (const note of rows) counts.set(note.studentId, (counts.get(note.studentId) ?? 0) + 1);
+      rows = [...rows].sort((a, b) => (counts.get(b.studentId) ?? 0) - (counts.get(a.studentId) ?? 0) || b.createdAt.localeCompare(a.createdAt));
+    } else if (sortBy === "name") {
+      rows = [...rows].sort((a, b) => a.studentName.localeCompare(b.studentName, "ar") || b.createdAt.localeCompare(a.createdAt));
+    }
+    return rows;
+  }, [feed, nameQuery, statusFilter, degreeFilter, sortBy]);
+
   if (typeParam && filtered.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل الكشف…")}</p>;
   if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل اللوحة…")}</p>;
   if (!typeParam && allowed && (query.isError || !query.data)) return <p className="text-danger">{tr("تعذر تحميل البيانات.")}</p>;
@@ -242,6 +265,44 @@ function AdminBody() {
               </button>
             );
           })}
+        </div>
+        <div className="no-print grid gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Input
+            value={nameQuery}
+            onChange={(e) => setNameQuery(e.target.value)}
+            placeholder={tr("اسم الطالب أو الفصل")}
+          />
+          <select
+            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | "open" | "closed")}
+          >
+            <option value="all">{tr("كل الحالات")}</option>
+            <option value="open">{tr("لم تُغلق")}</option>
+            <option value="closed">{tr("أُغلقت")}</option>
+          </select>
+          <select
+            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+            value={degreeFilter}
+            onChange={(e) => setDegreeFilter(Number(e.target.value))}
+          >
+            <option value={0}>{tr("كل الدرجات")}</option>
+            {[1, 2, 3, 4, 5].map((degree) => (
+              <option key={degree} value={degree}>{degreeLabel(degree)}</option>
+            ))}
+          </select>
+          <select
+            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as "newest" | "most" | "name")}
+          >
+            <option value="newest">{tr("الأحدث")}</option>
+            <option value="most">{tr("الأكثر مخالفات")}</option>
+            <option value="name">{tr("حسب اسم الطالب")}</option>
+          </select>
+          <p className="sm:col-span-2 lg:col-span-4 text-xs text-fg-muted">
+            {tr("عدد المخالفات")}: {visibleFeed.length}
+          </p>
         </div>
         {periodMode ? (
           <div className="no-print flex flex-wrap gap-1.5">
@@ -305,15 +366,15 @@ function AdminBody() {
             ) : null}
           </ul>
         ) : null}
-        {feed.length === 0 && !periodMode ? (
+        {visibleFeed.length === 0 && !periodMode ? (
           <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
             {typeParam ? tr("لا توجد سجلات في هذا النطاق.") : tr("لا توجد ملاحظات بعد. سيظهر هنا كل ما يسجّله المعلمون فورًا.")}
           </p>
-        ) : feed.length > 0 ? (
+        ) : visibleFeed.length > 0 ? (
           <>
             {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">{tr("تفاصيل كل حصة")}</h3> : null}
             <ul className="space-y-2">
-              {feed.map((note: any) => (
+              {visibleFeed.map((note: any) => (
                 <AdminNoteCard
                   key={note.id}
                   note={note}
