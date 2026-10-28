@@ -762,12 +762,15 @@ function ViolationStrip({
   subject,
   time,
 }) {
+  const dayCompact = String(day || "").replace(/\s+(?=\d{4}|[٠-٩]{4})/, "");
+  const timeCompact = String(time || "").replace(/\s*[صم]\s*$/, "").trim();
+  const when = [weekday, dayCompact].filter(Boolean).join(" ") + (timeCompact ? `(${timeCompact})` : "");
   const cells = [
     [tr("المخالفة / الموضوع"), violation || "………………"],
     [tr("الدرجة"), degree || "…………"],
     [
       tr("اليوم والتاريخ"),
-      [weekday || "…………", day || "………………", time].filter(Boolean).join(" — "),
+      when || "………………",
     ],
     [
       tr("الحصة / المادة"),
