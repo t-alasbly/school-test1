@@ -11,7 +11,7 @@ import { parsePermissions, defaultPermissions } from "@/lib/school/permissions";
 import {
   phoneToLoginEmail, INTERIM_DEGREE_PROCEDURES, parseSectionName, parseSchedules, proceduresFor,
   stageOrdinal, SHORT_DEGREE_PROCEDURES, canonicalStage, STAFF_DEGREE_PROCEDURES, ROLE_LABEL,
-  procedureLadder, parseSubjects, IMPROVE_OPTIONS, officialProcedures, LEGACY_STUDY_NOTES,
+  procedureLadder, parseSubjects, canonicalSubject, sameSubject, subjectAliases, IMPROVE_OPTIONS, officialProcedures, LEGACY_STUDY_NOTES,
   parseProcedures, classLabel, DEFAULT_ADMIN_PASSWORD, DEFAULT_HEALTH_CONDITIONS, withOccurrence,
   DEFAULT_PRINT_MARGINS, DEFAULT_TEACHER_PASSWORD, DEFAULT_STUDY_NOTES, isTeacherVerbal,
   COMPENSATION_OPTIONS, OFFICIAL_BEHAVIOR_TYPES, NOTE_META, DEFAULT_ADMIN_PHONE, formatSubjects,
@@ -985,8 +985,8 @@ export const getStagePage = createServerFn({ method: "POST" }).middleware([authM
 });
 function subjectMatches(noteSubject, teacherSubject, wanted) {
 	const direct = String(noteSubject ?? "").trim();
-	if (direct) return direct === wanted;
-	return parseSubjects(teacherSubject).includes(wanted);
+	if (direct) return sameSubject(direct, wanted);
+	return parseSubjects(teacherSubject).some((name) => sameSubject(name, wanted));
 }
 async function subjectHandoffForClass(sql, staff, classId) {
 	try {
@@ -1027,9 +1027,9 @@ export const claimClassSubjectNotes = createServerFn({ method: "POST" }).middlew
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireApproved(context.userId);
 	await ensureNoteThread(sql);
-	const subject = data.subject.trim();
 	const listed = parseSubjects(staff.subject);
-	if (listed.length && !listed.includes(subject)) throw new Error("هذه المادة ليست من موادك");
+	const subject = listed.find((name) => sameSubject(name, data.subject.trim())) || canonicalSubject(data.subject.trim());
+	if (listed.length && !listed.some((name) => sameSubject(name, subject))) throw new Error("هذه المادة ليست من موادك");
 	const ids = (await sql`
     select n.id, coalesce(n.subject, '') as subject, coalesce(sf.subject, '') as teacher_subject
     from notes n
@@ -1412,7 +1412,7 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 		if (absent) throw new Error("الطالب غائب في هذا اليوم، ولا تُسجَّل عليه مخالفات الحضور أو التأخر أو ورود الأسرة");
 	}
 	const listed = parseSubjects(staff.subject);
-	let lessonSubject = (data.subject ?? "").trim().slice(0, 40);
+	let lessonSubject = canonicalSubject((data.subject ?? "").trim());
 	if (listed.length === 1) lessonSubject = listed[0];
 	if (!lessonSubject && periodKey) {
 		const day = new Date(occurredAt).getDay();
@@ -1423,10 +1423,11 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
         where staff_id = ${staff.user_id} and school_id = ${staff.school_id}
           and day = ${day} and period_key = ${periodKey}
       `)[0];
-			if (cell?.subject) lessonSubject = String(cell.subject).trim();
+			if (cell?.subject) lessonSubject = canonicalSubject(String(cell.subject));
 		} catch {}
 	}
-	if (listed.length > 1 && !listed.includes(lessonSubject)) throw new Error("اختر المادة");
+	if (listed.length > 1 && !listed.some((name) => sameSubject(name, lessonSubject))) throw new Error("اختر المادة");
+	if (listed.length > 1) lessonSubject = listed.find((name) => sameSubject(name, lessonSubject)) || lessonSubject;
 	if (listed.length === 0) lessonSubject = lessonSubject || "";
 	const suggested = data.suggestedAction?.trim() ?? "";
 	const compensation = data.compensation?.trim() ?? "";
@@ -5731,10 +5732,16 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
       coalesce(s.parent_phone, '') as parent_phone,
       coalesce(s.parent_phone_2, '') as parent_phone_2,
       coalesce(s.work_phone, '') as work_phone,
-      coalesce(s.health_note, '') as health_note, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id
+      coalesce(s.health_note, '') as health_note, c.name as class_name, st.short_name, st.name as stage_name, st.id as stage_id,
+      a.kind as daily_kind
      from students s
      join classes c on c.id = s.class_id
      join stages st on st.id = c.stage_id
+     left join lateral (
+       select kind from daily_attendance
+       where student_id = s.id and school_id = s.school_id and day = current_date and kind = 'absence'
+       limit 1
+     ) a on true
      where ${where}
      order by st.sort_order, c.sort_order, s.roster_order nulls last, s.id`, params)).map((s) => ({
 		id: s.id,
@@ -5748,6 +5755,7 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
 		parentPhone2: revealPhone(staff, school, s.parent_phone_2),
 		workPhone: revealPhone(staff, school, s.work_phone),
 		healthNote: s.health_note ?? "",
+		dailyKind: s.daily_kind ?? null,
 		label: classLabel(s.short_name, s.class_name)
 	})) };
 });
@@ -6459,8 +6467,9 @@ async function subjectPlanOf(sql, staff, subject) {
 	const tasksMax = Number(row?.tasks_max ?? 40);
 	const quizzesMax = Number(row?.quizzes_max ?? 20);
 	const book = loadPlanBook(row?.plan);
-	const key = String(subject || "").trim();
-	const entry = key && book[key] || book["*"] || null;
+	const key = canonicalSubject(subject);
+	const aliased = Object.entries(book).find(([name]) => name !== "*" && sameSubject(name, key));
+	const entry = (key && book[key]) || aliased?.[1] || book["*"] || null;
 	const periods = parseSubjectPlan(entry?.periods ? JSON.stringify(entry.periods) : "", tasksMax, quizzesMax);
 	return {
 		combine: entry?.combine === "sum" ? "sum" : "avg",
@@ -6578,7 +6587,12 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
            coalesce(s.parent_phone_2, '') as parent_phone_2,
            a.kind as daily_kind
     from students s
-    left join daily_attendance a on a.student_id = s.id and a.school_id = s.school_id and a.day = current_date
+    left join lateral (
+      select kind from daily_attendance
+      where student_id = s.id and school_id = s.school_id and day = current_date and kind in ('absence', 'late')
+      order by case kind when 'absence' then 0 else 1 end
+      limit 1
+    ) a on true
     where s.class_id = ${cls.id} and s.school_id = ${staff.school_id}
       and coalesce(s.roster_status, 'active') <> 'unlinked'
     order by s.roster_order nulls last, s.id
@@ -6611,8 +6625,9 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 	}
 	const attendanceOf = new Map(attendanceRows.map((row) => [row.student_id, row]));
 	const listed = parseSubjects(staff.subject);
-	const chosen = (data.subject ?? "").trim();
+	const chosen = canonicalSubject(data.subject ?? "");
 	const lessonSubject = chosen || (listed.length ? listed[0] : "");
+	const aliases = subjectAliases(lessonSubject);
 	const plan = await subjectPlanOf(sql, staff, lessonSubject);
 	const periods = plan.periods;
 	const combine = plan.combine;
@@ -6625,7 +6640,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     select student_id, bucket, points, period_no, coalesce(label, '') as label, coalesce(column_id, '') as column_id
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
-      and (subject = ${lessonSubject} or subject = '')
+      and (subject = any(${aliases}) or subject = '')
   ` : [];
 	const marks = await sql`
     select student_id, participation, exam
@@ -6660,7 +6675,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 			periodMarkOf.set(key, row);
 			continue;
 		}
-		const rank = (item) => (lessonSubject && item.subject === lessonSubject ? 2 : item.subject ? 1 : 0);
+		const rank = (item) => sameSubject(item.subject || "", lessonSubject) ? 2 : item.subject ? 1 : 0;
 		if (rank(row) >= rank(prev)) periodMarkOf.set(key, row);
 	}
 	const lessonKey = (data.lessonKey ?? "").trim();
@@ -6670,7 +6685,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
       and (created_at at time zone 'Asia/Riyadh')::date = (now() at time zone 'Asia/Riyadh')::date
       and (${lessonKey} = '' or lesson_key = ${lessonKey} or lesson_key = '')
-      and (${lessonSubject} = '' or subject = ${lessonSubject} or subject = '')
+      and (${lessonSubject} = '' or subject = any(${aliases}) or subject = '')
     group by student_id, label
   `;
 	const tapsOf = /* @__PURE__ */ new Map();
@@ -6718,7 +6733,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     select id, student_id, label, points, coalesce(subject, '') as subject, coalesce(lesson_key, '') as lesson_key, created_at::text as created_at
     from student_evals
     where school_id = ${staff.school_id} and staff_id = ${staff.user_id} and class_id = ${cls.id}
-      and (subject = ${lessonSubject} or subject = '')
+      and (subject = any(${aliases}) or subject = '')
     order by id desc
     limit 40
   ` : [];
@@ -6847,7 +6862,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
 				taps: tapsOf.get(Number(student.id)) ?? [],
 				byPeriod
 			};
-		}),
+		}).sort((a, b) => (a.today === "absence" ? 0 : 1) - (b.today === "absence" ? 0 : 1)),
 		recent: recent.map((row) => ({
 			id: row.id,
 			studentId: row.student_id,
@@ -6895,9 +6910,8 @@ export const applyClassEval = createServerFn({ method: "POST" }).middleware([aut
 	}
 	if (!label || points == null || !bucket) throw new Error("حدد التقييم");
 	const listed = parseSubjects(staff.subject);
-	const sent = (data.subject ?? "").trim().slice(0, 40);
-	const norm = (value) => value.trim().replace(/^ال/, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/\s+/g, "");
-	const lessonSubject = listed.length === 1 ? listed[0] : listed.find((name) => name === sent || norm(name) === norm(sent)) || sent;
+	const sent = canonicalSubject(data.subject ?? "");
+	const lessonSubject = listed.length === 1 ? listed[0] : listed.find((name) => sameSubject(name, sent)) || sent;
 	if (listed.length > 1 && !lessonSubject) throw new Error("اختر المادة");
 	const plan = await subjectPlanOf(sql, staff, lessonSubject);
 	const open = plan.periods.find((period) => !period.closed) ?? plan.periods[0];
@@ -6970,7 +6984,7 @@ export const undoLastClassEval = createServerFn({ method: "POST" }).middleware([
 	const { sql, staff } = await requireDesk(context.userId);
 	await ensureTeacherEval(sql);
 	const listed = parseSubjects(staff.subject);
-	const lessonSubject = listed.length === 1 ? listed[0] : (data.subject ?? "").trim();
+	const lessonSubject = listed.length === 1 ? listed[0] : listed.find((name) => sameSubject(name, data.subject ?? "")) || canonicalSubject(data.subject ?? "");
 	const label = (data.label ?? "").trim();
 	const studentIds = [...new Set(data.studentIds)];
 	const rows = await sql.query(`
@@ -7238,7 +7252,8 @@ async function applyFormatToStaff(sql, staff, data) {
 	const payload = cleanFormat(data.payload ?? data);
 	const periodNo = Number(data.periodNo) || 0;
 	const names = parseSubjects(staff.subject);
-	const subjects = data.subject ? [data.subject] : names.length ? names : [""];
+	const asked = data.subject ? names.find((name) => sameSubject(name, data.subject)) || canonicalSubject(data.subject) : "";
+	const subjects = asked ? [asked] : names.length ? names : [""];
 	for (const name of subjects) {
 		const current = await subjectPlanOf(sql, staff, name);
 		const carried = [];
@@ -7492,7 +7507,7 @@ export const applyGradeFormat = createServerFn({ method: "POST" }).middleware([a
 	await ensureTeacherEval(sql);
 	await seedTeacherEval(sql, staff);
 	const listed = parseSubjects(staff.subject);
-	if (data.subject && listed.length && !listed.includes(data.subject)) throw new Error("هذه المادة ليست من موادك");
+	if (data.subject && listed.length && !listed.some((name) => sameSubject(name, data.subject))) throw new Error("هذه المادة ليست من موادك");
 	if (data.formatId) {
 		const exists = (await sql`select id from grade_formats where id = ${data.formatId} and school_id = ${staff.school_id}`)[0];
 		if (!exists) throw new Error("القالب غير موجود");

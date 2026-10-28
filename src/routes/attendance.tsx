@@ -238,11 +238,12 @@ function AttendanceBody() {
   }
 
   const shown = useMemo(() => {
-    return sortedStudents(
+    const ordered = sortedStudents(
       students.map((s) => ({ ...s })),
       sort,
     );
-  }, [students, sort]);
+    return [...ordered].sort((a, b) => (statusOf(a) === "absence" ? 0 : 1) - (statusOf(b) === "absence" ? 0 : 1));
+  }, [students, sort, local]);
   const dismissalWord = day < todayISO() || (day === todayISO() && minutesAfterSlot(school.season, school.schedules, "p6", "السادسة") != null);
 
   async function persist(s: DailyAttendanceRow, target: "absence" | "late" | "leave", extras?: Partial<Marks>) {

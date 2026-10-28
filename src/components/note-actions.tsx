@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createNote, closeNote, getMyTimetable, markFullDayAbsence, previewBehaviorOccurrence, previewStudyOccurrence } from "@/lib/school/api";
-import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, STUDY_ACTIONS, STUDY_NOTES, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, parseSubjects, procedureLadder, procedureStageLabel, resolveOther, scheduleFor, stageIndexFor, studyActionFor, toDatetimeLocalValue, toWhatsAppNumber } from "@/lib/school/constants";
+import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, STUDY_ACTIONS, STUDY_NOTES, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, parseSubjects, procedureLadder, procedureStageLabel, resolveOther, sameSubject, scheduleFor, stageIndexFor, studyActionFor, toDatetimeLocalValue, toWhatsAppNumber } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -641,7 +641,7 @@ export function NoteComposer({
   const subjects = parseSubjects(staff.subject).length
     ? parseSubjects(staff.subject)
     : parseSubjects(String((deskSubjects.data as { subject?: string } | undefined)?.subject || ""));
-  const lockedSubject = presetSubject && subjects.includes(presetSubject) ? presetSubject : "";
+  const lockedSubject = presetSubject && subjects.some((name) => sameSubject(name, presetSubject)) ? subjects.find((name) => sameSubject(name, presetSubject)) ?? "" : "";
   const [lessonSubject, setLessonSubject] = useState(lockedSubject || (subjects.length === 1 ? subjects[0] : ""));
   const [pickSubject, setPickSubject] = useState(false);
   const timetable = useQuery({

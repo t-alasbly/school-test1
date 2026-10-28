@@ -117,8 +117,8 @@ function ClassBody() {
     const filtered = term
       ? list.filter((s: StudentRow) => s.name.includes(term) || (s.nameEn ?? "").toLowerCase().includes(term.toLowerCase()))
       : list;
-    if (sort === "alpha") return [...filtered].sort((a: StudentRow, b: StudentRow) => a.name.localeCompare(b.name, "ar"));
-    return filtered;
+    const ordered = sort === "alpha" ? [...filtered].sort((a: StudentRow, b: StudentRow) => a.name.localeCompare(b.name, "ar")) : filtered;
+    return [...ordered].sort((a: StudentRow, b: StudentRow) => (a.dailyKind === "absence" ? 0 : 1) - (b.dailyKind === "absence" ? 0 : 1));
   }, [query.data, q, sort]);
 
   const keepSearch = {

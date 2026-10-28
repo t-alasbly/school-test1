@@ -32,7 +32,7 @@ import {
   undoLastClassEval,
 } from "@/lib/school/api";
 import { EVAL_PAIRS, formatPoints, scoreBand, shortEvalLabel } from "@/lib/school/eval";
-import { parseSubjects, hijriDate, formatStamp } from "@/lib/school/constants";
+import { parseSubjects, hijriDate, formatStamp, sameSubject } from "@/lib/school/constants";
 import { tr } from "@/lib/school/i18n";
 import { printElement } from "@/lib/school/print";
 import { staffCan } from "@/lib/school/permissions";
@@ -1523,7 +1523,9 @@ export function ClassRecords({
   const { school, staff } = useWorkspace();
   const classFollow = staffCan(staff, "viewClassFollow");
   const subjects = parseSubjects(staff.subject);
-  const subject = presetSubject && subjects.includes(presetSubject) ? presetSubject : subjects[0] ?? "";
+  const subject = presetSubject && subjects.some((name) => sameSubject(name, presetSubject))
+    ? subjects.find((name) => sameSubject(name, presetSubject)) ?? subjects[0] ?? ""
+    : subjects[0] ?? "";
   const printRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [periodNo, setPeriodNo] = useState(1);
@@ -1593,7 +1595,7 @@ export function ClassRecords({
   const data = first ? {
     ...first,
     class: sheetIds.length > 1 ? { label: first.class.stageName || first.class.label, stageName: first.class.stageName } : first.class,
-    students: parts.flatMap(({ id, part }) => part.students.map((student) => ({ ...student, classId: id }))),
+    students: parts.flatMap(({ id, part }) => part.students.map((student) => ({ ...student, classId: id }))).sort((a, b) => (a.today === "absence" ? 0 : 1) - (b.today === "absence" ? 0 : 1)),
   } : undefined;
   const finalColumns = (data as { finalColumns?: { id: string; title: string; max: number }[] } | undefined)?.finalColumns ?? [];
   const periods = data?.periods ?? [];

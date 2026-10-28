@@ -37,11 +37,52 @@ export const NOTE_META: Record<NoteType, { label: string; tone: NoteTone; short:
 export const NOTE_TYPES = Object.keys(NOTE_META) as NoteType[];
 
 /** مواد المعلم: تُحفظ متصلة بفاصلة عربية، وتُقرأ قائمة. */
+const SUBJECT_GROUPS: { label: string; names: string[] }[] = [
+	{ label: "الرياضيات", names: ["رياضيات", "الرياضيات"] },
+	{ label: "اللغة العربية", names: ["عربي", "العربي", "اللغة العربية", "لغة عربية", "اللغة العربيه", "لغتي", "لغتي الجميلة"] },
+	{ label: "التربية الإسلامية", names: ["دين", "الدين", "التربية الإسلامية", "التربية الاسلامية", "تربية إسلامية", "تربية اسلامية", "إسلامية", "اسلامية"] },
+];
+
+function subjectKey(value: string): string {
+	return String(value ?? "")
+		.trim()
+		.replace(/[أإآ]/g, "ا")
+		.replace(/ى/g, "ي")
+		.replace(/ة/g, "ه")
+		.replace(/[\u064B-\u0652]/g, "")
+		.replace(/\s+/g, "")
+		.replace(/^ال/, "");
+}
+
+/** يوحّد أسماء المادة الواحدة: الرياضيات، اللغة العربية، التربية الإسلامية. */
+export function canonicalSubject(value: string): string {
+	const raw = String(value ?? "").trim();
+	if (!raw) return "";
+	const key = subjectKey(raw);
+	for (const group of SUBJECT_GROUPS) {
+		if (group.names.some((name) => subjectKey(name) === key)) return group.label;
+	}
+	return raw.slice(0, 40);
+}
+
+export function sameSubject(a: string, b: string): boolean {
+	const left = subjectKey(canonicalSubject(a));
+	const right = subjectKey(canonicalSubject(b));
+	return Boolean(left) && left === right;
+}
+
+export function subjectAliases(value: string): string[] {
+	const raw = String(value ?? "").trim();
+	const canon = canonicalSubject(raw);
+	const group = SUBJECT_GROUPS.find((item) => item.label === canon);
+	return [...new Set([raw, canon, ...(group?.names ?? [])].map((name) => name.trim()).filter(Boolean))];
+}
+
 export function parseSubjects(value: string): string[] {
 	const seen = new Set<string>();
 	const out: string[] = [];
 	for (const part of String(value ?? "").split(/\n|،|,/)) {
-		const name = part.trim().slice(0, 40);
+		const name = canonicalSubject(part);
 		if (!name) continue;
 		const key = name.toLowerCase();
 		if (seen.has(key)) continue;

@@ -65,6 +65,7 @@ type RosterStudent = {
   parentPhone2?: string;
   workPhone?: string;
   healthNote?: string;
+  dailyKind?: string | null;
 };
 
 function ClassesBody() {
@@ -108,10 +109,11 @@ function ClassesBody() {
   const shown = useMemo(() => {
     const term = q.trim();
     const filtered = term ? students.filter((s) => s.name.includes(term) || s.label.includes(term)) : students;
-    return sortedStudents(
+    const ordered = sortedStudents(
       filtered.map((s) => ({ ...s, studentName: s.name, classLabel: s.label })),
       sort,
     );
+    return [...ordered].sort((a, b) => (a.dailyKind === "absence" ? 0 : 1) - (b.dailyKind === "absence" ? 0 : 1));
   }, [students, q, sort]);
 
   const pickedIds = useMemo(() => new Set(targets.map((item) => item.studentId)), [targets]);
@@ -268,6 +270,7 @@ function ClassesBody() {
                   </span>
                 ) : null}
                 <DayName studentId={student.id} className="min-w-0 text-base font-semibold">{studentLabel(locale, student.name)}</DayName>
+                {student.dailyKind === "absence" ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">{tr("غائب")}</span> : null}
                 <ExitPermitBadge studentId={student.id} />
               </span>
               <span className="block text-xs text-fg-muted">{placeLabel(student.label)}</span>

@@ -6,7 +6,7 @@ import { PageHelp } from "@/components/page-help";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getMyTimetable, getTeacherPins, saveMyTimetable } from "@/lib/school/api";
-import { parseSubjects, scheduleFor } from "@/lib/school/constants";
+import { canonicalSubject, parseSubjects, sameSubject, scheduleFor } from "@/lib/school/constants";
 import { placeLabel, tr } from "@/lib/school/i18n";
 import type { PeriodSlot } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -286,7 +286,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             {subjects.length > 1
               ? subjects.map((name) => (
                   <span key={name} className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                    {tr(name)} {cells.filter((cell) => cell.classId && cell.subject === name).length}
+                    {tr(name)} {cells.filter((cell) => cell.classId && sameSubject(cell.subject || "", name)).length}
                   </span>
                 ))
               : null}
@@ -336,7 +336,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                       <td key={slot.key} className="border-b border-l border-border p-1">
                         <button
                           type="button"
-                          onClick={() => (editing ? setPicked({ day: item.id, periodKey: slot.key }) : openClass(cell?.classId ?? null, cell?.subject, slot.key))}
+                          onClick={() => (editing ? setPicked({ day: item.id, periodKey: slot.key }) : openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key))}
                           className={cn(
                             "flex min-h-10 w-full flex-col items-center justify-center rounded-[var(--radius-sm)] px-1 py-1 text-xs leading-tight",
                             on && "ring-2 ring-primary",
@@ -346,7 +346,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                           <span>{cell?.classLabel ? placeLabel(cell.classLabel) : (editing ? tr("اختر") : "—")}</span>
                           {cell?.classLabel ? (
                             <span className={cn("mt-0.5 font-normal", cell.subject ? "text-fg" : "text-warn")}>
-                              {cell.subject ? tr(cell.subject) : (subjects.length === 1 ? tr(subjects[0]) : editing ? tr("اختر المادة") : "")}
+                              {cell.subject ? tr(canonicalSubject(cell.subject)) : (subjects.length === 1 ? tr(subjects[0]) : editing ? tr("اختر المادة") : "")}
                             </span>
                           ) : null}
                           {cell?.place ? <span className="mt-0.5 font-normal text-fg-muted">{cell.place}</span> : null}
@@ -383,7 +383,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         key={slot.key}
                         type="button"
                         ref={focused ? (node) => { focusRef.current = node; } : undefined}
-                        onClick={() => openClass(cell?.classId ?? null, cell?.subject, slot.key)}
+                        onClick={() => openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key)}
                         className={cn(
                           "flex snap-center flex-col items-center justify-center rounded-[var(--radius-md)] border px-2 py-2 text-center transition-all duration-300",
                           live
@@ -399,7 +399,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         <span className="mt-1 text-sm font-semibold leading-tight">{cell?.classLabel ? placeLabel(cell.classLabel) : "—"}</span>
                         {cell?.subject || subjects.length === 1 ? (
                           <span className={cn("text-[10px] font-medium", live ? "text-danger" : "text-fg-muted")}>
-                            {tr(cell?.subject || subjects[0])}
+                            {tr(canonicalSubject(cell?.subject || subjects[0]))}
                           </span>
                         ) : null}
                         {cell?.place ? <span className={cn("mt-0.5 text-[10px]", live ? "text-danger/80" : "text-fg-muted")}>{cell.place}</span> : null}
@@ -421,11 +421,11 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         <button
                           key={slot.key}
                           type="button"
-                          onClick={() => openClass(cell.classId, cell.subject, slot.key)}
+                          onClick={() => openClass(cell.classId, cell.subject ? canonicalSubject(cell.subject) : undefined, slot.key)}
                           className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted"
                         >
                           {periodWord(slot.label)} {placeLabel(cell.classLabel)}
-                          {cell.subject || subjects.length === 1 ? ` · ${tr(cell.subject || subjects[0])}` : ""}
+                          {cell.subject || subjects.length === 1 ? ` · ${tr(canonicalSubject(cell.subject || subjects[0]))}` : ""}
                         </button>
                       );
                     })}
