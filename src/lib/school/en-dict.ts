@@ -321,6 +321,7 @@ export const EN_UI: Record<string, string> = {
   "أيام التأخر": "Late days",
   "أيام الغياب": "Absence days",
   "عدد المخالفات والتأخر والغياب": "Counts of violations, late and absence",
+  "الطالب غائب في هذا اليوم، ولا تُسجَّل عليه مخالفات الحضور أو التأخر أو ورود الأسرة": "The student is absent this day; attendance and lateness notes cannot be recorded",
   "خيارات الرسالة الافتراضية": "Default message options",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",

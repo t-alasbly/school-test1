@@ -1398,6 +1398,19 @@ export const createNote = createServerFn({ method: "POST" }).middleware([authMid
 	const periodKey = data.periodKey?.trim() ?? "";
 	const occurredAt = data.occurredAt?.trim() ? new Date(data.occurredAt).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
 	if (Number.isNaN(Date.parse(occurredAt))) throw new Error("وقت المخالفة غير صالح");
+	let behaviorNameForCheck = "";
+	if (data.behaviorTypeId) {
+		const bt = (await sql`select name from behavior_types where id = ${data.behaviorTypeId} and school_id = ${staff.school_id}`)[0];
+		behaviorNameForCheck = bt?.name || "";
+	}
+	if (isAttendanceRelated(data.type, behaviorNameForCheck || data.details)) {
+		const absent = (await sql`
+      select 1 from daily_attendance
+      where school_id = ${staff.school_id} and student_id = ${student.id}
+        and day = (${occurredAt}::timestamptz)::date and kind = 'absence'
+    `)[0];
+		if (absent) throw new Error("الطالب غائب في هذا اليوم، ولا تُسجَّل عليه مخالفات الحضور أو التأخر أو ورود الأسرة");
+	}
 	const listed = parseSubjects(staff.subject);
 	let lessonSubject = (data.subject ?? "").trim().slice(0, 40);
 	if (listed.length === 1) lessonSubject = listed[0];
@@ -4119,6 +4132,56 @@ export const getDailyAttendance = createServerFn({ method: "POST" }).middleware(
 async function ensureAttendanceStamp(sql) {
 	await sql`alter table daily_attendance add column if not exists recorded_at timestamptz`;
 }
+
+const ATTENDANCE_NAME = /تأخر\s*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول/;
+
+function isAttendanceRelated(type: string, behaviorName?: string) {
+	if (type === "absence" || type === "late") return true;
+	return ATTENDANCE_NAME.test(String(behaviorName || ""));
+}
+
+async function clearAttendanceNotes(sql, schoolId: number, studentId: number, day: string) {
+	await sql`
+    delete from notifications
+    where school_id = ${schoolId}
+      and note_id in (
+        select n.id
+        from notes n
+        left join behavior_types bt on bt.id = n.behavior_type_id
+        where n.school_id = ${schoolId}
+          and n.student_id = ${studentId}
+          and coalesce(n.occurred_at, n.created_at)::date = ${day}::date
+          and (
+            n.type in ('absence', 'late')
+            or (
+              n.type = 'behavior'
+              and (
+                coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
+                or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
+              )
+            )
+          )
+      )
+  `;
+	await sql`
+    delete from notes n
+    using behavior_types bt
+    where n.school_id = ${schoolId}
+      and n.student_id = ${studentId}
+      and coalesce(n.occurred_at, n.created_at)::date = ${day}::date
+      and (
+        n.type in ('absence', 'late')
+        or (
+          n.type = 'behavior'
+          and bt.id = n.behavior_type_id
+          and (
+            coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
+            or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
+          )
+        )
+      )
+  `;
+}
 export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	day: string().min(8).max(12),
 	entries: array(object({
@@ -4159,10 +4222,13 @@ export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware
           `;
 			continue;
 		}
-		if (entry.kind === "absence") await sql`
+		if (entry.kind === "absence") {
+			await sql`
           delete from daily_attendance
           where school_id = ${staff.school_id} and student_id = ${entry.studentId} and day = ${day}::date and kind in ('late', 'leave')
         `;
+			await clearAttendanceNotes(sql, staff.school_id, entry.studentId, day);
+		}
 		else await sql`
           delete from daily_attendance
           where school_id = ${staff.school_id} and student_id = ${entry.studentId} and day = ${day}::date and kind = 'absence'
