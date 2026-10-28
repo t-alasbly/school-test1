@@ -38,6 +38,7 @@ function MessagesSettings() {
     otherViolations: false,
     late: false,
     absence: false,
+    counts: false,
   });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(WHATSAPP_TEMPLATES.general.body);
@@ -100,6 +101,7 @@ function MessagesSettings() {
             ["otherViolations", "المخالفات الأخرى"],
             ["late", "أيام التأخر"],
             ["absence", "أيام الغياب"],
+            ["counts", "عدد المخالفات والتأخر والغياب"],
           ] as const).map(([key, label]) => (
             <label key={key} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
               <input

@@ -320,6 +320,7 @@ export const EN_UI: Record<string, string> = {
   "المخالفات الأخرى": "Other violations",
   "أيام التأخر": "Late days",
   "أيام الغياب": "Absence days",
+  "عدد المخالفات والتأخر والغياب": "Counts of violations, late and absence",
   "خيارات الرسالة الافتراضية": "Default message options",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",

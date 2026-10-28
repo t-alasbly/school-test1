@@ -107,12 +107,13 @@ export function WhatsAppDialog({
   const [picker, setPicker] = useState<string>(defaultType);
   const [draft, setDraft] = useState("");
   const [includeParticipants, setIncludeParticipants] = useState(true);
-  const defaults = school.messageDefaults ?? { sameRepeat: true, otherViolations: false, late: false, absence: false };
+  const defaults = school.messageDefaults ?? { sameRepeat: true, otherViolations: false, late: false, absence: false, counts: false };
   const [sameRepeat, setSameRepeat] = useState(defaults.sameRepeat);
   const [otherViolations, setOtherViolations] = useState(defaults.otherViolations);
   const [includeLate, setIncludeLate] = useState(defaults.late);
   const [includeAbsence, setIncludeAbsence] = useState(defaults.absence);
-  const anyExtra = sameRepeat || otherViolations || includeLate || includeAbsence;
+  const [includeCounts, setIncludeCounts] = useState(defaults.counts);
+  const anyExtra = sameRepeat || otherViolations || includeLate || includeAbsence || includeCounts;
 
   const allowed = staffCan(staff, "sendMessages");
   const number = toWhatsAppNumber(parentPhone);
@@ -144,12 +145,12 @@ export function WhatsAppDialog({
   const history = useQuery({
     queryKey: ["student", studentId, "parent-repeat"],
     queryFn: () => getStudentNotes({ data: { studentId } }),
-    enabled: (open || embedded) && (sameRepeat || otherViolations),
+    enabled: (open || embedded) && (sameRepeat || otherViolations || includeCounts),
   });
   const attendance = useQuery({
     queryKey: ["student-attendance-days", studentId, "parent"],
     queryFn: () => getStudentAttendanceDays({ data: { studentId } }),
-    enabled: (open || embedded) && (includeLate || includeAbsence),
+    enabled: (open || embedded) && (includeLate || includeAbsence || includeCounts),
   });
   const behaviorNotes = (history.data?.notes ?? []).filter((n) => n.type === "behavior");
   const days = attendance.data?.days ?? [];
@@ -176,8 +177,9 @@ export function WhatsAppDialog({
       const lines = same.map((n) => {
         const day = formatDay(n.occurredAt || n.createdAt);
         const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
+        const times = Number(n.occurrence) || 1;
         const mark = current && n.id === current.id ? " (الحالية)" : "";
-        return `• ${day}${deg ? ` — ${deg}` : ""}${mark}`;
+        return `• ${day}${deg ? ` — ${deg}` : ""} (${times})${mark}`;
       });
       blocks.push(["تكرار نفس المخالفة:", ...(lines.length ? lines : ["لا يوجد تكرار مسجل"])].join("\n"));
     }
@@ -186,7 +188,8 @@ export function WhatsAppDialog({
         const name = (n.behaviorTypeName || n.details || "مخالفة").trim();
         const day = formatDay(n.occurredAt || n.createdAt);
         const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
-        return `• ${name} — ${day}${deg ? ` — ${deg}` : ""}`;
+        const times = Number(n.occurrence) || 1;
+        return `• ${name} — ${day}${deg ? ` — ${deg}` : ""} (${times})`;
       });
       blocks.push(["المخالفات الأخرى:", ...(lines.length ? lines : ["لا توجد مخالفات أخرى"])].join("\n"));
     }
@@ -197,6 +200,20 @@ export function WhatsAppDialog({
     if (includeAbsence) {
       const absDays = days.filter((d) => d.kind === "absence").map((d) => `• ${formatDay(d.day)}`);
       blocks.push(["أيام الغياب:", ...(absDays.length ? absDays : ["لا يوجد غياب"])].join("\n"));
+    }
+    if (includeCounts) {
+      const byDegree = [1, 2, 3, 4, 5].map((degree) => ({
+        degree,
+        count: behaviorNotes.filter((n) => Number(n.behaviorDegree) === degree).length,
+      })).filter((item) => item.count > 0 || item.degree <= 3);
+      const lateCount = days.filter((d) => d.kind === "late").length;
+      const absCount = days.filter((d) => d.kind === "absence").length;
+      blocks.push([
+        "الأعداد:",
+        ...byDegree.map((item) => `عدد مخالفات ${degreeLabel(item.degree)}: ${item.count}`),
+        `عدد أيام التأخر: ${lateCount}`,
+        `عدد أيام الغياب: ${absCount}`,
+      ].join("\n"));
     }
     blocks.push([
       `الدرجة المخصومة الآن: ${currentAmount}`,
@@ -209,7 +226,7 @@ export function WhatsAppDialog({
   function withRepeat(text: string) {
     const base = stripRepeatSummary(text);
     if (!anyExtra) return base;
-    const loading = (sameRepeat || otherViolations) && history.isLoading || (includeLate || includeAbsence) && attendance.isLoading;
+    const loading = (sameRepeat || otherViolations || includeCounts) && history.isLoading || (includeLate || includeAbsence || includeCounts) && attendance.isLoading;
     if (loading) return `${base}\n\n${REPEAT_HEADER}\nجاري التحميل...`;
     return `${base}\n\n${REPEAT_HEADER}\n${repeatSummary()}`;
   }
@@ -266,6 +283,7 @@ export function WhatsAppDialog({
       setOtherViolations(defaults.otherViolations);
       setIncludeLate(defaults.late);
       setIncludeAbsence(defaults.absence);
+      setIncludeCounts(defaults.counts);
       setDraft(draftFrom(defaultType, true));
     }
   }
@@ -283,7 +301,7 @@ export function WhatsAppDialog({
       return;
     }
     setDraft((current) => withRepeat(current));
-  }, [anyExtra, sameRepeat, otherViolations, includeLate, includeAbsence, history.data, history.isLoading, attendance.data, attendance.isLoading]);
+  }, [anyExtra, sameRepeat, otherViolations, includeLate, includeAbsence, includeCounts, history.data, history.isLoading, attendance.data, attendance.isLoading]);
 
   async function send() {
     if (!number) return;
@@ -374,6 +392,7 @@ export function WhatsAppDialog({
           ["other", "المخالفات الأخرى", otherViolations, setOtherViolations],
           ["late", "أيام التأخر", includeLate, setIncludeLate],
           ["abs", "أيام الغياب", includeAbsence, setIncludeAbsence],
+          ["counts", "عدد المخالفات والتأخر والغياب", includeCounts, setIncludeCounts],
         ] as const).map(([key, label, on, set]) => (
           <label key={key} className="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
             <input

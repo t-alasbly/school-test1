@@ -109,6 +109,7 @@ export type School = {
     otherViolations: boolean;
     late: boolean;
     absence: boolean;
+    counts: boolean;
   };
   teachersCanMessage: boolean;
   teachersCanViewAll: boolean;

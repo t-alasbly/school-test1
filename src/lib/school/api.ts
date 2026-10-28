@@ -62,7 +62,7 @@ function mapSchool(school) {
 	};
 }
 
-const DEFAULT_MESSAGE_DEFAULTS = { sameRepeat: true, otherViolations: false, late: false, absence: false };
+const DEFAULT_MESSAGE_DEFAULTS = { sameRepeat: true, otherViolations: false, late: false, absence: false, counts: false };
 function parseMessageDefaults(raw) {
 	let value = raw;
 	if (typeof raw === "string") try { value = JSON.parse(raw); } catch { return { ...DEFAULT_MESSAGE_DEFAULTS }; }
@@ -73,6 +73,7 @@ function parseMessageDefaults(raw) {
 		otherViolations: rec.otherViolations === true,
 		late: rec.late === true,
 		absence: rec.absence === true,
+		counts: rec.counts === true,
 	};
 }
 function parseMessageTemplates(raw) {
@@ -2972,6 +2973,7 @@ export const updateMessageDefaults = createServerFn({ method: "POST" }).middlewa
 	otherViolations: boolean(),
 	late: boolean(),
 	absence: boolean(),
+	counts: boolean(),
 })).handler(async ({ context, data }) => {
 	const { sql, staff } = await requireAdmin(context.userId);
 	await sql`alter table schools add column if not exists message_defaults jsonb not null default '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}'::jsonb`;
