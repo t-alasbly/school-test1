@@ -827,14 +827,23 @@ function RepeatBox({ ctx }) {
   const ladder = procedureLadder(ctx.focus?.behaviorDegree, bt?.procedures);
   const history = [...ctx.previous, ctx.focus].filter(Boolean);
   const rows = (history.length > 4 ? history.slice(-4) : history);
+  const periodBare = (key) => {
+    if (!key) return "—";
+    const label = periodShort(key, ctx.season, ctx.schedules);
+    return label.replace(/^الحصة\s*/, "").trim() || label;
+  };
+  const occBare = (n) => occurrenceLabel(n).replace(/^المرة\s*/, "").trim();
   return (
     <div className="official-tint my-2 rounded-sm border border-[#00857c] px-2 py-1.5 text-[11px] leading-5">
-      <p className="font-semibold text-[#00857c]">
-        هذه {occurrenceLabel(ctx.occurrence)} لنفس المخالفة
-        {ctx.focus?.behaviorTypeName ? ` (${tr(ctx.focus.behaviorTypeName)})` : ""}.
-      </p>
       {rows.length ? (
-        <table className="official-table mt-1 text-[10.5px]">
+        <table className="official-table mt-1 text-[11px]">
+          <colgroup>
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "46%" }} />
+          </colgroup>
           <thead>
             <tr>
               {[
@@ -853,16 +862,12 @@ function RepeatBox({ ctx }) {
               const occ = n.occurrence || i + 1;
               const recorded = parseActionTaken(n.actionTaken).steps;
               const news = newStepsForOccurrence(recorded, n.behaviorDegree ?? ctx.focus?.behaviorDegree, occ, ladder);
-              const brief = briefActionText(news[0]);
+              const brief = briefActionText(news[0], 90);
               return (
                 <tr className={n.id === ctx.focus?.id ? "bg-[#f3faf9]" : undefined}>
-                  <td className="!py-1">{occurrenceLabel(occ)}</td>
+                  <td className="!py-1">{occBare(occ)}</td>
                   <td className="!py-1">{formatStamp(n.createdAt)}</td>
-                  <td className="!py-1">
-                    {n.periodKey
-                      ? periodShort(n.periodKey, ctx.season, ctx.schedules)
-                      : "—"}
-                  </td>
+                  <td className="!py-1">{periodBare(n.periodKey)}</td>
                   <td className="!py-1">{n.teacherSubject || "—"}</td>
                   <td className="!py-1 text-right">{brief}</td>
                 </tr>
@@ -908,30 +913,6 @@ function CompensationLine({ ctx }) {
 function PledgeBody({ ctx }) {
   return (
     <div className="space-y-2 text-[13.5px] leading-8">
-      <p>
-        أنا {ctx.studentWord} <Dotted value={ctx.name} /> بالصف{" "}
-        <Dotted value={ctx.classLine} />
-      </p>
-      <p>
-        أنني قمت في يوم <Dotted value={ctx.weekday} /> الموافق{" "}
-        <Dotted value={ctx.day} /> {tr("هجريًا")}<Dotted value={ctx.hijri} />
-        {ctx.period ? (
-          <Fragment>
-            {" "}
-            في <Dotted value={ctx.period} />
-          </Fragment>
-        ) : null}
-        {ctx.subject ? (
-          <Fragment>
-            {" "}
-            مادة <Dotted value={ctx.subject} />
-          </Fragment>
-        ) : null}
-      </p>
-      <p>
-        بمشكلة سلوكية من الدرجة <Dotted value={ctx.degree} /> وهي{" "}
-        <Dotted value={ctx.violation} />
-      </p>
       {ctx.showParticipants && ctx.participants?.length ? (
         <p>
           والمشاركون في هذه المخالفة المشتركة:{" "}
