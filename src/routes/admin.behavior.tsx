@@ -133,14 +133,14 @@ function AdminBody() {
     refetchInterval: 5000,
     enabled: allowed && !typeParam,
   });
+  const dated = typeParam === "absence" || typeParam === "late";
   const filtered = useQuery({
-    queryKey: ["followup-notes", typeParam, rangeParam],
+    queryKey: ["followup-notes", typeParam, dated ? rangeParam : "all"],
     queryFn: () =>
       listFollowupNotes({
         data: {
           type: typeParam as "absence" | "late" | "homework" | "behavior",
-          from: bounds.from,
-          to: bounds.to,
+          ...(dated ? { from: bounds.from, to: bounds.to } : {}),
         },
       }),
     enabled: Boolean(typeParam),

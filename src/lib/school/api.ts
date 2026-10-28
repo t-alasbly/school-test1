@@ -5420,7 +5420,7 @@ export const listFollowupNotes = createServerFn({ method: "POST" }).middleware([
 		from: data.from,
 		to: data.to,
 		teacherId: ownOnly ? staff.user_id : void 0,
-		limit: 400,
+		limit: 2000,
 		staff,
 		school
 	});
