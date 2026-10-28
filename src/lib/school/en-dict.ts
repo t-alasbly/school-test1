@@ -314,6 +314,7 @@ export const EN_UI: Record<string, string> = {
   "توقيع ولي الأمر": "Guardian signature",
   "تعهد سلوكي": "Conduct pledge",
   "إظهار الإجراء أسفل التعهد": "Show the procedure under the pledge",
+  "إخفاء مرات التكرار السابقة": "Hide previous occurrences",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",
   "إحالة طالب / طالبة": "Student referral",

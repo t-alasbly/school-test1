@@ -219,9 +219,10 @@ function PrintFormsDialog({
   const [noteIdx, setNoteIdx] = useState(0);
   const [manual, setManual] = useState(false);
   const [overrides, setOverrides] = useState({});
-  const [showCompensation, setShowCompensation] = useState(true);
+  const [showCompensation, setShowCompensation] = useState(false);
   const [showParticipants, setShowParticipants] = useState(true);
   const [showProcedure, setShowProcedure] = useState(true);
+  const [showPrevious, setShowPrevious] = useState(true);
   const sheetRef = useRef(null);
   const historyNotes = useQuery({
     queryKey: ["student", studentId, "print-forms"],
@@ -336,6 +337,17 @@ function PrintFormsDialog({
               إظهار الإجراء أسفل التعهد
             </label>
           ) : null}
+          {kind === "pledge" ? (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={!showPrevious}
+                onChange={(e) => setShowPrevious(!e.target.checked)}
+              />
+              إخفاء مرات التكرار السابقة
+            </label>
+          ) : null}
         </div>
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
@@ -427,6 +439,7 @@ function PrintFormsDialog({
           showCompensation={showCompensation && Boolean(selected?.compensation)}
           showParticipants={kind === "pledge" && showParticipants}
           showProcedure={kind === "pledge" && showProcedure}
+          showPrevious={kind === "pledge" ? showPrevious : true}
           participants={participants}
           appointment={kind === "invite" ? appointment : undefined}
         />
@@ -444,6 +457,7 @@ export function OfficialForm({
   showCompensation = false,
   showParticipants = false,
   showProcedure = false,
+  showPrevious = true,
   participants = [],
   appointment,
   ref,
@@ -538,6 +552,7 @@ export function OfficialForm({
     showCompensation: Boolean(showCompensation && focus?.compensation),
     showParticipants: Boolean(showParticipants && participants.length),
     showProcedure: Boolean(showProcedure),
+    showPrevious: showPrevious !== false,
     participants,
     appointmentTime: appointment?.time || "",
   };
@@ -928,7 +943,7 @@ function PledgeBody({ ctx }) {
           <Dotted value={ctx.participants.join(tr("، "))} />
         </p>
       ) : null}
-      <RepeatBox ctx={ctx} />
+      {ctx.showPrevious !== false ? <RepeatBox ctx={ctx} /> : null}
       {ctx.showProcedure ? <ProcedureList ctx={ctx} /> : null}
       <CompensationLine ctx={ctx} />
       <p>{tr("وأتعهد بعدم تكرار أي مشكلة سلوكية مستقبلاً وعلى ذلك جرى التوقيع.")}</p>
