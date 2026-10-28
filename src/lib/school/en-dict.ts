@@ -315,6 +315,7 @@ export const EN_UI: Record<string, string> = {
   "تعهد سلوكي": "Conduct pledge",
   "إظهار الإجراء أسفل التعهد": "Show the procedure under the pledge",
   "إخفاء مرات التكرار السابقة": "Hide previous occurrences",
+  "إضافة مخالفات التكرار المختصرة": "Add a brief list of repeated violations",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",
   "إحالة طالب / طالبة": "Student referral",

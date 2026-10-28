@@ -1,6 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import { tr } from "@/lib/school/i18n";
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,12 +15,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { logParentMessage } from "@/lib/school/api";
+import { getStudentNotes, logParentMessage } from "@/lib/school/api";
 import {
   NOTE_META,
   WHATSAPP_TEMPLATES,
   classLabel,
   degreeDeductionLabel,
+  degreeLabel,
   fillTemplate,
   formatDay,
   sharedParticipantNames,
@@ -33,6 +35,25 @@ import {
 import { staffCan } from "@/lib/school/permissions";
 import type { MessageKind, MessageTemplate, NoteType } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
+
+
+const REPEAT_HEADER = "ملخص مخالفات التكرار:";
+
+function behaviorDeductAmount(note: { behaviorDegree?: number | null; occurrence?: number | null }) {
+  const degree = Number(note.behaviorDegree) || 0;
+  const times = Number(note.occurrence) || 1;
+  if (degree === 1) return times >= 3 ? 1 : 0;
+  if (degree === 2) return 2;
+  if (degree === 3) return 3;
+  if (degree === 4) return 10;
+  if (degree === 5) return 15;
+  return 0;
+}
+
+function stripRepeatSummary(text: string) {
+  const idx = text.indexOf(REPEAT_HEADER);
+  return idx >= 0 ? text.slice(0, idx).trimEnd() : text;
+}
 
 const KEYS = ["absence", "late", "homework", "behavior", "general"] as const;
 
@@ -85,6 +106,7 @@ export function WhatsAppDialog({
   const [picker, setPicker] = useState<string>(defaultType);
   const [draft, setDraft] = useState("");
   const [includeParticipants, setIncludeParticipants] = useState(true);
+  const [includeRepeats, setIncludeRepeats] = useState(false);
 
   const allowed = staffCan(staff, "sendMessages");
   const number = toWhatsAppNumber(parentPhone);
@@ -112,6 +134,44 @@ export function WhatsAppDialog({
     () => sharedParticipantNames(sharedText || details),
     [sharedText, details],
   );
+
+  const history = useQuery({
+    queryKey: ["student", studentId, "parent-repeat"],
+    queryFn: () => getStudentNotes({ data: { studentId } }),
+    enabled: (open || embedded) && includeRepeats,
+  });
+  const behaviorNotes = (history.data?.notes ?? []).filter((n) => n.type === "behavior");
+
+  function repeatSummary() {
+    const current =
+      behaviorNotes.find((n) => noteId != null && n.id === noteId) ??
+      behaviorNotes.find((n) => createdAt && n.createdAt === createdAt) ??
+      null;
+    const currentAmount = current
+      ? behaviorDeductAmount(current)
+      : behaviorDeductAmount({ behaviorDegree, occurrence: 1 });
+    const total = behaviorNotes.reduce((sum, n) => sum + behaviorDeductAmount(n), 0);
+    const lines = behaviorNotes.map((n) => {
+      const day = formatDay(n.occurredAt || n.createdAt);
+      const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
+      const mark = current && n.id === current.id ? " (الحالية)" : "";
+      return `• ${day}${deg ? ` — ${deg}` : ""}${mark}`;
+    });
+    return [
+      REPEAT_HEADER,
+      ...(lines.length ? lines : ["لا توجد مخالفات مسجلة"]),
+      "",
+      `الدرجة المخصومة الآن: ${currentAmount}`,
+      `مجموع درجات السلوك المخصومة حتى اليوم: ${total} من 100`,
+    ].join("\n");
+  }
+
+  function withRepeat(text: string, on: boolean) {
+    const base = stripRepeatSummary(text);
+    if (!on) return base;
+    if (history.isLoading) return `${base}\n\n${REPEAT_HEADER}\nجاري التحميل...`;
+    return `${base}\n\n${repeatSummary()}`;
+  }
 
   const degreePhrase = degreeDeductionLabel(behaviorDegree);
   const marksLine = deductionText
@@ -171,6 +231,11 @@ export function WhatsAppDialog({
     setIncludeParticipants(true);
     setDraft(draftFrom(defaultType, true));
   }, [embedded, allowed, defaultType, initialDraft, occurrenceText, deductionText, behaviorDegree, marksLine]);
+
+  useEffect(() => {
+    if (!includeRepeats) return;
+    setDraft((current) => withRepeat(current, true));
+  }, [includeRepeats, history.data, history.isLoading]);
 
   async function send() {
     if (!number) return;
@@ -254,6 +319,24 @@ export function WhatsAppDialog({
           </span>
         </label>
       ) : null}
+      <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 py-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1 size-4 accent-primary"
+          checked={includeRepeats}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setIncludeRepeats(on);
+            setDraft((current) => withRepeat(current, on));
+          }}
+        />
+        <span>
+          <span className="block font-semibold">{tr("إضافة مخالفات التكرار المختصرة")}</span>
+          <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
+            تاريخ كل مخالفة ودرجتها، والدرجة المخصومة الآن، ومجموع الخصم حتى اليوم من 100.
+          </span>
+        </span>
+      </label>
       {!number ? <p className="text-sm text-danger">{tr("لا يوجد رقم جوال محفوظ")}</p> : null}
       <Button className="w-full" onClick={send} disabled={!number || !draft.trim()}>
         {tr("إرسال عبر واتساب")}
