@@ -107,7 +107,7 @@ function ReportsBody() {
   const [colOrder, setColOrder] = useState<string[]>(["seq", "name"]);
   const [rowMm, setRowMm] = useState(7);
   const [sheetStyle, setSheetStyle] = useState<"names" | "grades">("names");
-  const [sheetMargins, setSheetMargins] = useState(school.printMargins ?? { top: 12, right: 12, bottom: 14, left: 10 });
+  const [sheetMargins, setSheetMargins] = useState(school.printMargins ?? { top: 7, right: 7, bottom: 9, left: 5 });
   const [rosterMarks, setRosterMarks] = useState<Record<string, string>>({});
   const [templateName, setTemplateName] = useState("");
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);

@@ -85,7 +85,7 @@ function printInPopup(el: HTMLElement) {
 <title>طباعة</title>
 ${collectedStyles()}
 <style>
-  @page { size: A4 portrait; margin: 0; }
+  @page { size: A4 portrait; margin: 5mm; }
   html, body { margin: 0; background: #fff; color: #111; direction: rtl; }
   body { font-family: "Noto Naskh Arabic", Amiri, "Times New Roman", serif; font-size: 12px; line-height: 1.45; }
   .print-form {
@@ -93,7 +93,7 @@ ${collectedStyles()}
     width: 210mm;
     max-width: 210mm;
     margin: 0 auto;
-    padding: var(--print-margin-top, 12mm) var(--print-margin-right, 12mm) var(--print-margin-bottom, 14mm) var(--print-margin-left, 10mm);
+    padding: var(--print-margin-top, 7mm) var(--print-margin-right, 7mm) var(--print-margin-bottom, 9mm) var(--print-margin-left, 5mm);
   }
   .print-form h2, .student-print-line, .year-title { text-align: center; }
   .year-title { display: block; width: 100%; border: 0; background: transparent; font-weight: 700; font-size: 14px; margin: 0 0 8px; }

@@ -296,6 +296,7 @@ function PrintFormsDialog({
             <Printer className="size-4" />
             {tr("طباعة")}
           </Button>
+          <span className="text-xs text-fg-muted">في نافذة الطباعة اترك الهوامش على «افتراضي»</span>
           <Button
             type="button"
             variant={manual ? "default" : "secondary"}

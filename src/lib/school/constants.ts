@@ -162,10 +162,10 @@ export const APP_NAME = "متابعة الطلاب الشاملة";
 export const DEFAULT_APP_PHRASE = "نظام متابعة شؤون الطلاب — بين المعلم والإدارة وولي الأمر";
 export const DEFAULT_SCHOOL_NAME = "اسم المدرسة";
 export const DEFAULT_PRINT_MARGINS: PrintMargins = {
-	top: 12,
-	right: 12,
-	bottom: 14,
-	left: 10
+	top: 7,
+	right: 7,
+	bottom: 9,
+	left: 5
 };
 export function clampPrintMargin(value: unknown): number {
 	const n = typeof value === "number" ? value : Number(value);
