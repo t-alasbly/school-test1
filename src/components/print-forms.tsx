@@ -830,7 +830,7 @@ function RepeatBox({ ctx }) {
   const bt = behaviorTypes.find((b) => b.name === ctx.focus?.behaviorTypeName);
   const ladder = procedureLadder(ctx.focus?.behaviorDegree, bt?.procedures);
   const history = [...ctx.previous, ctx.focus].filter(Boolean);
-  const rows = (history.length > 4 ? history.slice(-4) : history);
+  const rows = history;
   const periodBare = (key) => {
     if (!key) return "—";
     const label = periodShort(key, ctx.season, ctx.schedules);
