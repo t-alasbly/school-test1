@@ -1753,7 +1753,7 @@ export const getAdminDashboard = createServerFn({ method: "GET" }).middleware([a
 			improvementsOpen: improveRows[0]?.count ?? 0
 		},
 		feed: await fetchNotes(sql, staff.school_id, {
-			limit: 60,
+			limit: 1000,
 			staff,
 			school
 		}),

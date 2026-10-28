@@ -124,6 +124,8 @@ function AdminBody() {
   const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
   const [degreeFilter, setDegreeFilter] = useState<number | 0>(0);
   const [sortBy, setSortBy] = useState<"newest" | "most" | "name">("newest");
+  const [minCount, setMinCount] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
   const bounds = rangeFromPreset(rangeParam);
   const query = useQuery({
     queryKey: ["admin"],
@@ -198,15 +200,16 @@ function AdminBody() {
       if (degreeFilter && Number(note.behaviorDegree) !== degreeFilter) return false;
       return true;
     });
+    const counts = new Map<number, number>();
+    for (const note of rows) counts.set(note.studentId, (counts.get(note.studentId) ?? 0) + 1);
+    if (minCount > 0) rows = rows.filter((note) => (counts.get(note.studentId) ?? 0) >= minCount);
     if (sortBy === "most") {
-      const counts = new Map<number, number>();
-      for (const note of rows) counts.set(note.studentId, (counts.get(note.studentId) ?? 0) + 1);
       rows = [...rows].sort((a, b) => (counts.get(b.studentId) ?? 0) - (counts.get(a.studentId) ?? 0) || b.createdAt.localeCompare(a.createdAt));
     } else if (sortBy === "name") {
       rows = [...rows].sort((a, b) => a.studentName.localeCompare(b.studentName, "ar") || b.createdAt.localeCompare(a.createdAt));
     }
     return rows;
-  }, [feed, nameQuery, statusFilter, degreeFilter, sortBy]);
+  }, [feed, nameQuery, statusFilter, degreeFilter, sortBy, minCount]);
 
   if (typeParam && filtered.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل الكشف…")}</p>;
   if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل اللوحة…")}</p>;
@@ -266,43 +269,69 @@ function AdminBody() {
             );
           })}
         </div>
-        <div className="no-print grid gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Input
-            value={nameQuery}
-            onChange={(e) => setNameQuery(e.target.value)}
-            placeholder={tr("اسم الطالب أو الفصل")}
-          />
-          <select
-            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "all" | "open" | "closed")}
-          >
-            <option value="all">{tr("كل الحالات")}</option>
-            <option value="open">{tr("لم تُغلق")}</option>
-            <option value="closed">{tr("أُغلقت")}</option>
-          </select>
-          <select
-            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
-            value={degreeFilter}
-            onChange={(e) => setDegreeFilter(Number(e.target.value))}
-          >
-            <option value={0}>{tr("كل الدرجات")}</option>
-            {[1, 2, 3, 4, 5].map((degree) => (
-              <option key={degree} value={degree}>{degreeLabel(degree)}</option>
-            ))}
-          </select>
-          <select
-            className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as "newest" | "most" | "name")}
-          >
-            <option value="newest">{tr("الأحدث")}</option>
-            <option value="most">{tr("الأكثر مخالفات")}</option>
-            <option value="name">{tr("حسب اسم الطالب")}</option>
-          </select>
-          <p className="sm:col-span-2 lg:col-span-4 text-xs text-fg-muted">
-            {tr("عدد المخالفات")}: {visibleFeed.length}
-          </p>
+        <div className="no-print space-y-2">
+          <div className="flex items-center gap-2">
+            <Input
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              placeholder={tr("اسم الطالب أو الفصل")}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant={showFilters ? "default" : "secondary"}
+              onClick={() => setShowFilters((v) => !v)}
+              aria-label={tr("فلتر")}
+            >
+              {tr("فلتر")}
+            </Button>
+          </div>
+          {showFilters ? (
+            <div className="grid gap-2 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2 lg:grid-cols-4">
+              <select
+                className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "all" | "open" | "closed")}
+              >
+                <option value="all">{tr("كل الحالات")}</option>
+                <option value="open">{tr("لم تُغلق")}</option>
+                <option value="closed">{tr("أُغلقت")}</option>
+              </select>
+              <select
+                className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+                value={degreeFilter}
+                onChange={(e) => setDegreeFilter(Number(e.target.value))}
+              >
+                <option value={0}>{tr("كل الدرجات")}</option>
+                {[1, 2, 3, 4, 5].map((degree) => (
+                  <option key={degree} value={degree}>{degreeLabel(degree)}</option>
+                ))}
+              </select>
+              <select
+                className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as "newest" | "most" | "name")}
+              >
+                <option value="newest">{tr("الأحدث")}</option>
+                <option value="most">{tr("الأكثر مخالفات")}</option>
+                <option value="name">{tr("حسب اسم الطالب")}</option>
+              </select>
+              <label className="flex h-11 items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm">
+                <span className="shrink-0 text-fg-muted">{tr("أكثر من")}</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={minCount || ""}
+                  onChange={(e) => setMinCount(Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0"
+                  className="w-full bg-transparent outline-none"
+                />
+              </label>
+              <p className="sm:col-span-2 lg:col-span-4 text-xs text-fg-muted">
+                {tr("عدد المخالفات")}: {visibleFeed.length}
+              </p>
+            </div>
+          ) : null}
         </div>
         {periodMode ? (
           <div className="no-print flex flex-wrap gap-1.5">

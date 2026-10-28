@@ -330,6 +330,8 @@ export const EN_UI: Record<string, string> = {
   "الأكثر مخالفات": "Most violations",
   "حسب اسم الطالب": "By student name",
   "عدد المخالفات": "Violation count",
+  "فلتر": "Filter",
+  "أكثر من": "More than",
   "خيارات الرسالة الافتراضية": "Default message options",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",
