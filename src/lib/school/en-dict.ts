@@ -274,6 +274,8 @@ export const EN_UI: Record<string, string> = {
   "لا يوجد متأخرون في هذا النطاق.": "No late students in this range.",
   "غياب اليوم الكامل": "Absent all day",
   "سُجّل غياب اليوم الكامل": "Full-day absence recorded",
+  "أُلغي غياب اليوم الكامل": "Full-day absence cancelled",
+  "إلغاء غياب اليوم الكامل": "Cancel full-day absence",
   "تعذر تسجيل غياب اليوم": "Could not record today's absence",
   "أيام الغياب": "Days absent",
   "أيام التأخر": "Days late",

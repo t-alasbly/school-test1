@@ -4060,9 +4060,12 @@ export const setPreferredLocale = createServerFn({ method: "POST" }).middleware(
 	return { locale: data.locale };
 });
 function todayISODate() {
-	const d = /* @__PURE__ */ new Date();
-	const pad = (n) => String(n).padStart(2, "0");
-	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "Asia/Riyadh",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit"
+	}).format(new Date());
 }
 export const getDailyAttendance = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	day: string().max(12).optional(),
@@ -4257,36 +4260,74 @@ export const saveDailyAttendance = createServerFn({ method: "POST" }).middleware
 		day
 	};
 });
+export const todayAbsenceIds = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
+	studentIds: array(number()).min(1).max(80)
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireApproved(context.userId);
+	const day = todayISODate();
+	const ids = [...new Set(data.studentIds)];
+	const rows = await sql.query(`select student_id from daily_attendance
+     where school_id = $1 and day = $2::date and kind = 'absence' and student_id = any($3::int[])`, [
+		staff.school_id,
+		day,
+		ids
+	]);
+	return {
+		day,
+		studentIds: rows.map((row) => Number(row.student_id))
+	};
+});
 export const markFullDayAbsence = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
 	studentIds: array(number()).min(1).max(80)
 })).handler(async ({ context, data }) => {
 	const { sql, staff, school } = await requireApproved(context.userId);
 	await ensureAttendanceStamp(sql);
 	const day = todayISODate();
-	let count = 0;
-	for (const studentId of data.studentIds) {
-		if (!(await sql`select id from students where id = ${studentId} and school_id = ${staff.school_id}`)[0]) continue;
+	const wanted = [...new Set(data.studentIds)];
+	const students = wanted.length ? await sql.query(`select id from students where school_id = $1 and id = any($2::int[])`, [staff.school_id, wanted]) : [];
+	const ids = students.map((row) => Number(row.id));
+	const existingRows = ids.length ? await sql.query(`select student_id from daily_attendance
+     where school_id = $1 and day = $2::date and kind = 'absence' and student_id = any($3::int[])`, [
+		staff.school_id,
+		day,
+		ids
+	]) : [];
+	const existing = new Set(existingRows.map((row) => Number(row.student_id)));
+	const clearAll = ids.length > 0 && ids.every((id) => existing.has(id));
+	let recorded = 0;
+	let cleared = 0;
+	for (const studentId of ids) {
+		if (clearAll) {
+			await sql`
+        delete from daily_attendance
+        where school_id = ${staff.school_id} and student_id = ${studentId} and day = ${day}::date and kind = 'absence'
+      `;
+			cleared += 1;
+			continue;
+		}
+		if (existing.has(studentId)) continue;
 		await sql`
       delete from daily_attendance
       where school_id = ${staff.school_id} and student_id = ${studentId} and day = ${day}::date and kind in ('late', 'leave')
     `;
+		await clearAttendanceNotes(sql, staff.school_id, studentId, day);
 		await sql.query(`insert into daily_attendance (school_id, student_id, day, kind, excused, details, recorded_by, arrived_at, recorded_at)
-         values ($1, $2, $3::date, 'absence', false, $4, $5, null, now())
+         values ($1, $2, $3::date, 'absence', false, '', $4, null, now())
          on conflict (school_id, student_id, day, kind)
-         do update set details = excluded.details, recorded_by = excluded.recorded_by, recorded_at = now()`, [
+         do update set excused = false, details = '', recorded_by = excluded.recorded_by, recorded_at = now()`, [
 			staff.school_id,
 			studentId,
 			day,
-			"غياب اليوم الكامل",
 			staff.user_id
 		]);
-		count += 1;
+		recorded += 1;
 	}
-	if (count > 0) await upsertAttendanceDigest(sql, staff, school);
+	if (recorded + cleared > 0) await upsertAttendanceDigest(sql, staff, school);
 	return {
 		ok: true,
-		count,
-		day
+		day,
+		recorded,
+		cleared
 	};
 });
 export const getCounselingDesk = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(async ({ context }) => {

@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { createNote, closeNote, getMyTimetable, markFullDayAbsence, previewBehaviorOccurrence, previewStudyOccurrence } from "@/lib/school/api";
+import { createNote, closeNote, getMyTimetable, markFullDayAbsence, previewBehaviorOccurrence, previewStudyOccurrence, todayAbsenceIds } from "@/lib/school/api";
 import { NOTE_META, NOTE_TYPES, SHORTCUT_VIOLATIONS, STUDY_ACTIONS, STUDY_NOTES, classLabel, currentPeriod, degreeLabel, degreeTone, formatDay, formatTime, fromDatetimeLocalValue, isOtherChoice, isStaffViolation, isTeacherVerbal, occurrenceLabel, parseSubjects, procedureLadder, procedureStageLabel, resolveOther, sameSubject, scheduleFor, stageIndexFor, studyActionFor, toDatetimeLocalValue, toWhatsAppNumber } from "@/lib/school/constants";
 import { staffCan } from "@/lib/school/permissions";
 import type { NoteType } from "@/lib/school/types";
@@ -911,20 +911,35 @@ export function NoteComposer({
       toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تسجيل الملاحظة"));
     },
   });
+  const absenceToday = useQuery({
+    queryKey: ["today-absence", targets.map((item) => item.studentId).join(",")],
+    queryFn: () => todayAbsenceIds({ data: { studentIds: targets.map((item) => item.studentId) } }),
+    enabled: open && targets.length > 0,
+  });
+  const absentIds = new Set(absenceToday.data?.studentIds ?? []);
+  const allAbsent = targets.length > 0 && targets.every((item) => absentIds.has(item.studentId));
   const dayAbsence = useMutation({
     mutationFn: () => markFullDayAbsence({ data: { studentIds: targets.map((item) => item.studentId) } }),
     onSuccess: (result) => {
-      const count = result?.count ?? targets.length;
-      toast.success(count > 1 ? `${tr("سُجّل غياب اليوم الكامل")} — ${count}` : tr("سُجّل غياب اليوم الكامل"));
-      reset();
-      setInnerOpen(false);
-      onOpenChangeProp?.(false);
-      onSubmitted?.({ count, failedIds: [] });
+      const cleared = result?.cleared ?? 0;
+      const recorded = result?.recorded ?? 0;
+      if (cleared > 0 && recorded === 0) {
+        toast.success(cleared > 1 ? `${tr("أُلغي غياب اليوم الكامل")} — ${cleared}` : tr("أُلغي غياب اليوم الكامل"));
+      } else {
+        const count = recorded || targets.length;
+        toast.success(count > 1 ? `${tr("سُجّل غياب اليوم الكامل")} — ${count}` : tr("سُجّل غياب اليوم الكامل"));
+      }
+      void queryClient.invalidateQueries({ queryKey: ["today-absence"] });
       void queryClient.invalidateQueries({ queryKey: ["workspace"] });
       void queryClient.invalidateQueries({ queryKey: ["stage-students"] });
       void queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      void queryClient.invalidateQueries({ queryKey: ["daily-attendance"] });
+      void queryClient.invalidateQueries({ queryKey: ["attendance-day-counts"] });
+      void queryClient.invalidateQueries({ queryKey: ["student-attendance-days"] });
+      void queryClient.invalidateQueries({ queryKey: ["attendance-roster"] });
       void queryClient.invalidateQueries({ queryKey: ["class"] });
       void queryClient.invalidateQueries({ queryKey: ["admin"] });
+      void queryClient.invalidateQueries({ queryKey: ["desk-notes"] });
     },
     onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر تسجيل غياب اليوم")),
   });
@@ -1210,11 +1225,14 @@ export function NoteComposer({
           </div>
           <button
             type="button"
-            disabled={targets.length === 0 || dayAbsence.isPending || mutation.isPending}
+            disabled={targets.length === 0 || dayAbsence.isPending || mutation.isPending || (absenceToday.isLoading && !absenceToday.data)}
             onClick={() => dayAbsence.mutate()}
-            className="flex min-h-12 w-full items-center justify-center rounded-[var(--radius-md)] bg-danger px-3 text-base font-bold text-white disabled:opacity-60"
+            className={cn(
+              "flex min-h-12 w-full items-center justify-center rounded-[var(--radius-md)] px-3 text-base font-bold disabled:opacity-60",
+              allAbsent ? "border-2 border-danger bg-white text-danger" : "bg-danger text-white",
+            )}
           >
-            {dayAbsence.isPending ? tr("جارٍ الحفظ…") : tr("غياب اليوم الكامل")}
+            {dayAbsence.isPending ? tr("جارٍ الحفظ…") : allAbsent ? tr("إلغاء غياب اليوم الكامل") : tr("غياب اليوم الكامل")}
           </button>
           {!many ? (
             <div className="space-y-1.5">
