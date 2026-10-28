@@ -221,6 +221,7 @@ function PrintFormsDialog({
   const [overrides, setOverrides] = useState({});
   const [showCompensation, setShowCompensation] = useState(true);
   const [showParticipants, setShowParticipants] = useState(true);
+  const [showProcedure, setShowProcedure] = useState(true);
   const sheetRef = useRef(null);
   const historyNotes = useQuery({
     queryKey: ["student", studentId, "print-forms"],
@@ -323,6 +324,17 @@ function PrintFormsDialog({
               إضافة أسماء المشاركين في التعهد
             </label>
           ) : null}
+          {kind === "pledge" ? (
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={showProcedure}
+                onChange={(e) => setShowProcedure(e.target.checked)}
+              />
+              إظهار الإجراء أسفل التعهد
+            </label>
+          ) : null}
         </div>
         {manual ? (
           <div className="no-print mb-4 grid gap-3 rounded-[var(--radius-md)] border border-border bg-bg-elevated p-3 sm:grid-cols-2">
@@ -413,6 +425,7 @@ function PrintFormsDialog({
           overrides={manual ? overrides : void 0}
           showCompensation={showCompensation && Boolean(selected?.compensation)}
           showParticipants={kind === "pledge" && showParticipants}
+          showProcedure={kind === "pledge" && showProcedure}
           participants={participants}
           appointment={kind === "invite" ? appointment : undefined}
         />
@@ -429,6 +442,7 @@ export function OfficialForm({
   overrides,
   showCompensation = false,
   showParticipants = false,
+  showProcedure = false,
   participants = [],
   appointment,
   ref,
@@ -522,6 +536,7 @@ export function OfficialForm({
     compensation: focus?.compensation || "",
     showCompensation: Boolean(showCompensation && focus?.compensation),
     showParticipants: Boolean(showParticipants && participants.length),
+    showProcedure: Boolean(showProcedure),
     participants,
     appointmentTime: appointment?.time || "",
   };
@@ -758,12 +773,16 @@ function ViolationStrip({
       [period, subject].filter(Boolean).join(" · ") || "………………",
     ],
   ];
+  const widths = ["minmax(0,2.6fr)", "minmax(0,0.55fr)", "minmax(0,0.95fr)", "minmax(0,0.9fr)"];
   return (
-    <div className="official-meta mb-3 grid grid-cols-2 overflow-hidden rounded-sm border border-black text-center sm:grid-cols-4">
-      {cells.map(([label, value]) => (
+    <div
+      className="official-meta mb-3 grid overflow-hidden rounded-sm border border-black text-center"
+      style={{ gridTemplateColumns: widths.join(" ") }}
+    >
+      {cells.map(([label, value], i) => (
         <div className="border-l border-black px-1.5 py-1.5 last:border-l-0">
           <p className="text-[11px] font-semibold text-[#00857c]">{label}</p>
-          <p className="text-[13px] font-medium leading-6">{value}</p>
+          <p className={`font-medium leading-6 ${i === 0 ? "text-[13.5px]" : "text-[12px]"}`}>{value}</p>
         </div>
       ))}
     </div>
@@ -920,7 +939,7 @@ function PledgeBody({ ctx }) {
         </p>
       ) : null}
       <RepeatBox ctx={ctx} />
-      <ProcedureList ctx={ctx} />
+      {ctx.showProcedure ? <ProcedureList ctx={ctx} /> : null}
       <CompensationLine ctx={ctx} />
       <p>{tr("وأتعهد بعدم تكرار أي مشكلة سلوكية مستقبلاً وعلى ذلك جرى التوقيع.")}</p>
       <SignRow
