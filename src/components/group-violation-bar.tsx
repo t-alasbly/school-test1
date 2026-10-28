@@ -24,13 +24,13 @@ export function GroupViolationBar({
   onApply: () => void;
 }) {
   return (
-    <div className="contents">
-      <div className="flex items-center gap-0.5 justify-self-end">
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="flex min-w-0 items-center gap-0.5">
         <Button
           type="button"
           size="sm"
           variant={picking ? "default" : "secondary"}
-          className="h-8 whitespace-nowrap px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
+          className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
           onClick={onTogglePicking}
         >
           <ListChecks className="size-3.5 sm:size-4" />
@@ -41,7 +41,7 @@ export function GroupViolationBar({
         />
       </div>
       {picking ? (
-        <div className="col-span-2 flex gap-1.5 overflow-x-auto">
+        <div className="flex w-full min-w-0 gap-1.5 overflow-x-auto">
           <Button type="button" size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs" onClick={onSelectShown} disabled={shownCount === 0}>
             {tr("تحديد الظاهر")} ({shownCount})
           </Button>

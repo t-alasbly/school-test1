@@ -450,24 +450,30 @@ function AdminBody() {
         ) : studentGroups.length > 0 ? (
           <>
             {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">{tr("تفاصيل كل حصة")}</h3> : null}
-            <ul className="space-y-2">
+            <div className="space-y-3">
               {studentGroups.map((group) => {
                 const latest = group.notes[0];
                 const previous = group.notes.slice(1);
                 const open = openStudents.has(group.studentId);
                 return (
-                  <li key={group.studentId} className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      {previous.length ? (
-                        <button
-                          type="button"
-                          onClick={() => toggleStudent(group.studentId)}
-                          className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-lg font-semibold leading-none"
-                          aria-label={open ? tr("إخفاء المخالفات السابقة") : tr("إظهار المخالفات السابقة")}
-                        >
-                          {open ? "−" : "+"}
-                        </button>
-                      ) : <span className="size-8 shrink-0" />}
+                  <div key={group.studentId} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {previous.length ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleStudent(group.studentId)}
+                            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-lg font-semibold leading-none"
+                            aria-label={open ? tr("إخفاء المخالفات السابقة") : tr("إظهار المخالفات السابقة")}
+                          >
+                            {open ? "−" : "+"}
+                          </button>
+                        ) : <span className="size-8 shrink-0" />}
+                        <span className="truncate text-sm font-semibold">
+                          {group.studentName}
+                        </span>
+                        <span className="text-xs text-fg-muted">{group.classLabel}</span>
+                      </div>
                       <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">
                         {group.notes.length}
                       </span>
@@ -490,10 +496,10 @@ function AdminBody() {
                         ))}
                       </div>
                     ) : null}
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </>
         ) : null}
       </section>
@@ -732,7 +738,7 @@ export function AdminNoteCard({
   }
 
   return (
-    <li className="rounded-[var(--radius-md)] border border-border bg-card p-4 shadow-[var(--shadow-card)]">
+    <div className="rounded-[var(--radius-md)] border border-border bg-card p-4 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -1229,7 +1235,7 @@ export function AdminNoteCard({
           )}
         </DialogContent>
       </Dialog>
-    </li>
+    </div>
   );
 }
 
@@ -1295,6 +1301,6 @@ function CounselorImproveCard({
           إغلاق الخطة
         </Button>
       </div>
-    </li>
+    </div>
   );
 }

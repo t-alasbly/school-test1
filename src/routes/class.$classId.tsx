@@ -278,7 +278,7 @@ function ClassBody() {
               const phones = [student.parentPhone, student.parentPhone2, student.workPhone].filter(Boolean);
               return (
                 <li key={student.id} className={cn("px-3 py-2", absent ? "bg-red-100" : late ? "bg-orange-50" : lesson > 0 && allowFollow ? "bg-emerald-50" : lesson < 0 && allowFollow ? "bg-orange-100" : "")}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {

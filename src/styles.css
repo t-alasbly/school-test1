@@ -230,7 +230,8 @@
 .grade-equal .grade-name,
 .grade-equal .grade-no { width: auto; }
 .grade-equal .grade-name { width: var(--name-mm, 46mm); min-width: 8.5rem; }
-.grade-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.grade-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; min-width: 0; }
+.year-sheet { max-width: 100%; overflow-x: auto; }
 .grade-phone { display: none; }
 @media (min-width: 761px) {
   .grade-name { position: sticky; right: 0; z-index: 2; background: #fff; }

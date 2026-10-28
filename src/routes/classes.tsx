@@ -189,7 +189,7 @@ function ClassesBody() {
       ) : null}
       {showYear ? null : (
       <>
-      <header className="mx-[calc(2mm-1rem)] grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 sm:mx-0">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h1 className="flex items-center gap-1 text-2xl font-semibold tracking-tight sm:text-3xl">
           {tr("الفصول")}
           <PageHelp text={tr("اختر المرحلة ثم كل الفصول أو فصلاً واحداً — النبتة لتحسين السلوك والزائد لتسجيل مخالفة لطالب. المخالفة الجماعية تُبقي التحديد وأنت تنتقل بين المراحل والفصول، ثم تُسجَّل مرة واحدة وتذهب لوكيل شؤون الطلاب. الرسائل ومراسلة الزملاء داخل صفحة الطالب")} />
@@ -230,7 +230,7 @@ function ClassesBody() {
           <li
             key={student.id}
             className={cn(
-              "flex items-start gap-1.5 px-3 py-3 sm:px-4",
+              "flex min-w-0 flex-wrap items-start gap-1.5 px-3 py-3 sm:px-4",
               picking && pickedIds.has(student.id) && "bg-primary/5",
             )}
           >

@@ -974,9 +974,9 @@ export function NoteComposer({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         className={cn(
-          "flex flex-col overflow-hidden p-4",
-          "!inset-0 !h-dvh !max-h-dvh !w-full !max-w-none !translate-x-0 !translate-y-0 !rounded-none",
-          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!h-[92vh] sm:!max-h-[92vh] sm:!w-[calc(100%-2rem)] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
+          "flex max-w-[100vw] flex-col overflow-hidden p-4",
+          "!inset-0 !h-dvh !max-h-dvh !w-auto !max-w-[100vw] !translate-x-0 !translate-y-0 !rounded-none",
+          "sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!h-[92vh] sm:!max-h-[92vh] sm:!w-[min(48rem,calc(100vw-2rem))] sm:!max-w-3xl sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:!rounded-[var(--radius-lg)]",
         )}
       >
         {follow ? (
