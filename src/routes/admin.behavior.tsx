@@ -125,6 +125,7 @@ function AdminBody() {
   const [degreeFilter, setDegreeFilter] = useState<number | 0>(0);
   const [sortBy, setSortBy] = useState<"newest" | "most" | "name">("newest");
   const [minCount, setMinCount] = useState(0);
+  const [teacherId, setTeacherId] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [openStudents, setOpenStudents] = useState<Set<number>>(new Set());
   const bounds = rangeFromPreset(rangeParam);
@@ -152,6 +153,14 @@ function AdminBody() {
   }, [studentParam]);
 
   const feed = typeParam ? (filtered.data ?? []) : (query.data?.feed ?? []);
+  const teacherOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const note of feed as NoteRecord[]) {
+      if (!note.teacherId) continue;
+      map.set(note.teacherId, note.teacherName || note.teacherId);
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], "ar"));
+  }, [feed]);
   const improvements = typeParam ? [] : (query.data?.improvements ?? []);
   const typeLabel =
     typeParam === "behavior"
@@ -199,6 +208,7 @@ function AdminBody() {
       if (statusFilter === "open" && note.status !== "open") return false;
       if (statusFilter === "closed" && note.status !== "closed") return false;
       if (degreeFilter && Number(note.behaviorDegree) !== degreeFilter) return false;
+      if (teacherId && note.teacherId !== teacherId) return false;
       return true;
     });
     const counts = new Map<number, number>();
@@ -210,7 +220,7 @@ function AdminBody() {
       rows = [...rows].sort((a, b) => a.studentName.localeCompare(b.studentName, "ar") || b.createdAt.localeCompare(a.createdAt));
     }
     return rows;
-  }, [feed, nameQuery, statusFilter, degreeFilter, sortBy, minCount]);
+  }, [feed, nameQuery, statusFilter, degreeFilter, sortBy, minCount, teacherId]);
 
   const studentGroups = useMemo(() => {
     const map = new Map<number, { studentId: number; studentName: string; classLabel: string; notes: NoteRecord[] }>();
@@ -324,6 +334,16 @@ function AdminBody() {
                 <option value="all">{tr("كل الحالات")}</option>
                 <option value="open">{tr("لم تُغلق")}</option>
                 <option value="closed">{tr("أُغلقت")}</option>
+              </select>
+              <select
+                className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
+                value={teacherId}
+                onChange={(e) => setTeacherId(e.target.value)}
+              >
+                <option value="">{tr("كل المعلمين")}</option>
+                {teacherOptions.map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
               </select>
               <select
                 className="h-11 rounded-[var(--radius-sm)] border border-border bg-bg px-3 text-sm"
