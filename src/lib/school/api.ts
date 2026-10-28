@@ -634,11 +634,11 @@ async function listClassOptions(sql, schoolId) {
       (select count(*)::int from daily_attendance a
          join students s on s.id = a.student_id
          where s.class_id = c.id and a.school_id = c.school_id
-           and a.day = current_date and a.kind = 'absence') as absence_today,
+           and a.day = (timezone('Asia/Riyadh', now()))::date and a.kind = 'absence') as absence_today,
       (select count(*)::int from daily_attendance a
          join students s on s.id = a.student_id
          where s.class_id = c.id and a.school_id = c.school_id
-           and a.day = current_date and a.kind = 'late') as late_today
+           and a.day = (timezone('Asia/Riyadh', now()))::date and a.kind = 'late') as late_today
     from classes c
     join stages st on st.id = c.stage_id
     where c.school_id = ${schoolId}
@@ -1081,7 +1081,7 @@ export const getClassPage = createServerFn({ method: "POST" }).middleware([authM
       left join lateral (
         select kind, arrived_at
         from daily_attendance
-        where student_id = s.id and school_id = s.school_id and day = current_date and kind in ('absence', 'late')
+        where student_id = s.id and school_id = s.school_id and day = (timezone('Asia/Riyadh', now()))::date and kind in ('absence', 'late')
         order by case kind when 'absence' then 0 else 1 end
         limit 1
       ) a on true
@@ -1333,14 +1333,14 @@ export const listTodayMarks = createServerFn({ method: "GET" }).middleware([auth
       select student_id, kind
       from daily_attendance
       where school_id = ${staff.school_id}
-        and day = current_date
+        and day = (timezone('Asia/Riyadh', now()))::date
         and kind in ('absence', 'late', 'leave')
       union all
       select student_id, type as kind
       from notes
       where school_id = ${staff.school_id}
         and type in ('absence', 'late')
-        and coalesce(occurred_at, created_at)::date = current_date
+        and coalesce(occurred_at, created_at)::date = (timezone('Asia/Riyadh', now()))::date
     ) marks
     group by student_id
   `).map((row) => ({
@@ -5264,9 +5264,9 @@ async function countKindBucket(sql, schoolId, table, kind) {
 	if (table === "daily") {
 		const row = (await sql`
       select
-        count(*) filter (where day = current_date)::int as today,
-        count(*) filter (where day >= current_date - 6)::int as week,
-        count(*) filter (where day >= date_trunc('month', current_date))::int as month,
+        count(*) filter (where day = (timezone('Asia/Riyadh', now()))::date)::int as today,
+        count(*) filter (where day >= (timezone('Asia/Riyadh', now()))::date - 6)::int as week,
+        count(*) filter (where day >= date_trunc('month', (timezone('Asia/Riyadh', now()))::date))::int as month,
         count(*)::int as total
       from daily_attendance
       where school_id = ${schoolId} and kind = ${kind}
@@ -5309,8 +5309,8 @@ function counterHref(source, range) {
 async function upsertAttendanceDigest(sql, staff, school) {
 	if (!school) return;
 	const schoolId = staff.school_id;
-	const absDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = current_date and kind = 'absence'`)[0]?.n ?? 0;
-	const lateDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = current_date and kind = 'late'`)[0]?.n ?? 0;
+	const absDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = (timezone('Asia/Riyadh', now()))::date and kind = 'absence'`)[0]?.n ?? 0;
+	const lateDaily = (await sql`select count(*)::int as n from daily_attendance where school_id = ${schoolId} and day = (timezone('Asia/Riyadh', now()))::date and kind = 'late'`)[0]?.n ?? 0;
 	const absNotes = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'absence'`)[0]?.n ?? 0;
 	const lateNotes = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'late'`)[0]?.n ?? 0;
 	const homework = (await sql`select count(*)::int as n from notes where school_id = ${schoolId} and created_at >= current_date and type = 'homework'`)[0]?.n ?? 0;
@@ -5780,7 +5780,7 @@ export const listStudents = createServerFn({ method: "POST" }).middleware([authM
      join stages st on st.id = c.stage_id
      left join lateral (
        select kind from daily_attendance
-       where student_id = s.id and school_id = s.school_id and day = current_date and kind = 'absence'
+       where student_id = s.id and school_id = s.school_id and day = (timezone('Asia/Riyadh', now()))::date and kind = 'absence'
        limit 1
      ) a on true
      where ${where}
@@ -6630,7 +6630,7 @@ export const getClassEval = createServerFn({ method: "POST" }).middleware([authM
     from students s
     left join lateral (
       select kind from daily_attendance
-      where student_id = s.id and school_id = s.school_id and day = current_date and kind in ('absence', 'late')
+      where student_id = s.id and school_id = s.school_id and day = (timezone('Asia/Riyadh', now()))::date and kind in ('absence', 'late')
       order by case kind when 'absence' then 0 else 1 end
       limit 1
     ) a on true
