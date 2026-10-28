@@ -224,6 +224,9 @@ function AdminBody() {
       current.notes.push(note);
       map.set(note.studentId, current);
     }
+    for (const group of map.values()) {
+      group.notes.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
     return [...map.values()];
   }, [visibleFeed]);
 
@@ -429,32 +432,36 @@ function AdminBody() {
             {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">{tr("تفاصيل كل حصة")}</h3> : null}
             <ul className="space-y-2">
               {studentGroups.map((group) => {
+                const latest = group.notes[0];
+                const previous = group.notes.slice(1);
                 const open = openStudents.has(group.studentId);
                 return (
-                  <li key={group.studentId} className="rounded-[var(--radius-lg)] border border-border bg-card">
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleStudent(group.studentId)}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-lg font-semibold leading-none"
-                        aria-label={open ? tr("إخفاء المخالفات") : tr("إظهار المخالفات")}
-                      >
-                        {open ? "−" : "+"}
-                      </button>
-                      <button type="button" onClick={() => setActiveStudent(group.studentId)} className="min-w-0 flex-1 text-right">
-                        <p className="font-semibold hover:text-primary hover:underline">
-                          <DayName studentId={group.studentId}>{group.studentName}</DayName>
-                          <ExitPermitBadge studentId={group.studentId} className="ms-1.5" />
-                        </p>
-                        <p className="text-xs text-fg-muted">{group.classLabel}</p>
-                      </button>
+                  <li key={group.studentId} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      {previous.length ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleStudent(group.studentId)}
+                          className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-lg font-semibold leading-none"
+                          aria-label={open ? tr("إخفاء المخالفات السابقة") : tr("إظهار المخالفات السابقة")}
+                        >
+                          {open ? "−" : "+"}
+                        </button>
+                      ) : <span className="size-8 shrink-0" />}
                       <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">
                         {group.notes.length}
                       </span>
                     </div>
-                    {open ? (
-                      <div className="space-y-2 border-t border-border p-2">
-                        {group.notes.map((note) => (
+                    {latest ? (
+                      <AdminNoteCard
+                        note={latest}
+                        onOpenStudent={() => setActiveStudent(latest.studentId)}
+                      />
+                    ) : null}
+                    {open && previous.length ? (
+                      <div className="space-y-2 border-s-2 border-border ps-3">
+                        <p className="text-xs text-fg-muted">{tr("المخالفات السابقة")}</p>
+                        {previous.map((note) => (
                           <AdminNoteCard
                             key={note.id}
                             note={note}
