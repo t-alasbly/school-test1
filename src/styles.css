@@ -428,8 +428,8 @@
     page-break-inside: auto;
     width: 100% !important;
     max-width: none !important;
-    padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm)
-      var(--print-margin-bottom, 12mm) var(--print-margin-left, 8mm) !important;
+    padding: var(--print-margin-top, 12mm) var(--print-margin-right, 12mm)
+      var(--print-margin-bottom, 14mm) var(--print-margin-left, 10mm) !important;
     font-family: var(--font-naskh), "Noto Naskh Arabic", serif !important;
     box-sizing: border-box !important;
     border: none !important;

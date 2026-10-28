@@ -1555,7 +1555,7 @@ export function ClassRecords({
   const [showPrincipalSign, setShowPrincipalSign] = useState(true);
   const [sheetTitle, setSheetTitle] = useState("");
   const [schoolYear, setSchoolYear] = useState(() => new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", { year: "numeric" }).format(new Date()));
-  const [sheetMargins, setSheetMargins] = useState({ top: 10, right: 10, bottom: 12, left: 8 });
+  const [sheetMargins, setSheetMargins] = useState({ top: 12, right: 12, bottom: 14, left: 10 });
   const [gradeCols, setGradeCols] = useState<ExtraCol[]>(() => GRADE_SHEET_COLUMNS.map((col) => ({ ...col })));
   const [splitTarget, setSplitTarget] = useState("");
   const [splitParts, setSplitParts] = useState("4");

@@ -93,7 +93,7 @@ ${collectedStyles()}
     width: 210mm;
     max-width: 210mm;
     margin: 0 auto;
-    padding: var(--print-margin-top, 10mm) var(--print-margin-right, 10mm) var(--print-margin-bottom, 12mm) var(--print-margin-left, 8mm);
+    padding: var(--print-margin-top, 12mm) var(--print-margin-right, 12mm) var(--print-margin-bottom, 14mm) var(--print-margin-left, 10mm);
   }
   .print-form h2, .student-print-line, .year-title { text-align: center; }
   .year-title { display: block; width: 100%; border: 0; background: transparent; font-weight: 700; font-size: 14px; margin: 0 0 8px; }

@@ -832,17 +832,22 @@ function RepeatBox({ ctx }) {
     const label = periodShort(key, ctx.season, ctx.schedules);
     return label.replace(/^الحصة\s*/, "").trim() || label;
   };
-  const occBare = (n) => occurrenceLabel(n).replace(/^المرة\s*/, "").trim();
+  const dateBare = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "short" }).format(d);
+  };
   return (
     <div className="official-tint my-2 rounded-sm border border-[#00857c] px-2 py-1.5 text-[11px] leading-5">
       {rows.length ? (
-        <table className="official-table mt-1 text-[11px]">
+        <table className="official-table mt-1 text-[11px] font-semibold">
           <colgroup>
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "22%" }} />
+            <col style={{ width: "5%" }} />
+            <col style={{ width: "14%" }} />
             <col style={{ width: "8%" }} />
             <col style={{ width: "16%" }} />
-            <col style={{ width: "46%" }} />
+            <col style={{ width: "57%" }} />
           </colgroup>
           <thead>
             <tr>
@@ -865,8 +870,8 @@ function RepeatBox({ ctx }) {
               const brief = briefActionText(news[0], 90);
               return (
                 <tr className={n.id === ctx.focus?.id ? "bg-[#f3faf9]" : undefined}>
-                  <td className="!py-1">{occBare(occ)}</td>
-                  <td className="!py-1">{formatStamp(n.createdAt)}</td>
+                  <td className="!py-1 font-bold">{occ}</td>
+                  <td className="!py-1 font-bold">{dateBare(n.createdAt)}</td>
                   <td className="!py-1">{periodBare(n.periodKey)}</td>
                   <td className="!py-1">{n.teacherSubject || "—"}</td>
                   <td className="!py-1 text-right">{brief}</td>
