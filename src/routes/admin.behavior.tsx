@@ -126,6 +126,7 @@ function AdminBody() {
   const [sortBy, setSortBy] = useState<"newest" | "most" | "name">("newest");
   const [minCount, setMinCount] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [openStudents, setOpenStudents] = useState<Set<number>>(new Set());
   const bounds = rangeFromPreset(rangeParam);
   const query = useQuery({
     queryKey: ["admin"],
@@ -210,6 +211,30 @@ function AdminBody() {
     }
     return rows;
   }, [feed, nameQuery, statusFilter, degreeFilter, sortBy, minCount]);
+
+  const studentGroups = useMemo(() => {
+    const map = new Map<number, { studentId: number; studentName: string; classLabel: string; notes: NoteRecord[] }>();
+    for (const note of visibleFeed as NoteRecord[]) {
+      const current = map.get(note.studentId) ?? {
+        studentId: note.studentId,
+        studentName: note.studentName,
+        classLabel: classLabel(note.shortName, note.className),
+        notes: [],
+      };
+      current.notes.push(note);
+      map.set(note.studentId, current);
+    }
+    return [...map.values()];
+  }, [visibleFeed]);
+
+  function toggleStudent(id: number) {
+    setOpenStudents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   if (typeParam && filtered.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل الكشف…")}</p>;
   if (!typeParam && allowed && query.isPending) return <p className="text-fg-muted">{tr("جارٍ تحميل اللوحة…")}</p>;
@@ -395,21 +420,52 @@ function AdminBody() {
             ) : null}
           </ul>
         ) : null}
-        {visibleFeed.length === 0 && !periodMode ? (
+        {studentGroups.length === 0 && !periodMode ? (
           <p className="rounded-[var(--radius-lg)] border border-dashed border-border p-8 text-center text-sm text-fg-muted">
             {typeParam ? tr("لا توجد سجلات في هذا النطاق.") : tr("لا توجد ملاحظات بعد. سيظهر هنا كل ما يسجّله المعلمون فورًا.")}
           </p>
-        ) : visibleFeed.length > 0 ? (
+        ) : studentGroups.length > 0 ? (
           <>
             {periodMode ? <h3 className="pt-2 text-sm font-semibold text-fg-muted">{tr("تفاصيل كل حصة")}</h3> : null}
             <ul className="space-y-2">
-              {visibleFeed.map((note: any) => (
-                <AdminNoteCard
-                  key={note.id}
-                  note={note}
-                  onOpenStudent={() => setActiveStudent(note.studentId)}
-                />
-              ))}
+              {studentGroups.map((group) => {
+                const open = openStudents.has(group.studentId);
+                return (
+                  <li key={group.studentId} className="rounded-[var(--radius-lg)] border border-border bg-card">
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleStudent(group.studentId)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-lg font-semibold leading-none"
+                        aria-label={open ? tr("إخفاء المخالفات") : tr("إظهار المخالفات")}
+                      >
+                        {open ? "−" : "+"}
+                      </button>
+                      <button type="button" onClick={() => setActiveStudent(group.studentId)} className="min-w-0 flex-1 text-right">
+                        <p className="font-semibold hover:text-primary hover:underline">
+                          <DayName studentId={group.studentId}>{group.studentName}</DayName>
+                          <ExitPermitBadge studentId={group.studentId} className="ms-1.5" />
+                        </p>
+                        <p className="text-xs text-fg-muted">{group.classLabel}</p>
+                      </button>
+                      <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger">
+                        {group.notes.length}
+                      </span>
+                    </div>
+                    {open ? (
+                      <div className="space-y-2 border-t border-border p-2">
+                        {group.notes.map((note) => (
+                          <AdminNoteCard
+                            key={note.id}
+                            note={note}
+                            onOpenStudent={() => setActiveStudent(note.studentId)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           </>
         ) : null}

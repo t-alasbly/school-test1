@@ -332,6 +332,8 @@ export const EN_UI: Record<string, string> = {
   "عدد المخالفات": "Violation count",
   "فلتر": "Filter",
   "أكثر من": "More than",
+  "إظهار المخالفات": "Show violations",
+  "إخفاء المخالفات": "Hide violations",
   "خيارات الرسالة الافتراضية": "Default message options",
   "طباعة نموذج": "Print form",
   "نموذج الالتزام المدرسي": "School commitment form",
