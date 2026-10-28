@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { updateMessageTemplates } from "@/lib/school/api";
+import { updateMessageDefaults, updateMessageTemplates } from "@/lib/school/api";
 import { WHATSAPP_TEMPLATES } from "@/lib/school/constants";
 import type { CustomMessage, MessageKind, MessageTemplate } from "@/lib/school/types";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -33,8 +33,23 @@ function MessagesSettings() {
     return next;
   });
   const [custom, setCustom] = useState<CustomMessage[]>(() => school.customMessages ?? []);
+  const [defaults, setDefaults] = useState(() => school.messageDefaults ?? {
+    sameRepeat: true,
+    otherViolations: false,
+    late: false,
+    absence: false,
+  });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState(WHATSAPP_TEMPLATES.general.body);
+
+  const defaultsMutation = useMutation({
+    mutationFn: () => updateMessageDefaults({ data: defaults }),
+    onSuccess: () => {
+      toast.success(tr("تم حفظ الإعدادات الافتراضية"));
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+    },
+    onError: (err) => toast.error(err instanceof Error ? tr(err.message) : tr("تعذر الحفظ")),
+  });
 
   const mutation = useMutation({
     mutationFn: (customMessages: CustomMessage[]) =>
@@ -74,6 +89,34 @@ function MessagesSettings() {
           إلى الرسائل الجماعية
         </Link>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>خيارات الرسالة الافتراضية</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-fg-muted">حدّد ما يظهر تلقائياً في رسالة ولي الأمر. يمكن إلغاؤه عند الإرسال.</p>
+          {([
+            ["sameRepeat", "تكرار نفس المخالفة"],
+            ["otherViolations", "المخالفات الأخرى"],
+            ["late", "أيام التأخر"],
+            ["absence", "أيام الغياب"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={defaults[key]}
+                onChange={(e) => setDefaults((prev) => ({ ...prev, [key]: e.target.checked }))}
+              />
+              {label}
+            </label>
+          ))}
+          <Button disabled={defaultsMutation.isPending} onClick={() => defaultsMutation.mutate()}>
+            حفظ الافتراضيات
+          </Button>
+        </CardContent>
+      </Card>
+
       {KEYS.map((key) => (
         <Card key={key}>
           <CardHeader>

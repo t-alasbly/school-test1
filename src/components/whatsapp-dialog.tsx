@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getStudentNotes, logParentMessage } from "@/lib/school/api";
+import { getStudentAttendanceDays } from "@/lib/school/attendance-totals";
 import {
   NOTE_META,
   WHATSAPP_TEMPLATES,
@@ -106,7 +107,12 @@ export function WhatsAppDialog({
   const [picker, setPicker] = useState<string>(defaultType);
   const [draft, setDraft] = useState("");
   const [includeParticipants, setIncludeParticipants] = useState(true);
-  const [includeRepeats, setIncludeRepeats] = useState(false);
+  const defaults = school.messageDefaults ?? { sameRepeat: true, otherViolations: false, late: false, absence: false };
+  const [sameRepeat, setSameRepeat] = useState(defaults.sameRepeat);
+  const [otherViolations, setOtherViolations] = useState(defaults.otherViolations);
+  const [includeLate, setIncludeLate] = useState(defaults.late);
+  const [includeAbsence, setIncludeAbsence] = useState(defaults.absence);
+  const anyExtra = sameRepeat || otherViolations || includeLate || includeAbsence;
 
   const allowed = staffCan(staff, "sendMessages");
   const number = toWhatsAppNumber(parentPhone);
@@ -138,39 +144,74 @@ export function WhatsAppDialog({
   const history = useQuery({
     queryKey: ["student", studentId, "parent-repeat"],
     queryFn: () => getStudentNotes({ data: { studentId } }),
-    enabled: (open || embedded) && includeRepeats,
+    enabled: (open || embedded) && (sameRepeat || otherViolations),
+  });
+  const attendance = useQuery({
+    queryKey: ["student-attendance-days", studentId, "parent"],
+    queryFn: () => getStudentAttendanceDays({ data: { studentId } }),
+    enabled: (open || embedded) && (includeLate || includeAbsence),
   });
   const behaviorNotes = (history.data?.notes ?? []).filter((n) => n.type === "behavior");
+  const days = attendance.data?.days ?? [];
 
   function repeatSummary() {
     const current =
       behaviorNotes.find((n) => noteId != null && n.id === noteId) ??
       behaviorNotes.find((n) => createdAt && n.createdAt === createdAt) ??
       null;
+    const sameKey = current?.behaviorTypeId ?? null;
+    const sameName = (current?.behaviorTypeName || details || "").trim();
+    const isSame = (n) =>
+      (sameKey != null && n.behaviorTypeId === sameKey) ||
+      (sameName && (n.behaviorTypeName || n.details || "").trim() === sameName);
+    const same = behaviorNotes.filter(isSame);
+    const others = behaviorNotes.filter((n) => !isSame(n));
     const currentAmount = current
       ? behaviorDeductAmount(current)
       : behaviorDeductAmount({ behaviorDegree, occurrence: 1 });
     const total = behaviorNotes.reduce((sum, n) => sum + behaviorDeductAmount(n), 0);
-    const lines = behaviorNotes.map((n) => {
-      const day = formatDay(n.occurredAt || n.createdAt);
-      const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
-      const mark = current && n.id === current.id ? " (الحالية)" : "";
-      return `• ${day}${deg ? ` — ${deg}` : ""}${mark}`;
-    });
-    return [
-      REPEAT_HEADER,
-      ...(lines.length ? lines : ["لا توجد مخالفات مسجلة"]),
-      "",
+    const finalScore = Math.max(0, 100 - total);
+    const blocks: string[] = [];
+    if (sameRepeat) {
+      const lines = same.map((n) => {
+        const day = formatDay(n.occurredAt || n.createdAt);
+        const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
+        const mark = current && n.id === current.id ? " (الحالية)" : "";
+        return `• ${day}${deg ? ` — ${deg}` : ""}${mark}`;
+      });
+      blocks.push(["تكرار نفس المخالفة:", ...(lines.length ? lines : ["لا يوجد تكرار مسجل"])].join("\n"));
+    }
+    if (otherViolations) {
+      const lines = others.map((n) => {
+        const name = (n.behaviorTypeName || n.details || "مخالفة").trim();
+        const day = formatDay(n.occurredAt || n.createdAt);
+        const deg = n.behaviorDegree ? degreeLabel(n.behaviorDegree) : "";
+        return `• ${name} — ${day}${deg ? ` — ${deg}` : ""}`;
+      });
+      blocks.push(["المخالفات الأخرى:", ...(lines.length ? lines : ["لا توجد مخالفات أخرى"])].join("\n"));
+    }
+    if (includeLate) {
+      const lateDays = days.filter((d) => d.kind === "late").map((d) => `• ${formatDay(d.day)}`);
+      blocks.push(["أيام التأخر:", ...(lateDays.length ? lateDays : ["لا يوجد تأخر"])].join("\n"));
+    }
+    if (includeAbsence) {
+      const absDays = days.filter((d) => d.kind === "absence").map((d) => `• ${formatDay(d.day)}`);
+      blocks.push(["أيام الغياب:", ...(absDays.length ? absDays : ["لا يوجد غياب"])].join("\n"));
+    }
+    blocks.push([
       `الدرجة المخصومة الآن: ${currentAmount}`,
-      `مجموع درجات السلوك المخصومة حتى اليوم: ${total} من 100`,
-    ].join("\n");
+      `مجموع درجات الخصم: ${total}`,
+      `الدرجة النهائية من 100: ${finalScore}`,
+    ].join("\n"));
+    return blocks.join("\n\n");
   }
 
-  function withRepeat(text: string, on: boolean) {
+  function withRepeat(text: string) {
     const base = stripRepeatSummary(text);
-    if (!on) return base;
-    if (history.isLoading) return `${base}\n\n${REPEAT_HEADER}\nجاري التحميل...`;
-    return `${base}\n\n${repeatSummary()}`;
+    if (!anyExtra) return base;
+    const loading = (sameRepeat || otherViolations) && history.isLoading || (includeLate || includeAbsence) && attendance.isLoading;
+    if (loading) return `${base}\n\n${REPEAT_HEADER}\nجاري التحميل...`;
+    return `${base}\n\n${REPEAT_HEADER}\n${repeatSummary()}`;
   }
 
   const degreePhrase = degreeDeductionLabel(behaviorDegree);
@@ -213,7 +254,7 @@ export function WhatsAppDialog({
 
   function applyKind(next: string) {
     setPicker(next);
-    setDraft(draftFrom(next, includeParticipants));
+    setDraft(withRepeat(draftFrom(next, includeParticipants)));
   }
 
   function onOpenChange(next: boolean) {
@@ -221,6 +262,10 @@ export function WhatsAppDialog({
     if (next) {
       setPicker(defaultType);
       setIncludeParticipants(true);
+      setSameRepeat(defaults.sameRepeat);
+      setOtherViolations(defaults.otherViolations);
+      setIncludeLate(defaults.late);
+      setIncludeAbsence(defaults.absence);
       setDraft(draftFrom(defaultType, true));
     }
   }
@@ -233,9 +278,12 @@ export function WhatsAppDialog({
   }, [embedded, allowed, defaultType, initialDraft, occurrenceText, deductionText, behaviorDegree, marksLine]);
 
   useEffect(() => {
-    if (!includeRepeats) return;
-    setDraft((current) => withRepeat(current, true));
-  }, [includeRepeats, history.data, history.isLoading]);
+    if (!anyExtra) {
+      setDraft((current) => stripRepeatSummary(current));
+      return;
+    }
+    setDraft((current) => withRepeat(current));
+  }, [anyExtra, sameRepeat, otherViolations, includeLate, includeAbsence, history.data, history.isLoading, attendance.data, attendance.isLoading]);
 
   async function send() {
     if (!number) return;
@@ -319,24 +367,28 @@ export function WhatsAppDialog({
           </span>
         </label>
       ) : null}
-      <label className="flex min-h-11 cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated px-3 py-2 text-sm">
-        <input
-          type="checkbox"
-          className="mt-1 size-4 accent-primary"
-          checked={includeRepeats}
-          onChange={(e) => {
-            const on = e.target.checked;
-            setIncludeRepeats(on);
-            setDraft((current) => withRepeat(current, on));
-          }}
-        />
-        <span>
-          <span className="block font-semibold">{tr("إضافة مخالفات التكرار المختصرة")}</span>
-          <span className="mt-0.5 block text-xs leading-5 text-fg-muted">
-            تاريخ كل مخالفة ودرجتها، والدرجة المخصومة الآن، ومجموع الخصم حتى اليوم من 100.
-          </span>
-        </span>
-      </label>
+      <div className="space-y-2 rounded-[var(--radius-sm)] border border-border bg-bg-elevated p-3">
+        <p className="text-xs font-semibold text-fg-muted">إضافات الرسالة</p>
+        {([
+          ["same", "تكرار نفس المخالفة", sameRepeat, setSameRepeat],
+          ["other", "المخالفات الأخرى", otherViolations, setOtherViolations],
+          ["late", "أيام التأخر", includeLate, setIncludeLate],
+          ["abs", "أيام الغياب", includeAbsence, setIncludeAbsence],
+        ] as const).map(([key, label, on, set]) => (
+          <label key={key} className="flex min-h-10 cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={on}
+              onChange={(e) => set(e.target.checked)}
+            />
+            {tr(label)}
+          </label>
+        ))}
+        <p className="text-xs leading-5 text-fg-muted">
+          تكرار نفس المخالفة يظهر تواريخها ودرجتها. المخالفات الأخرى بنوعها وتاريخها ودرجتها. وفي كل الحالات تظهر الدرجة المخصومة الآن ومجموع الخصم والدرجة النهائية من 100.
+        </p>
+      </div>
       {!number ? <p className="text-sm text-danger">{tr("لا يوجد رقم جوال محفوظ")}</p> : null}
       <Button className="w-full" onClick={send} disabled={!number || !draft.trim()}>
         {tr("إرسال عبر واتساب")}

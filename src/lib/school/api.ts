@@ -53,11 +53,26 @@ function mapSchool(school) {
 		schedules: parseSchedules(school.schedules),
 		messageTemplates: parseMessageTemplates(school.message_templates),
 		customMessages: parseCustomMessages(school.custom_messages),
+		messageDefaults: parseMessageDefaults(school.message_defaults),
 		teachersCanMessage: school.teachers_can_message === true,
 		teachersCanViewAll: Boolean(school.teachers_can_view_all),
 		appearance: parseAppearance(school.appearance),
 		statCounters: parseStatCounters(school.stat_counters ?? school.statCounters),
 		statHidden: parseStatHidden(school.stat_hidden ?? school.statHidden)
+	};
+}
+
+const DEFAULT_MESSAGE_DEFAULTS = { sameRepeat: true, otherViolations: false, late: false, absence: false };
+function parseMessageDefaults(raw) {
+	let value = raw;
+	if (typeof raw === "string") try { value = JSON.parse(raw); } catch { return { ...DEFAULT_MESSAGE_DEFAULTS }; }
+	if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_MESSAGE_DEFAULTS };
+	const rec = value as Record<string, unknown>;
+	return {
+		sameRepeat: rec.sameRepeat !== false,
+		otherViolations: rec.otherViolations === true,
+		late: rec.late === true,
+		absence: rec.absence === true,
 	};
 }
 function parseMessageTemplates(raw) {
@@ -195,6 +210,11 @@ async function loadSchool(sql, schoolId) {
 			}
 		}
 	}
+	let message_defaults = '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}';
+	try {
+		await sql`alter table schools add column if not exists message_defaults jsonb not null default '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}'::jsonb`;
+		message_defaults = (await sql`select coalesce(message_defaults::text, '{"sameRepeat":true}') as message_defaults from schools where id = ${schoolId}`)[0]?.message_defaults ?? message_defaults;
+	} catch {}
 	let stat_counters = "[]";
 	let stat_hidden = "[]";
 	try {
@@ -214,7 +234,8 @@ async function loadSchool(sql, schoolId) {
 		print_school_logo,
 		schedules,
 		stat_counters,
-		stat_hidden
+		stat_hidden,
+		message_defaults
 	};
 }
 async function getStaff(sql, userId) {
@@ -2944,6 +2965,17 @@ export const updateMessageTemplates = createServerFn({ method: "POST" }).middlew
 	} catch {
 		throw new Error("تعذر حفظ الرسائل المخصصة — أعد تشغيل التطبيق بعد التحديث");
 	}
+	return { ok: true };
+});
+export const updateMessageDefaults = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({
+	sameRepeat: boolean(),
+	otherViolations: boolean(),
+	late: boolean(),
+	absence: boolean(),
+})).handler(async ({ context, data }) => {
+	const { sql, staff } = await requireAdmin(context.userId);
+	await sql`alter table schools add column if not exists message_defaults jsonb not null default '{"sameRepeat":true,"otherViolations":false,"late":false,"absence":false}'::jsonb`;
+	await sql.query(`update schools set message_defaults = $1::jsonb where id = $2`, [JSON.stringify(data), staff.school_id]);
 	return { ok: true };
 });
 export const updateSchoolName = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator(object({ name: string().min(3).max(120) })).handler(async ({ context, data }) => {

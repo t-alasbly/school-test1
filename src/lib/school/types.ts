@@ -104,6 +104,12 @@ export type School = {
   statHidden: string[];
   messageTemplates: MessageTemplates;
   customMessages: CustomMessage[];
+  messageDefaults: {
+    sameRepeat: boolean;
+    otherViolations: boolean;
+    late: boolean;
+    absence: boolean;
+  };
   teachersCanMessage: boolean;
   teachersCanViewAll: boolean;
   appearance: Appearance;
