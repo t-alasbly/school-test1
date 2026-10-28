@@ -332,6 +332,7 @@ export const EN_UI: Record<string, string> = {
   "عدد المخالفات": "Violation count",
   "فلتر": "Filter",
   "أكثر من": "More than",
+  "كل المعلمين": "All teachers",
   "إظهار المخالفات": "Show violations",
   "إخفاء المخالفات": "Hide violations",
   "إظهار المخالفات السابقة": "Show previous violations",
