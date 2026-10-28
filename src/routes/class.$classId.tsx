@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { claimClassSubjectNotes, getClassPage, getMyTimetable } from "@/lib/school/api";
+import { scheduleFor } from "@/lib/school/constants";
 import {
   finishGroupPick,
   useGroupPick,
@@ -61,7 +62,7 @@ function ClassBody() {
   const { student: studentParam, subject: lessonFromTable, period: periodFromTable, from, pane } = Route.useSearch();
   const fromDesk = from === "desk";
   const id = Number(classId);
-  const { stages, classes, staff } = useWorkspace();
+  const { stages, classes, staff, school } = useWorkspace();
   const tableQuery = useQuery({ queryKey: ["my-timetable"], queryFn: () => getMyTimetable() });
   const owner = tableQuery.data as { role?: string; showFollow?: boolean; showYear?: boolean } | undefined;
   const asTeacher = fromDesk && owner?.role === "teacher";
@@ -74,7 +75,7 @@ function ClassBody() {
   const [activeStudent, setActiveStudent] = useState<number | null>(studentParam ?? null);
   const [sort, setSort] = useState<ClassSort>("order");
   const [groupOpen, setGroupOpen] = useState(false);
-  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? "behavior");
+  const [followMode, setFollowMode] = useState<FollowMode>(pane ?? (periodFromTable ? "one" : "behavior"));
   const [printTick, setPrintTick] = useState(0);
   const [followStudent, setFollowStudent] = useState<number | null>(null);
   const { targets } = useGroupPick();
@@ -199,9 +200,11 @@ function ClassBody() {
         </div>
         <AddStudentButton classId={id} />
       </div>
-      {lessonFromTable ? (
+      {periodFromTable || lessonFromTable ? (
         <p className="rounded-[var(--radius-md)] bg-primary/10 px-3 py-2 text-sm font-semibold">
-          {tr("مادة هذه الحصة")}: {tr(lessonFromTable)}
+          {periodFromTable
+            ? `${tr(scheduleFor(school.season, school.schedules).find((slot) => slot.key === periodFromTable)?.label || "الحصة")}${lessonFromTable ? ` — ${tr(lessonFromTable)}` : ""}`
+            : `${tr("مادة هذه الحصة")}: ${tr(lessonFromTable)}`}
         </p>
       ) : null}
       <div className="flex flex-wrap gap-1.5">

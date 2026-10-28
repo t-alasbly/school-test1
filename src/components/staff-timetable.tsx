@@ -152,19 +152,28 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
     });
   }
 
-  function openClass(classId: number | null, subject?: string, period?: string) {
-    if (!classId) {
+  function classIdOf(classId: number | null | undefined, label?: string) {
+    if (classId) return classId;
+    const name = (label || "").trim();
+    if (!name) return null;
+    return classes.find((item) => item.label === name || placeLabel(item.label) === placeLabel(name))?.id ?? null;
+  }
+
+  function openClass(classId: number | null, subject?: string, period?: string, label?: string) {
+    const id = classIdOf(classId, label);
+    if (!id) {
       toast(tr("لا يوجد فصل في هذه الحصة"));
       return;
     }
     const chosen = subject?.trim() || (subjects.length === 1 ? subjects[0] : "");
     void navigate({
       to: "/class/$classId",
-      params: { classId: String(classId) },
+      params: { classId: String(id) },
       search: {
         subject: chosen || undefined,
         period: period || undefined,
         from: "desk",
+        pane: "one",
       },
     });
   }
@@ -235,7 +244,20 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
             hit?.kind === "now" ? "border-primary bg-primary text-primary-fg" : "border-border bg-card",
           )}
         >
-          {message}
+          {hit?.cell.classId || hit?.cell.classLabel ? (
+            <button
+              type="button"
+              className="w-full text-right"
+              onClick={() => {
+                if (!hit) return;
+                openClass(hit.cell.classId, hit.cell.subject ? canonicalSubject(hit.cell.subject) : undefined, hit.slot.key, hit.cell.classLabel);
+              }}
+            >
+              {message}
+            </button>
+          ) : (
+            message
+          )}
         </div>
       ) : null}
       <div className="min-w-0 max-w-full overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card">
@@ -336,7 +358,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                       <td key={slot.key} className="border-b border-l border-border p-1">
                         <button
                           type="button"
-                          onClick={() => (editing ? setPicked({ day: item.id, periodKey: slot.key }) : openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key))}
+                          onClick={() => (editing ? setPicked({ day: item.id, periodKey: slot.key }) : openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key, cell?.classLabel))}
                           className={cn(
                             "flex min-h-10 w-full flex-col items-center justify-center rounded-[var(--radius-sm)] px-1 py-1 text-xs leading-tight",
                             on && "ring-2 ring-primary",
@@ -383,7 +405,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         key={slot.key}
                         type="button"
                         ref={focused ? (node) => { focusRef.current = node; } : undefined}
-                        onClick={() => openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key)}
+                        onClick={() => openClass(cell?.classId ?? null, cell?.subject ? canonicalSubject(cell.subject) : undefined, slot.key, cell?.classLabel)}
                         className={cn(
                           "flex snap-center flex-col items-center justify-center rounded-[var(--radius-md)] border px-2 py-2 text-center transition-all duration-300",
                           live
@@ -421,7 +443,7 @@ export function StaffTimetable({ ownerKey = "" }: { ownerKey?: string }) {
                         <button
                           key={slot.key}
                           type="button"
-                          onClick={() => openClass(cell.classId, cell.subject ? canonicalSubject(cell.subject) : undefined, slot.key)}
+                          onClick={() => openClass(cell.classId, cell.subject ? canonicalSubject(cell.subject) : undefined, slot.key, cell.classLabel)}
                           className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-fg-muted"
                         >
                           {periodWord(slot.label)} {placeLabel(cell.classLabel)}
