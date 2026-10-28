@@ -4164,21 +4164,23 @@ async function clearAttendanceNotes(sql, schoolId: number, studentId: number, da
       )
   `;
 	await sql`
+    delete from notes
+    where school_id = ${schoolId}
+      and student_id = ${studentId}
+      and coalesce(occurred_at, created_at)::date = ${day}::date
+      and type in ('absence', 'late')
+  `;
+	await sql`
     delete from notes n
     using behavior_types bt
     where n.school_id = ${schoolId}
       and n.student_id = ${studentId}
       and coalesce(n.occurred_at, n.created_at)::date = ${day}::date
+      and n.type = 'behavior'
+      and bt.id = n.behavior_type_id
       and (
-        n.type in ('absence', 'late')
-        or (
-          n.type = 'behavior'
-          and bt.id = n.behavior_type_id
-          and (
-            coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
-            or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
-          )
-        )
+        coalesce(bt.name, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة|غياب عن الحصة|تأخر عن الحصة|تأخر في الدخول'
+        or coalesce(n.details, '') ~ 'تأخر[[:space:]]*صباحي|اصطفاف|دخول إلى الحصص|ورود من الأسرة'
       )
   `;
 }
