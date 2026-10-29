@@ -2331,6 +2331,7 @@ export const importStudents = createServerFn({ method: "POST" }).middleware([aut
 		if (existing) {
 			await sql`
           update students set
+            name = case when ${name} <> '' then ${name} else name end,
             parent_phone = case when ${phone} <> '' then ${phone} else parent_phone end,
             parent_phone_2 = case when ${phone2} <> '' then ${phone2} else parent_phone_2 end,
             work_phone = case when ${work} <> '' then ${work} else work_phone end,
