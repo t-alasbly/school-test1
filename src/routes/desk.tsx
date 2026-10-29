@@ -308,7 +308,11 @@ function LiveClassesOption({ on }: { on: boolean }) {
           {days.map(([id, name]) => <option key={id} value={id}>{t(name)}</option>)}
         </Select>
         <Select className="h-8 min-w-0 flex-1" value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>
-          {slots.map((slot) => <option key={slot.key} value={slot.key}>{t(slot.label.replace(/^الحصة\s+/, ""))}</option>)}
+          {slots.map((slot) => (
+            <option key={slot.key} value={slot.key}>
+              {`${t(slot.label.replace(/^الحصة\s+/, ""))} \u200E${slot.from}–${slot.to}`}
+            </option>
+          ))}
         </Select>
         <button
           type="button"
