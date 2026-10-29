@@ -8342,7 +8342,7 @@ export const getLiveLessons = createServerFn({ method: "GET" }).middleware([auth
   `;
 	const rows = await sql`
     select t.day, t.period_key, coalesce(t.subject, '') as subject, sf.display_name,
-           c.name as class_name, st.id as stage_id, st.short_name
+           c.id as class_id, c.name as class_name, st.id as stage_id, st.short_name
     from staff_timetable t
     join staff sf on sf.user_id = t.staff_id and sf.school_id = t.school_id
     join classes c on c.id = t.class_id
@@ -8361,6 +8361,7 @@ export const getLiveLessons = createServerFn({ method: "GET" }).middleware([auth
 			periodKey: row.period_key,
 			subject: row.subject || "",
 			teacher: row.display_name || "",
+			classId: Number(row.class_id),
 			classLabel: classLabel(row.short_name, row.class_name),
 			stageId: row.stage_id
 		}))

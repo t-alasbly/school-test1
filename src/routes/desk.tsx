@@ -14,7 +14,7 @@ import { ExitPermitStrip } from "@/components/exit-permit";
 import { TeacherStudio, GradeFormatStudio, FollowLedgerPage } from "@/components/teacher-studio";
 import { Select } from "@/components/ui/select";
 import { getHomeDesk, getLiveLessons, getMyTimetable, setDeskTarget } from "@/lib/school/api";
-import { currentPeriod, parseSubjects, scheduleFor } from "@/lib/school/constants";
+import { currentPeriod, canonicalSubject, parseSubjects, scheduleFor } from "@/lib/school/constants";
 import { useLocale, tr } from "@/lib/school/i18n";
 import { staffCan } from "@/lib/school/permissions";
 import { useWorkspace } from "@/lib/school/workspace";
@@ -291,7 +291,7 @@ function LiveClassesOption({ on }: { on: boolean }) {
   });
   const data = query.data as {
     stages?: { id: number; name: string }[];
-    lessons?: { day: number; periodKey: string; subject: string; teacher: string; classLabel: string; stageId: number }[];
+    lessons?: { day: number; periodKey: string; subject: string; teacher: string; classId: number; classLabel: string; stageId: number }[];
   } | undefined;
   const days = [
     [0, "الأحد"],
@@ -331,10 +331,21 @@ function LiveClassesOption({ on }: { on: boolean }) {
               {items.length === 0 ? <p className="text-[11px] text-fg-subtle">{t("لا حصص")}</p> : (
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {items.map((item) => (
-                    <div key={`${item.classLabel}-${item.teacher}`} className="rounded-xl border border-white/80 bg-white/80 px-2 py-1.5">
-                      <p className="text-xs font-bold">{sectionNo(item.classLabel)} · {item.subject ? t(item.subject) : "—"}</p>
+                    <Link
+                      key={`${item.classId}-${item.teacher}`}
+                      to="/class/$classId"
+                      params={{ classId: String(item.classId) }}
+                      search={{
+                        subject: item.subject ? canonicalSubject(item.subject) : undefined,
+                        period: periodKey,
+                        from: "desk",
+                        pane: "one",
+                      }}
+                      className="block rounded-xl border border-white/80 bg-white/80 px-2 py-1.5 text-right"
+                    >
+                      <p className="text-xs font-bold">{sectionNo(item.classLabel)} · {item.subject ? t(canonicalSubject(item.subject)) : "—"}</p>
                       <p className="truncate text-[11px] text-fg-muted">{shortTeacher(item.teacher)}</p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
