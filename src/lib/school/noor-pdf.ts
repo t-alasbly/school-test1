@@ -5,6 +5,60 @@ import { create as createFont } from "fontkit";
 
 const AR = /[\u0600-\u06FF]/;
 
+// Lam-alef is one glyph in the Noor font. Expanding it before the visual
+// reverse swaps it, so هلال becomes هالل and بلال becomes بالل.
+const LAM_ALEF = {
+	"\uFEF5": "\u0644\u0622",
+	"\uFEF6": "\u0644\u0622",
+	"\uFEF7": "\u0644\u0623",
+	"\uFEF8": "\u0644\u0623",
+	"\uFEF9": "\u0644\u0625",
+	"\uFEFA": "\u0644\u0625",
+	"\uFEFB": "\u0644\u0627",
+	"\uFEFC": "\u0644\u0627",
+};
+
+function logical(text) {
+	const marks = [];
+	const shielded = String(text ?? "").replace(/[\uFEF5-\uFEFC]/g, (ch) => {
+		const mark = String.fromCodePoint(0xE000 + marks.length);
+		marks.push(LAM_ALEF[ch] || "\u0644\u0627");
+		return mark;
+	});
+	const clean = shielded
+		.normalize("NFKC")
+		.replace(/[\u0000-\u001f\u00a0]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!clean) return "";
+	const words = clean
+		.split(" ")
+		.filter(Boolean)
+		.map((part) => {
+			const chars = [...part];
+			const arabic = chars.some((ch) => {
+				const cp = ch.codePointAt(0) ?? 0;
+				return AR.test(ch) || (cp >= 0xE000 && cp < 0xF900);
+			});
+			return arabic ? chars.reverse().join("") : part;
+		});
+	words.reverse();
+	let out = words.join(" ");
+	if (marks.length) {
+		out = [...out]
+			.map((ch) => {
+				const cp = ch.codePointAt(0) ?? 0;
+				return cp >= 0xE000 && cp < 0xE000 + marks.length ? marks[cp - 0xE000] : ch;
+			})
+			.join("");
+	}
+	return out
+		.replaceAll("هللا", "الله")
+		.replaceAll("األ", "الأ")
+		.replaceAll("اإل", "الإ")
+		.replaceAll("اآل", "الآ");
+}
+
 /** Noor prints this report with an empty ToUnicode map. Glyph ids live in the embedded Arial. */
 function preferUnicode(unis) {
 	const bases = unis.map((u) => {
@@ -56,26 +110,6 @@ function extractFonts(buf) {
 		fonts.set(key, gidMap(bytes));
 	}
 	return fonts;
-}
-
-function logical(text) {
-	const clean = text
-		.normalize("NFKC")
-		.replace(/[\u0000-\u001f\u00a0]+/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-	if (!clean) return "";
-	const words = clean
-		.split(" ")
-		.filter(Boolean)
-		.map((part) => (AR.test(part) ? [...part].reverse().join("") : part));
-	words.reverse();
-	return words
-		.join(" ")
-		.replaceAll("هللا", "الله")
-		.replaceAll("األ", "الأ")
-		.replaceAll("اإل", "الإ")
-		.replaceAll("اآل", "الآ");
 }
 
 function tidyName(name) {
